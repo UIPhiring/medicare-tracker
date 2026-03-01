@@ -257,16 +257,16 @@ function MedicareTracker() {
 
   // Status changes
   const openStatusChange=(client,newStatus)=>{
-    setStatusForm({newStatus,commissionAmount:client.commissionAmount||"",paidDate:client.paidDate||today(),chargebackDate:client.chargebackDate||today(),chargebackAmount:client.chargebackAmount||client.commissionAmount||"",statusNote:""});
+    setStatusForm({newStatus,commissionAmount:client.commissionAmount||String(calcInitialComm(client.effectiveDate,client.electionPeriod)),paidDate:client.paidDate||today(),chargebackDate:client.chargebackDate||today(),chargebackAmount:client.chargebackAmount||client.commissionAmount||"",cancelMonth:"",statusNote:""});
     setShowStatusModal(client);
   };
   const confirmStatusChange=()=>{
     const c=showStatusModal; const ns=statusForm.newStatus;
     const u={status:ns,statusNote:statusForm.statusNote||c.statusNote||""};
     if(ns==="paid"){u.commissionAmount=statusForm.commissionAmount;u.paidDate=statusForm.paidDate||today();}
-    if(ns==="inactive"){u.inactiveDate=today();}
+    if(ns==="inactive"){u.inactiveDate=today();u.cancelMonth=statusForm.cancelMonth||"";}
     if(ns==="chargedBack"){u.chargebackDate=statusForm.chargebackDate||today();u.chargebackAmount=statusForm.chargebackAmount;}
-    if(ns==="neverInEffect"){u.inactiveDate=today();}
+    if(ns==="neverInEffect"){u.inactiveDate=today();u.cancelMonth="";}
     if(ns==="active"&&(c.status==="inactive"||c.status==="chargedBack")){u.lastVerified=today();}
     save(clients.map(x=>x.id===c.id?{...x,...u}:x));
     showToast(`${c.fullName} → ${ST[ns].label}`);
@@ -330,9 +330,26 @@ function MedicareTracker() {
     const commByMonth={};clients.forEach(c=>{if(c.commissionAmount&&c.paidDate){const mk=monthKey(c.paidDate);if(mk)commByMonth[mk]=(commByMonth[mk]||0)+(parseFloat(c.commissionAmount)||0);}});
     // Commission by app month (projected)
     const commByAppMonth={};clients.forEach(c=>{if(!c.effectiveDate||!(c.status==="active"||c.status==="paid"))return;const mk=appMonthKey(c.effectiveDate);if(mk)commByAppMonth[mk]=(commByAppMonth[mk]||0)+calcInitialComm(c.effectiveDate,c.electionPeriod);});
+    // Survival curve: months on book before canceling
+    const survival={};const droppedClients=clients.filter(c=>c.status==="inactive"||c.status==="chargedBack");
+    droppedClients.forEach(c=>{
+      if(!c.effectiveDate) return;
+      let monthsOnBook=0;
+      if(c.cancelMonth){const eff=new Date(c.effectiveDate+"T00:00:00");const can=new Date(c.cancelMonth+"-01T00:00:00");monthsOnBook=Math.max(0,(can.getFullYear()-eff.getFullYear())*12+(can.getMonth()-eff.getMonth()));}
+      else if(c.inactiveDate){const eff=new Date(c.effectiveDate+"T00:00:00");const ina=new Date(c.inactiveDate+"T00:00:00");monthsOnBook=Math.max(0,Math.round((ina-eff)/(30.44*86400000)));}
+      const bucket=monthsOnBook<=0?"<1 month":monthsOnBook===1?"1 month":monthsOnBook<=3?"2-3 months":monthsOnBook<=6?"4-6 months":monthsOnBook<=12?"7-12 months":"12+ months";
+      survival[bucket]=(survival[bucket]||0)+1;
+    });
+    const survivalOrder=["<1 month","1 month","2-3 months","4-6 months","7-12 months","12+ months"];
+    const survivalData=survivalOrder.filter(k=>survival[k]).map(k=>[k,survival[k]]);
+    // Never in Effect analysis
+    const nieClients=clients.filter(c=>c.status==="neverInEffect");
+    const nieByCarrier={};nieClients.forEach(c=>{const cr=c.carrier||"Unknown";nieByCarrier[cr]=(nieByCarrier[cr]||0)+1;});
+    const nieByMonth={};nieClients.forEach(c=>{if(!c.effectiveDate)return;const mk=appMonthKey(c.effectiveDate);if(mk)nieByMonth[mk]=(nieByMonth[mk]||0)+1;});
+    const nieLostComm=nieClients.reduce((s,c)=>s+calcInitialComm(c.effectiveDate,c.electionPeriod),0);
     const needsReview=clients.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=30));
     const overdue60=clients.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=60));
-    return {t,ac,pd,ina,cb,nie,inForce,projectedInitial,totalComm,totalCB,net,residualClients:residualClients.length,monthlyResidual:inForce*29,totalResidualEarned,annualResidualProjected,carrierStats,stateStats,cohorts,commByMonth,commByAppMonth,needsReview:needsReview.length,overdue60:overdue60.length};
+    return {t,ac,pd,ina,cb,nie,inForce,projectedInitial,totalComm,totalCB,net,residualClients:residualClients.length,monthlyResidual:inForce*29,totalResidualEarned,annualResidualProjected,carrierStats,stateStats,cohorts,commByMonth,commByAppMonth,survivalData,droppedTotal:droppedClients.length,nieByCarrier,nieByMonth,nieLostComm,needsReview:needsReview.length,overdue60:overdue60.length};
   },[clients,byStatus]);
 
   const uniqueVals=useCallback((f,l)=>[...new Set(l.map(c=>c[f]).filter(Boolean))].sort(),[]);
@@ -713,14 +730,35 @@ function MedicareTracker() {
                 <div>AEP apps (Oct 15–Dec 31) → effective Jan → <strong style={{color:"#22C55E"}}>$347</strong></div>
                 <div>Jan apps → effective Feb → <strong style={{color:"#22C55E"}}>$318</strong> (347 - 29×1)</div>
                 <div>Feb apps → effective Mar → <strong style={{color:"#22C55E"}}>$289</strong> (347 - 29×2)</div>
-                <div>Mar apps → effective Apr → <strong style={{color:"#22C55E"}}>$260</strong> (347 - 29×3)</div>
                 <div style={{marginTop:10}}><strong style={{color:"var(--text)"}}>IEP (Initial Enrollment):</strong></div>
                 <div>First-time Medicare → <strong style={{color:"#22C55E"}}>Double initial commission</strong></div>
-                <div>Example: Feb IEP app → $289 × 2 = <strong style={{color:"#22C55E"}}>$578</strong></div>
                 <div style={{marginTop:10}}><strong style={{color:"var(--text)"}}>Residuals:</strong></div>
                 <div><strong style={{color:"#8B5CF6"}}>$29/month</strong> per client starting January after effective year</div>
-                <div>AEP clients: residuals start Jan of the <em>following</em> year</div>
               </div>
+            </Card>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+            <Card title="📉 Client Fall-Off Timeline">
+              {analytics.survivalData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients yet</div>:
+              <div>
+                <div style={{fontSize:12,color:"var(--t2)",marginBottom:12}}>When clients fell off your book ({analytics.droppedTotal} total dropped)</div>
+                <BarChart data={analytics.survivalData} color="#EF4444" />
+                <div style={{marginTop:12,padding:10,background:"var(--bg-hover)",borderRadius:8,fontSize:12,color:"var(--t2)"}}>
+                  Average monthly drop rate: <strong style={{color:"#EF4444"}}>{analytics.t>0?pct(analytics.droppedTotal,analytics.t):"0%"}</strong> of all clients
+                </div>
+              </div>}
+            </Card>
+            <Card title="🚫 Never in Effect Analysis">
+              {analytics.nie===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No pre-effective drops — great retention!</div>:
+              <div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+                  <div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{analytics.nie}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Never in Effect</div></div>
+                  <div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#EF4444"}}>{money(analytics.nieLostComm)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Lost Commission</div></div>
+                  <div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{pct(analytics.nie,analytics.t)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>NIE Rate</div></div>
+                </div>
+                {Object.keys(analytics.nieByCarrier).length>0&&<><div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginBottom:6}}>By Carrier</div><BarChart data={Object.entries(analytics.nieByCarrier).sort((a,b)=>b[1]-a[1]).map(([c,n])=>[c,n])} color="#94A3B8" /></>}
+                {Object.keys(analytics.nieByMonth).length>0&&<><div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginTop:14,marginBottom:6}}>By App Month</div><BarChart data={Object.entries(analytics.nieByMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,n])=>[monthLabel(mk),n])} color="#94A3B8" /></>}
+              </div>}
             </Card>
           </div>
         </div>}
@@ -751,6 +789,7 @@ function MedicareTracker() {
                 {l:"Residual Earned",v:money(calcResidualEarned(viewClient.effectiveDate,today())),c:"#8B5CF6"},
                 {l:"Total Earned",v:money(calcInitialComm(viewClient.effectiveDate,viewClient.electionPeriod)+calcResidualEarned(viewClient.effectiveDate,today())),c:"#22C55E"},
                 {l:"Chargeback",v:viewClient.chargebackAmount?money(viewClient.chargebackAmount):"—",c:"#EF4444"},
+                {l:"Cancelled",v:viewClient.cancelMonth?new Date(viewClient.cancelMonth+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"numeric"}):"—",c:viewClient.cancelMonth?"#F59E0B":"var(--text)"},
                 {l:"Notes",v:viewClient.statusNote||"—"}
               ].map(f=><div key={f.l} style={{padding:10,background:"var(--bg-hover)",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginBottom:3}}>{f.l}</div><div style={{fontSize:13,fontWeight:600,color:f.c||"var(--text)"}}>{f.v}</div></div>)}
             </div>
@@ -770,6 +809,7 @@ function MedicareTracker() {
           <div style={{display:"flex",alignItems:"center",gap:10,padding:14,background:`${ST[statusForm.newStatus]?.color}10`,borderRadius:10,border:`1px solid ${ST[statusForm.newStatus]?.color}30`,marginBottom:18}}><span style={{fontSize:22}}>{ST[statusForm.newStatus]?.icon}</span><div><div style={{fontWeight:700,fontSize:14}}>{ST[statusForm.newStatus]?.label}</div><div style={{fontSize:12,color:"var(--t2)"}}>{ST[statusForm.newStatus]?.desc}</div></div></div>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             {statusForm.newStatus==="paid"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Commission ($)</label><input type="number" step="0.01" value={statusForm.commissionAmount} onChange={e=>setStatusForm(p=>({...p,commissionAmount:e.target.value}))} placeholder="250" style={{...inp,marginTop:4}} /></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Date Paid</label><input type="date" value={statusForm.paidDate} onChange={e=>setStatusForm(p=>({...p,paidDate:e.target.value}))} style={{...inp,marginTop:4}} /></div></>}
+            {statusForm.newStatus==="inactive"&&<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>What month did they cancel?</label><input type="month" value={statusForm.cancelMonth} onChange={e=>setStatusForm(p=>({...p,cancelMonth:e.target.value}))} style={{...inp,marginTop:4}} /></div>}
             {statusForm.newStatus==="chargedBack"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Chargeback Amount ($)</label><input type="number" step="0.01" value={statusForm.chargebackAmount} onChange={e=>setStatusForm(p=>({...p,chargebackAmount:e.target.value}))} placeholder="Amount" style={{...inp,marginTop:4}} /></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Chargeback Date</label><input type="date" value={statusForm.chargebackDate} onChange={e=>setStatusForm(p=>({...p,chargebackDate:e.target.value}))} style={{...inp,marginTop:4}} /></div></>}
             <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Notes</label><input type="text" value={statusForm.statusNote} onChange={e=>setStatusForm(p=>({...p,statusNote:e.target.value}))} placeholder="Reason..." style={{...inp,marginTop:4}} /></div>
           </div>
