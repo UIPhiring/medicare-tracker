@@ -186,7 +186,7 @@ function MedicareTracker() {
     const t=setTimeout(()=>{if(m)setLoading(false);},2000); load(); return ()=>{m=false;clearTimeout(t);};
   }, []);
 
-  const save = useCallback(async nc => { setClients(nc); try{localStorage.setItem(STORAGE_KEY,JSON.stringify(nc));}catch(e){} }, []);
+  const save = useCallback(async nc => { const clean=normalizeClients(nc); setClients(clean); try{localStorage.setItem(STORAGE_KEY,JSON.stringify(clean));}catch(e){} }, []);
   const showToast = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
 
   const byStatus = useMemo(()=>{
