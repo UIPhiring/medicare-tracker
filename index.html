@@ -33,7 +33,8 @@ const FIELDS = [
   { key: "medicaidNumber", label: "Medicaid Number", type: "text" },
   { key: "medicaidLevel", label: "Medicaid Level", type: "select", options: ["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"] },
   { key: "planName", label: "New Plan Name", type: "text" },
-  { key: "carrier", label: "Carrier", type: "select", options: ["Aetna","Anthem","Cigna","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Devoted Health","Clover Health","Alignment Health","Oscar Health","Other"] },
+  { key: "planType", label: "Plan Type", type: "select", options: ["MAPD","DSNP","CSNP","PDP","Medigap"] },
+  { key: "carrier", label: "Carrier", type: "select", options: ["Aetna","Anthem","CarePlus","Cigna","Devoted Health","Freedom Health","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Clover Health","Alignment Health","Oscar Health","Other"] },
   { key: "hospitalIndemnity", label: "Hospital Indemnity", type: "select", options: ["Yes","No"] },
   { key: "sunfireCode", label: "Sunfire Personal Code", type: "text" },
 ];
@@ -57,13 +58,17 @@ const TRANSITIONS = {
 const STORAGE_KEY = "uip-medicare-clients-v5";
 const fmt = d => { if (!d) return "—"; return new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
 const fmtPhone = p => { if (!p) return "—"; const c=p.replace(/\D/g,""); const d=c.length>=11&&c[0]==="1"?c.slice(1):c; return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:d.length===7?`${d.slice(0,3)}-${d.slice(3)}`:p; };
-const fmtCarrier = c => { if(!c) return "—"; const m={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare"}; return m[c.toLowerCase()]||c; };
+const fmtCarrier = c => { if(!c) return "—"; const m={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus"}; return m[c.toLowerCase()]||c; };
 const money = n => "$"+(parseFloat(n)||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
 const pct = (n,d) => d===0?"0%":(n/d*100).toFixed(1)+"%";
 const monthKey = d => d?d.slice(0,7):null;
 const monthLabel = mk => { if(!mk) return "—"; return new Date(mk+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"2-digit"}); };
 const daysBetween = (a,b) => { if(!a||!b) return null; return Math.floor((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/(86400000)); };
 const today = () => new Date().toISOString().split("T")[0];
+const CARRIER_COLORS = {"humana":"#22C55E","careplus":"#22C55E","unitedhealthcare":"#3B82F6","uhc":"#3B82F6","aetna":"#EC4899","devoted health":"#F97316","devoted":"#F97316","freedom health":"#EAB308","freedom":"#EAB308"};
+const getCarrierColor = c => { if(!c) return "#78716C"; return CARRIER_COLORS[c.toLowerCase()]||CARRIER_COLORS[c.toLowerCase().replace(/ health$/,"")]||"#78716C"; };
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const appMonthToEffMonth = m => m===11?0:m+1; // Jan app → Feb eff, Dec app → Jan eff
 
 function Badge({children, color="var(--accent)", bg}) {
   return <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,letterSpacing:0.6,background:bg||`${color}14`,color,textTransform:"uppercase"}}>{children}</span>;
@@ -129,6 +134,9 @@ function MedicareTracker() {
   const [bulkRows, setBulkRows] = useState([]);
   const [bulkMapping, setBulkMapping] = useState({});
   const [statusFilter, setStatusFilter] = useState("all");
+  const [carrierColors, setCarrierColors] = useState(false);
+  const [appMonthFilter, setAppMonthFilter] = useState("all");
+  const [quickEdit, setQuickEdit] = useState(null);
   // Monthly review
   const [reviewMode, setReviewMode] = useState(false);
   const [reviewIdx, setReviewIdx] = useState(0);
@@ -175,12 +183,29 @@ function MedicareTracker() {
 
   const applyFilters = useCallback(list=>{
     let f=[...list];
-    if(searchTerm){const s=searchTerm.toLowerCase();f=f.filter(c=>c.fullName?.toLowerCase().includes(s)||c.phone?.includes(s)||c.email?.toLowerCase().includes(s)||c.mbiNumber?.toLowerCase().includes(s)||c.city?.toLowerCase().includes(s)||c.carrier?.toLowerCase().includes(s));}
+    if(searchTerm){const s=searchTerm.toLowerCase();const sDigits=s.replace(/\D/g,"");f=f.filter(c=>{
+      if(c.fullName?.toLowerCase().includes(s)) return true;
+      if(c.phone&&(c.phone.includes(s)||c.phone.replace(/\D/g,"").includes(sDigits))) return true;
+      if(c.email?.toLowerCase().includes(s)) return true;
+      if(c.mailingAddress?.toLowerCase().includes(s)) return true;
+      if(c.city?.toLowerCase().includes(s)) return true;
+      if(c.zipCode?.includes(s)) return true;
+      if(c.mbiNumber?.toLowerCase().includes(s)) return true;
+      if(c.carrier?.toLowerCase().includes(s)) return true;
+      if(c.planName?.toLowerCase().includes(s)) return true;
+      if(c.medicaidNumber?.toLowerCase().includes(s)) return true;
+      if(c.sunfireCode?.toLowerCase().includes(s)) return true;
+      if(c.statusNote?.toLowerCase().includes(s)) return true;
+      if(c.applicationDate?.includes(s)) return true;
+      if(c.effectiveDate?.includes(s)) return true;
+      return false;
+    });}
     if(statusFilter&&statusFilter!=="all")f=f.filter(c=>c.status===statusFilter);
+    if(appMonthFilter&&appMonthFilter!=="all"){const effMo=appMonthToEffMonth(parseInt(appMonthFilter));f=f.filter(c=>{if(!c.effectiveDate)return false;const m=new Date(c.effectiveDate+"T00:00:00").getMonth();return m===effMo;});}
     Object.entries(filters).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v);});
     if(sortField!=="custom") f.sort((a,b)=>{const av=a[sortField]||"",bv=b[sortField]||"";const c=av<bv?-1:av>bv?1:0;return sortDir==="asc"?c:-c;});
     return f;
-  },[searchTerm,statusFilter,filters,sortField,sortDir]);
+  },[searchTerm,statusFilter,appMonthFilter,filters,sortField,sortDir]);
 
   const resetForm=()=>{setForm({});setEditId(null);};
   const openAdd=()=>{resetForm();setShowAddModal(true);};
@@ -189,7 +214,7 @@ function MedicareTracker() {
     if(!form.fullName?.trim()){showToast("Full Name required","error");return;}
     const cleaned={...form};
     if(!cleaned.medicaidNumber?.trim()) cleaned.medicaidLevel="N/A";
-    if(cleaned.carrier){const m={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare"};cleaned.carrier=m[cleaned.carrier.toLowerCase()]||cleaned.carrier;}
+    if(cleaned.carrier){const m={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus"};cleaned.carrier=m[cleaned.carrier.toLowerCase()]||cleaned.carrier;}
     if(editId){save(clients.map(c=>c.id===editId?{...cleaned,id:editId}:c));showToast("Updated");}
     else{save([...clients,{...cleaned,id:Date.now().toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""}]);showToast("Client added");}
     setShowAddModal(false);resetForm();
@@ -243,9 +268,9 @@ function MedicareTracker() {
   const openBulkImport=()=>{setBulkRaw("");setBulkHeaders([]);setBulkRows([]);setBulkMapping({});setBulkStep(1);setShowBulkModal(true);};
   const normalizeDate=val=>{if(!val)return"";const cl=val.trim();if(/^\d{4}-\d{2}-\d{2}$/.test(cl))return cl;const sm=cl.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);if(sm){let[_,m,d,y]=sm;if(y.length===2)y=(parseInt(y)>50?"19":"20")+y;return`${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;}const tm=cl.match(/^(\d{2})(\d{2})[\/\-](\d{4})$/);if(tm){let[_,m,d,y]=tm;return`${y}-${m}-${d}`;}const pm=cl.match(/^(\d{1,2})[\/\-](\d{4})$/);if(pm){let[_,m,y]=pm;return`${y}-${m.padStart(2,"0")}-01`;}const p=new Date(cl);if(!isNaN(p.getTime()))return p.toISOString().split("T")[0];return cl;};
   const parseSheet=text=>{const recs=[];let cur=[],fld="",inQ=false,i=0;const fn=text.indexOf("\n"),fl=fn>-1?text.substring(0,fn):text,del=fl.includes("\t")?"\t":",";while(i<text.length){const ch=text[i];if(inQ){if(ch==='"'){if(i+1<text.length&&text[i+1]==='"'){fld+='"';i+=2;}else{inQ=false;i++;}}else{fld+=ch;i++;}}else{if(ch==='"'){inQ=true;i++;}else if(ch===del){cur.push(fld.trim());fld="";i++;}else if(ch==="\n"||ch==="\r"){cur.push(fld.trim());fld="";if(ch==="\r"&&i+1<text.length&&text[i+1]==="\n")i++;i++;if(cur.some(c=>c.length>0))recs.push(cur);cur=[];}else{fld+=ch;i++;}}}cur.push(fld.trim());if(cur.some(c=>c.length>0))recs.push(cur);return recs;};
-  const parseBulkData=()=>{const text=bulkRaw.trim();if(!text){showToast("Paste data","error");return;}const all=parseSheet(text);if(all.length<2){showToast("Need header+data","error");return;}let hd=all[0];while(hd.length&&hd[hd.length-1]==="")hd.pop();const cc=hd.length,rows=all.slice(1).map(r=>r.slice(0,cc)).filter(r=>r.filter(c=>c).length>=2);if(!rows.length){showToast("No data","error");return;}setBulkHeaders(hd);setBulkRows(rows);const mm={applicationdate:"applicationDate",appdate:"applicationDate",effectivedate:"effectiveDate",effdate:"effectiveDate",fullname:"fullName",name:"fullName",clientname:"fullName",phone:"phone",phonenumber:"phone",telephone:"phone",cell:"phone",mobile:"phone",email:"email",emailaddress:"email",dateofbirth:"dob",dob:"dob",birthday:"dob",birthdate:"dob",mailingaddress:"mailingAddress",address:"mailingAddress",streetaddress:"mailingAddress",zipcode:"zipCode",zip:"zipCode",postalcode:"zipCode",city:"city",state:"state",mbinumber:"mbiNumber",mbi:"mbiNumber",medicarenumber:"mbiNumber",electionperiod:"electionPeriod",election:"electionPeriod",medicaidnumber:"medicaidNumber",medicaidno:"medicaidNumber",medicaidlevel:"medicaidLevel",newplanname:"planName",planname:"planName",plan:"planName",carrier:"carrier",company:"carrier",hospitalindemnity:"hospitalIndemnity",indemnity:"hospitalIndemnity",sunfirepersonalcode:"sunfireCode",sunfirecode:"sunfireCode",sunfire:"sunfireCode",personalcode:"sunfireCode"};const am={};hd.forEach((h,idx)=>{const l=h.toLowerCase().replace(/[^a-z0-9]/g,"");if(!l)return;const m=mm[l];if(m&&!Object.values(am).includes(m))am[idx]=m;});setBulkMapping(am);const mf=new Set(Object.values(am));setBulkStep(FIELDS.map(f=>f.key).every(k=>mf.has(k))?3:2);};
+  const parseBulkData=()=>{const text=bulkRaw.trim();if(!text){showToast("Paste data","error");return;}const all=parseSheet(text);if(all.length<2){showToast("Need header+data","error");return;}let hd=all[0];while(hd.length&&hd[hd.length-1]==="")hd.pop();const cc=hd.length,rows=all.slice(1).map(r=>r.slice(0,cc)).filter(r=>r.filter(c=>c).length>=2);if(!rows.length){showToast("No data","error");return;}setBulkHeaders(hd);setBulkRows(rows);const mm={applicationdate:"applicationDate",appdate:"applicationDate",effectivedate:"effectiveDate",effdate:"effectiveDate",fullname:"fullName",name:"fullName",clientname:"fullName",phone:"phone",phonenumber:"phone",telephone:"phone",cell:"phone",mobile:"phone",email:"email",emailaddress:"email",dateofbirth:"dob",dob:"dob",birthday:"dob",birthdate:"dob",mailingaddress:"mailingAddress",address:"mailingAddress",streetaddress:"mailingAddress",zipcode:"zipCode",zip:"zipCode",postalcode:"zipCode",city:"city",state:"state",mbinumber:"mbiNumber",mbi:"mbiNumber",medicarenumber:"mbiNumber",electionperiod:"electionPeriod",election:"electionPeriod",medicaidnumber:"medicaidNumber",medicaidno:"medicaidNumber",medicaidlevel:"medicaidLevel",newplanname:"planName",planname:"planName",plan:"planName",carrier:"carrier",company:"carrier",hospitalindemnity:"hospitalIndemnity",indemnity:"hospitalIndemnity",sunfirepersonalcode:"sunfireCode",sunfirecode:"sunfireCode",sunfire:"sunfireCode",personalcode:"sunfireCode",plantype:"planType",dsnp:"planType",csnp:"planType",mapd:"planType",pdp:"planType"};const am={};hd.forEach((h,idx)=>{const l=h.toLowerCase().replace(/[^a-z0-9]/g,"");if(!l)return;const m=mm[l];if(m&&!Object.values(am).includes(m))am[idx]=m;});setBulkMapping(am);const mf=new Set(Object.values(am));setBulkStep(FIELDS.map(f=>f.key).every(k=>mf.has(k))?3:2);};
   const buildPreview=()=>bulkRows.map(row=>{const c={};Object.entries(bulkMapping).forEach(([ci,fk])=>{if(fk&&fk!=="skip"){let v=row[parseInt(ci)]||"";const fd=FIELDS.find(f=>f.key===fk);if(fd&&fd.type==="date")v=normalizeDate(v);v=v.replace(/\s+/g," ").trim();if(v)c[fk]=v;}});return c;});
-  const execImport=()=>{const p=buildPreview(),v=p.filter(c=>c.fullName?.trim());if(!v.length){showToast("No valid clients","error");return;}const cm={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare"};save([...clients,...v.map((c,i)=>{if(c.carrier)c.carrier=cm[c.carrier.toLowerCase()]||c.carrier;if(!c.medicaidNumber?.trim())c.medicaidLevel="N/A";return{...c,id:(Date.now()+i).toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""};})]);showToast(`Imported ${v.length} clients!`);setShowBulkModal(false);};
+  const execImport=()=>{const p=buildPreview(),v=p.filter(c=>c.fullName?.trim());if(!v.length){showToast("No valid clients","error");return;}const cm={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus"};save([...clients,...v.map((c,i)=>{if(c.carrier)c.carrier=cm[c.carrier.toLowerCase()]||c.carrier;if(!c.medicaidNumber?.trim())c.medicaidLevel="N/A";return{...c,id:(Date.now()+i).toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""};})]);showToast(`Imported ${v.length} clients!`);setShowBulkModal(false);};
 
   // Analytics
   const analytics = useMemo(()=>{
@@ -268,6 +293,22 @@ function MedicareTracker() {
   },[clients,byStatus]);
 
   const uniqueVals=useCallback((f,l)=>[...new Set(l.map(c=>c[f]).filter(Boolean))].sort(),[]);
+  const countVals=useCallback((f,v,l)=>l.filter(c=>c[f]===v).length,[]);
+  const exportCSV=()=>{
+    const allFields=[...FIELDS,{key:"status",label:"Status"},{key:"commissionAmount",label:"Commission"},{key:"paidDate",label:"Date Paid"},{key:"chargebackAmount",label:"Chargeback Amount"},{key:"chargebackDate",label:"Chargeback Date"},{key:"lastVerified",label:"Last Verified"},{key:"statusNote",label:"Notes"}];
+    const header=allFields.map(f=>f.label).join(",");
+    const rows=clients.map(c=>allFields.map(f=>{let v=c[f.key]||"";if(typeof v==="string"&&(v.includes(",")||v.includes('"')))v='"'+v.replace(/"/g,'""')+'"';return v;}).join(","));
+    const csv=header+"\n"+rows.join("\n");
+    const blob=new Blob([csv],{type:"text/csv"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="medicare-clients-"+today()+".csv";a.click();URL.revokeObjectURL(url);
+    showToast("Exported "+clients.length+" clients!");
+  };
+  const quickSave=(id,field,value)=>{
+    save(clients.map(c=>c.id===id?{...c,[field]:value}:c));
+    setQuickEdit(null);
+    showToast("Updated");
+  };
 
   // Themes
   const LT={"--bg":"#F7F8FA","--card":"#FFFFFF","--border":"#E2E8F0","--text":"#1A2332","--t2":"#64748B","--t3":"#94A3B8","--accent":"#3B8FD9","--bg-hover":"#F1F5F9","--input-bg":"#FFF","--input-border":"#E2E8F0","--shadow":"0 4px 24px rgba(0,0,0,0.06)","--cs":"0 1px 3px rgba(0,0,0,0.04)","--overlay":"rgba(15,23,42,0.45)","--header-bg":"#FFF","--header-border":"#E2E8F0","--bar-track":"#F1F5F9","--tab-bg":"#EDF4FC"};
@@ -460,7 +501,7 @@ function MedicareTracker() {
 
       <div style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 24px"}}>
         <div style={{maxWidth:1400,margin:"0 auto",display:"flex",gap:4}}>
-          {tabs2.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setFilters({});setSearchTerm("");setStatusFilter("all");}} style={{padding:"12px 18px",border:"none",background:"transparent",color:tab===t.id?"#3B8FD9":"var(--t2)",borderBottom:tab===t.id?"2px solid #3B8FD9":"2px solid transparent",cursor:"pointer",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:7,fontFamily:"var(--font)"}}>
+          {tabs2.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setFilters({});setSearchTerm("");setStatusFilter("all");setAppMonthFilter("all");}} style={{padding:"12px 18px",border:"none",background:"transparent",color:tab===t.id?"#3B8FD9":"var(--t2)",borderBottom:tab===t.id?"2px solid #3B8FD9":"2px solid transparent",cursor:"pointer",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:7,fontFamily:"var(--font)"}}>
             <span style={{fontSize:14}}>{t.icon}</span>{t.label}{t.count!==undefined&&<span style={{background:tab===t.id?"#3B8FD9":"var(--bg-hover)",color:tab===t.id?"#fff":"var(--t2)",padding:"1px 7px",borderRadius:8,fontSize:11,fontWeight:700}}>{t.count}</span>}
           </button>)}
         </div>
@@ -501,8 +542,21 @@ function MedicareTracker() {
         {tab==="clients"&&<div style={{animation:"slideUp 0.3s"}}>
           <div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
             <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-              <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:0.4}}>🔍</span><input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search clients..." style={{...inp,paddingLeft:36}} /></div>
-              {[{k:"carrier",l:"Carrier"},{k:"state",l:"State"},{k:"electionPeriod",l:"Election"}].map(f=><select key={f.k} value={filters[f.k]||"all"} onChange={e=>setFilters(p=>({...p,[f.k]:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">{f.l}: All</option>{uniqueVals(f.k,clients).map(v=><option key={v} value={v}>{v}</option>)}</select>)}
+              <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:0.4}}>🔍</span><input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search name, phone, email, MBI, address, zip..." style={{...inp,paddingLeft:36}} /></div>
+              <select value={filters.carrier||"all"} onChange={e=>setFilters(p=>({...p,carrier:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Carrier: All</option>{uniqueVals("carrier",clients).map(v=><option key={v} value={v}>{fmtCarrier(v)} ({countVals("carrier",v,clients)})</option>)}</select>
+              <select value={filters.state||"all"} onChange={e=>setFilters(p=>({...p,state:e.target.value}))} style={{...inp,width:"auto",minWidth:80,cursor:"pointer"}}><option value="all">State: All</option>{uniqueVals("state",clients).map(v=><option key={v} value={v}>{v} ({countVals("state",v,clients)})</option>)}</select>
+              <select value={filters.planType||"all"} onChange={e=>setFilters(p=>({...p,planType:e.target.value}))} style={{...inp,width:"auto",minWidth:90,cursor:"pointer"}}><option value="all">Plan Type: All</option>{["MAPD","DSNP","CSNP","PDP","Medigap"].map(v=><option key={v} value={v}>{v} ({countVals("planType",v,clients)})</option>)}</select>
+              <select value={appMonthFilter} onChange={e=>setAppMonthFilter(e.target.value)} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">App Month: All</option>{MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}</select>
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginTop:10}}>
+              <select value={filters.hospitalIndemnity||"all"} onChange={e=>setFilters(p=>({...p,hospitalIndemnity:e.target.value}))} style={{...inp,width:"auto",minWidth:120,cursor:"pointer"}}><option value="all">Hosp Indemnity: All</option><option value="Yes">Yes ({countVals("hospitalIndemnity","Yes",clients)})</option><option value="No">No ({countVals("hospitalIndemnity","No",clients)})</option></select>
+              <select value={filters.medicaidLevel||"all"} onChange={e=>setFilters(p=>({...p,medicaidLevel:e.target.value}))} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">Medicaid: All</option>{["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"].map(v=><option key={v} value={v}>{v} ({countVals("medicaidLevel",v,clients)})</option>)}</select>
+              <select value={filters.electionPeriod||"all"} onChange={e=>setFilters(p=>({...p,electionPeriod:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Election: All</option>{uniqueVals("electionPeriod",clients).map(v=><option key={v} value={v}>{v} ({countVals("electionPeriod",v,clients)})</option>)}</select>
+              <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>setCarrierColors(!carrierColors)} style={{...btnO,fontSize:11,padding:"6px 12px",borderColor:carrierColors?"#3B8FD9":"var(--border)",color:carrierColors?"#3B8FD9":"var(--t2)"}}>{carrierColors?"🎨 Colors On":"🎨 Colors Off"}</button>
+                <button onClick={exportCSV} style={{...btnO,fontSize:11,padding:"6px 12px"}}>📥 Export CSV</button>
+                {(searchTerm||statusFilter!=="all"||appMonthFilter!=="all"||Object.values(filters).some(v=>v&&v!=="all"))&&<button onClick={()=>{setSearchTerm("");setStatusFilter("all");setAppMonthFilter("all");setFilters({});}} style={{...btnO,fontSize:11,padding:"6px 12px"}}>✕ Clear</button>}
+              </div>
             </div>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
@@ -513,17 +567,20 @@ function MedicareTracker() {
             const filtered=applyFilters(clients);
             return filtered.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}><div style={{fontSize:42,marginBottom:10}}>👥</div><div style={{fontSize:15,fontWeight:600}}>No clients found</div></div>:
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 0.9fr 0.7fr 0.9fr 0.8fr",gap:10,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Last Verified</div><div>Status</div></div>
-              {filtered.map(c=>{const st=ST[c.status]||ST.active;const dv=c.lastVerified?daysBetween(c.lastVerified,today()):null;const stale=(c.status==="active"||c.status==="paid")&&(!c.lastVerified||dv>=30);
-              return <div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 0.9fr 0.7fr 0.9fr 0.8fr",gap:10,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:`1px solid ${stale?"#F59E0B44":"var(--border)"}`,cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"border-color 0.15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#3B8FD9"} onMouseLeave={e=>e.currentTarget.style.borderColor=stale?"#F59E0B44":"var(--border)"}>
-                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:dark?"#334155":"#E8ECF1",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
-                <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtCarrier(c.carrier)}</div>
+              <div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{filtered.length} of {clients.length} clients</div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Type</div><div>Status</div><div>Notes</div></div>
+              {filtered.map(c=>{const st=ST[c.status]||ST.active;const dv=c.lastVerified?daysBetween(c.lastVerified,today()):null;const stale=(c.status==="active"||c.status==="paid")&&(!c.lastVerified||dv>=30);const cc=carrierColors?getCarrierColor(c.carrier):null;
+              return <div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:`1px solid ${stale?"#F59E0B44":"var(--border)"}`,cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"border-color 0.15s",borderLeft:cc?`4px solid ${cc}`:"none"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#3B8FD9"} onMouseLeave={e=>e.currentTarget.style.borderColor=stale?"#F59E0B44":"var(--border)"}>
+                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:cc?`${cc}18`:(dark?"#334155":"#E8ECF1"),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:cc||"var(--text)"}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
+                <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:cc||"var(--text)"}}>{fmtCarrier(c.carrier)}</div>
                 <div style={{fontSize:12}}>{fmt(c.effectiveDate)}</div>
                 <div style={{fontSize:12}}>{c.state||"—"}</div>
-                <div style={{fontSize:12,color:stale?"#F59E0B":"var(--t2)"}}>{c.lastVerified?<>{fmt(c.lastVerified)}{stale&&" ⚠️"}</>:"Never"}</div>
+                <div>{c.planType?<Badge color={c.planType==="DSNP"?"#8B5CF6":c.planType==="CSNP"?"#EC4899":"var(--accent)"}>{c.planType}</Badge>:<span style={{fontSize:11,color:"var(--t3)"}}>—</span>}</div>
                 <Badge color={st.color}>{st.icon} {st.label}</Badge>
+                <div style={{fontSize:11,color:"var(--t3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} onClick={e=>{e.stopPropagation();setQuickEdit({id:c.id,field:"statusNote",value:c.statusNote||""});}}>{quickEdit&&quickEdit.id===c.id&&quickEdit.field==="statusNote"?<input autoFocus value={quickEdit.value} onChange={e=>setQuickEdit({...quickEdit,value:e.target.value})} onBlur={()=>quickSave(c.id,"statusNote",quickEdit.value)} onKeyDown={e=>{if(e.key==="Enter")quickSave(c.id,"statusNote",quickEdit.value);if(e.key==="Escape")setQuickEdit(null);}} onClick={e=>e.stopPropagation()} style={{...inp,padding:"4px 8px",fontSize:11,width:"100%"}} />:(c.statusNote||<span style={{fontStyle:"italic",opacity:0.5}}>+ note</span>)}</div>
               </div>;})}
             </div>;
+          })()}
           })()}
         </div>}
 
