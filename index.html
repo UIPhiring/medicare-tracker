@@ -117,7 +117,7 @@ function MedicareTracker() {
   const [viewClient, setViewClient] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(null);
   const [statusForm, setStatusForm] = useState({});
-  const [sortField, setSortField] = useState("applicationDate");
+  const [sortField, setSortField] = useState("custom");
   const [sortDir, setSortDir] = useState("desc");
   const [toast, setToast] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
@@ -177,7 +177,7 @@ function MedicareTracker() {
     if(searchTerm){const s=searchTerm.toLowerCase();f=f.filter(c=>c.fullName?.toLowerCase().includes(s)||c.phone?.includes(s)||c.email?.toLowerCase().includes(s)||c.mbiNumber?.toLowerCase().includes(s)||c.city?.toLowerCase().includes(s)||c.carrier?.toLowerCase().includes(s));}
     if(statusFilter&&statusFilter!=="all")f=f.filter(c=>c.status===statusFilter);
     Object.entries(filters).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v);});
-    f.sort((a,b)=>{const av=a[sortField]||"",bv=b[sortField]||"";const c=av<bv?-1:av>bv?1:0;return sortDir==="asc"?c:-c;});
+    if(sortField!=="custom") f.sort((a,b)=>{const av=a[sortField]||"",bv=b[sortField]||"";const c=av<bv?-1:av>bv?1:0;return sortDir==="asc"?c:-c;});
     return f;
   },[searchTerm,statusFilter,filters,sortField,sortDir]);
 
@@ -644,6 +644,7 @@ function MedicareTracker() {
             const orderedClients=orderedIds.map(id=>clients.find(c=>c.id===id)).filter(Boolean);
             const remaining=clients.filter(c=>!orderedIds.includes(c.id));
             save([...orderedClients,...remaining]);
+            setSortField("custom");
             showToast(`Reordered ${orderedClients.length} clients!`);
             setShowQuickAdd(false);
           }} style={btnP}>✅ Apply Order</button>}
