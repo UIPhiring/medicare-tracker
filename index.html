@@ -334,7 +334,9 @@ function MedicareTracker() {
   const LT={"--bg":"#F7F8FA","--card":"#FFFFFF","--border":"#E2E8F0","--text":"#1A2332","--t2":"#64748B","--t3":"#94A3B8","--accent":"#3B8FD9","--bg-hover":"#F1F5F9","--input-bg":"#FFF","--input-border":"#E2E8F0","--shadow":"0 4px 24px rgba(0,0,0,0.06)","--cs":"0 1px 3px rgba(0,0,0,0.04)","--overlay":"rgba(15,23,42,0.45)","--header-bg":"#FFF","--header-border":"#E2E8F0","--bar-track":"#F1F5F9","--tab-bg":"#EDF4FC"};
   const DT={"--bg":"#0F172A","--card":"#1E293B","--border":"#334155","--text":"#F1F5F9","--t2":"#94A3B8","--t3":"#64748B","--accent":"#3B8FD9","--bg-hover":"#273548","--input-bg":"#1E293B","--input-border":"#475569","--shadow":"0 4px 24px rgba(0,0,0,0.4)","--cs":"0 1px 3px rgba(0,0,0,0.2)","--overlay":"rgba(0,0,0,0.6)","--header-bg":"#1E293B","--header-border":"#334155","--bar-track":"#273548","--tab-bg":"#1A2840"};
   const theme=dark?DT:LT;
-  const tabs2=[{id:"dashboard",label:"Dashboard",icon:"📊"},{id:"clients",label:"All Clients",icon:"👥",count:clients.length},{id:"analytics",label:"Analytics",icon:"📈"}];
+  const isPending = c => c.effectiveDate && new Date(c.effectiveDate+"T00:00:00") > new Date();
+  const bookClients = useMemo(()=>clients.filter(c=>c.status==="active"||c.status==="paid"),[clients]);
+  const tabs2=[{id:"dashboard",label:"Dashboard",icon:"📊"},{id:"book",label:"Book of Business",icon:"📖",count:bookClients.length},{id:"clients",label:"All Clients",icon:"👥",count:clients.length},{id:"analytics",label:"Analytics",icon:"📈"}];
 
   if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F7F8FA",fontFamily:"'Inter',system-ui,sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:12}}>⚕️</div><div style={{fontSize:13,fontWeight:600,letterSpacing:0.5}}>LOADING...</div></div></div>;
 
@@ -559,8 +561,52 @@ function MedicareTracker() {
           </div>
         </div>}
 
+        {/* BOOK OF BUSINESS */}
+        {tab==="book"&&<div style={{animation:"slideUp 0.3s"}}>
+          <div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><h1 style={{fontSize:24,fontWeight:800,marginBottom:2}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>{bookClients.length} active clients on your book</p></div>
+          </div>
+          <div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+              <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:0.4}}>🔍</span><input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search name, phone, email, MBI, address, zip..." style={{...inp,paddingLeft:36}} /></div>
+              <select value={filters.carrier||"all"} onChange={e=>setFilters(p=>({...p,carrier:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Carrier: All</option>{uniqueVals("carrier",bookClients).map(v=><option key={v} value={v}>{fmtCarrier(v)} ({countVals("carrier",v,bookClients)})</option>)}</select>
+              <select value={filters.state||"all"} onChange={e=>setFilters(p=>({...p,state:e.target.value}))} style={{...inp,width:"auto",minWidth:80,cursor:"pointer"}}><option value="all">State: All</option>{uniqueVals("state",bookClients).map(v=><option key={v} value={v}>{v} ({countVals("state",v,bookClients)})</option>)}</select>
+              <select value={filters.planType||"all"} onChange={e=>setFilters(p=>({...p,planType:e.target.value}))} style={{...inp,width:"auto",minWidth:90,cursor:"pointer"}}><option value="all">Plan Type: All</option>{["MAPD","DSNP","CSNP","PDP","Medigap"].map(v=><option key={v} value={v}>{v} ({countVals("planType",v,bookClients)})</option>)}</select>
+              <select value={appMonthFilter} onChange={e=>setAppMonthFilter(e.target.value)} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">App Month: All</option>{MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}</select>
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginTop:10}}>
+              <select value={filters.hospitalIndemnity||"all"} onChange={e=>setFilters(p=>({...p,hospitalIndemnity:e.target.value}))} style={{...inp,width:"auto",minWidth:120,cursor:"pointer"}}><option value="all">Hosp Indemnity: All</option><option value="Yes">Yes ({countVals("hospitalIndemnity","Yes",bookClients)})</option><option value="No">No ({countVals("hospitalIndemnity","No",bookClients)})</option></select>
+              <select value={filters.medicaidLevel||"all"} onChange={e=>setFilters(p=>({...p,medicaidLevel:e.target.value}))} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">Medicaid: All</option>{["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"].map(v=><option key={v} value={v}>{v} ({countVals("medicaidLevel",v,bookClients)})</option>)}</select>
+              <select value={filters.electionPeriod||"all"} onChange={e=>setFilters(p=>({...p,electionPeriod:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Election: All</option>{uniqueVals("electionPeriod",bookClients).map(v=><option key={v} value={v}>{v} ({countVals("electionPeriod",v,bookClients)})</option>)}</select>
+              <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>setCarrierColors(!carrierColors)} style={{...btnO,fontSize:11,padding:"6px 12px",borderColor:carrierColors?"#3B8FD9":"var(--border)",color:carrierColors?"#3B8FD9":"var(--t2)"}}>{carrierColors?"🎨 Colors On":"🎨 Colors Off"}</button>
+                {(searchTerm||appMonthFilter!=="all"||Object.values(filters).some(v=>v&&v!=="all"))&&<button onClick={()=>{setSearchTerm("");setAppMonthFilter("all");setFilters({});}} style={{...btnO,fontSize:11,padding:"6px 12px"}}>✕ Clear</button>}
+              </div>
+            </div>
+          </div>
+          {(()=>{
+            const filtered=applyFilters(bookClients);
+            return filtered.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}><div style={{fontSize:42,marginBottom:10}}>📖</div><div style={{fontSize:15,fontWeight:600}}>No clients match filters</div></div>:
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{filtered.length} of {bookClients.length} on book</div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Type</div><div>Status</div><div>Notes</div></div>
+              {filtered.map(c=>{const st=ST[c.status]||ST.active;const cc=carrierColors?getCarrierColor(c.carrier):null;const pending=isPending(c);
+              return <div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"box-shadow 0.15s",borderLeft:cc?`4px solid ${cc}`:"none"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"} onMouseLeave={e=>e.currentTarget.style.boxShadow="var(--cs)"}>
+                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:cc?`${cc}18`:(dark?"#334155":"#E8ECF1"),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:cc||"var(--text)"}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
+                <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:cc||"var(--text)"}}>{fmtCarrier(c.carrier)}</div>
+                <div style={{fontSize:12}}>{fmt(c.effectiveDate)}{pending&&" ⏳"}</div>
+                <div style={{fontSize:12}}>{c.state||"—"}</div>
+                <div>{c.planType?<Badge color={c.planType==="DSNP"?"#8B5CF6":c.planType==="CSNP"?"#EC4899":"var(--accent)"}>{c.planType}</Badge>:<span style={{fontSize:11,color:"var(--t3)"}}>—</span>}</div>
+                <div>{pending?<Badge color="#6366F1">⏳ Pending</Badge>:<Badge color={st.color}>{st.icon} {st.label}</Badge>}</div>
+                <div style={{fontSize:11,color:"var(--t3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} onClick={e=>{e.stopPropagation();setQuickEdit({id:c.id,field:"statusNote",value:c.statusNote||""});}}>{quickEdit&&quickEdit.id===c.id&&quickEdit.field==="statusNote"?<input autoFocus value={quickEdit.value} onChange={e=>setQuickEdit({...quickEdit,value:e.target.value})} onBlur={()=>quickSave(c.id,"statusNote",quickEdit.value)} onKeyDown={e=>{if(e.key==="Enter")quickSave(c.id,"statusNote",quickEdit.value);if(e.key==="Escape")setQuickEdit(null);}} onClick={e=>e.stopPropagation()} style={{...inp,padding:"4px 8px",fontSize:11,width:"100%"}} />:(c.statusNote||<span style={{fontStyle:"italic",opacity:0.5}}>+ note</span>)}</div>
+              </div>;})}
+            </div>;
+          })()}
+        </div>}
+
         {/* CLIENTS */}
         {tab==="clients"&&<div style={{animation:"slideUp 0.3s"}}>
+          <div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:2}}>All Clients</h1><p style={{fontSize:13,color:"var(--t3)"}}>Everyone you've ever sold — on book and off book</p></div>
           <div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
             <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
               <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:0.4}}>🔍</span><input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search name, phone, email, MBI, address, zip..." style={{...inp,paddingLeft:36}} /></div>
@@ -590,14 +636,14 @@ function MedicareTracker() {
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               <div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{filtered.length} of {clients.length} clients</div>
               <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Type</div><div>Status</div><div>Notes</div></div>
-              {filtered.map(c=>{const st=ST[c.status]||ST.active;const dv=c.lastVerified?daysBetween(c.lastVerified,today()):null;const stale=(c.status==="active"||c.status==="paid")&&(!c.lastVerified||dv>=30);const cc=carrierColors?getCarrierColor(c.carrier):null;
+              {filtered.map(c=>{const st=ST[c.status]||ST.active;const dv=c.lastVerified?daysBetween(c.lastVerified,today()):null;const stale=(c.status==="active"||c.status==="paid")&&(!c.lastVerified||dv>=30);const cc=carrierColors?getCarrierColor(c.carrier):null;const pending=isPending(c);
               return <div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:`1px solid ${stale?"#F59E0B44":"var(--border)"}`,cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"box-shadow 0.15s",borderLeft:cc?`4px solid ${cc}`:"none"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"} onMouseLeave={e=>e.currentTarget.style.boxShadow="var(--cs)"}>
                 <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:cc?`${cc}18`:(dark?"#334155":"#E8ECF1"),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:cc||"var(--text)"}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
                 <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:cc||"var(--text)"}}>{fmtCarrier(c.carrier)}</div>
-                <div style={{fontSize:12}}>{fmt(c.effectiveDate)}</div>
+                <div style={{fontSize:12}}>{fmt(c.effectiveDate)}{pending&&" ⏳"}</div>
                 <div style={{fontSize:12}}>{c.state||"—"}</div>
                 <div>{c.planType?<Badge color={c.planType==="DSNP"?"#8B5CF6":c.planType==="CSNP"?"#EC4899":"var(--accent)"}>{c.planType}</Badge>:<span style={{fontSize:11,color:"var(--t3)"}}>—</span>}</div>
-                <Badge color={st.color}>{st.icon} {st.label}</Badge>
+                {pending?<Badge color="#6366F1">⏳ Pending</Badge>:<Badge color={st.color}>{st.icon} {st.label}</Badge>}
                 <div style={{fontSize:11,color:"var(--t3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} onClick={e=>{e.stopPropagation();setQuickEdit({id:c.id,field:"statusNote",value:c.statusNote||""});}}>{quickEdit&&quickEdit.id===c.id&&quickEdit.field==="statusNote"?<input autoFocus value={quickEdit.value} onChange={e=>setQuickEdit({...quickEdit,value:e.target.value})} onBlur={()=>quickSave(c.id,"statusNote",quickEdit.value)} onKeyDown={e=>{if(e.key==="Enter")quickSave(c.id,"statusNote",quickEdit.value);if(e.key==="Escape")setQuickEdit(null);}} onClick={e=>e.stopPropagation()} style={{...inp,padding:"4px 8px",fontSize:11,width:"100%"}} />:(c.statusNote||<span style={{fontStyle:"italic",opacity:0.5}}>+ note</span>)}</div>
               </div>;})}
             </div>;
