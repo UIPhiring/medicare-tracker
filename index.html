@@ -66,7 +66,7 @@ const monthLabel = mk => { if(!mk) return "—"; return new Date(mk+"-01T00:00:0
 const daysBetween = (a,b) => { if(!a||!b) return null; return Math.floor((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/(86400000)); };
 const today = () => new Date().toISOString().split("T")[0];
 const CARRIER_COLORS = {"humana":"#22C55E","careplus":"#22C55E","unitedhealthcare":"#3B82F6","uhc":"#3B82F6","aetna":"#EC4899","devoted health":"#F97316","devoted":"#F97316","freedom health":"#EAB308","freedom":"#EAB308"};
-const getCarrierColor = c => { if(!c) return "#78716C"; return CARRIER_COLORS[c.toLowerCase()]||CARRIER_COLORS[c.toLowerCase().replace(/ health$/,"")]||"#78716C"; };
+const getCarrierColor = c => { if(!c) return "#78716C"; const k=c.trim().toLowerCase(); return CARRIER_COLORS[k]||CARRIER_COLORS[k.replace(/ health$/,"")]||"#78716C"; };
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const appMonthToEffMonth = m => m===11?0:m+1; // Jan app → Feb eff, Dec app → Jan eff
 
@@ -152,10 +152,10 @@ function MedicareTracker() {
   const [massField, setMassField] = useState("");
   const [massValue, setMassValue] = useState("");
 
-  const CARRIER_NORM={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus","devoted":"Devoted Health","wellcare":"WellCare"};
+  const CARRIER_NORM={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus","devoted":"Devoted Health","devoted health":"Devoted Health","wellcare":"WellCare","humana":"Humana","aetna":"Aetna"};
   const normalizeClients = (list) => list.map(c=>{
     const n={...c};
-    if(n.carrier){const k=n.carrier.toLowerCase();if(CARRIER_NORM[k])n.carrier=CARRIER_NORM[k];}
+    if(n.carrier){n.carrier=n.carrier.trim();const k=n.carrier.toLowerCase();if(CARRIER_NORM[k])n.carrier=CARRIER_NORM[k];}
     if(!n.medicaidNumber?.trim()&&(!n.medicaidLevel||n.medicaidLevel==="None"))n.medicaidLevel="N/A";
     if(!n.planType)n.planType="";
     if(!n.hospitalIndemnity)n.hospitalIndemnity="";
@@ -717,7 +717,7 @@ function MedicareTracker() {
         <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
           <button onClick={()=>{
             const dupes=[];const seen={};
-            clients.forEach(c=>{const k=(c.fullName||"").toLowerCase().trim()+"||"+(c.phone||"").replace(/\D/g,"");if(seen[k])dupes.push(c.id);else seen[k]=true;});
+            clients.forEach(c=>{const k=(c.fullName||"").toLowerCase().trim()+"||"+(c.phone||"").replace(/\D/g,"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"").toLowerCase();if(seen[k])dupes.push(c.id);else seen[k]=true;});
             if(!dupes.length){showToast("No duplicates found");return;}
             save(clients.filter(c=>!dupes.includes(c.id)));
             showToast(`Removed ${dupes.length} duplicates!`);
