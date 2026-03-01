@@ -31,7 +31,7 @@ const FIELDS = [
   { key: "mbiNumber", label: "MBI Number", type: "text" },
   { key: "electionPeriod", label: "Election Period", type: "select", options: ["AEP","OEP","SEP","IEP","ICEP"] },
   { key: "medicaidNumber", label: "Medicaid Number", type: "text" },
-  { key: "medicaidLevel", label: "Medicaid Level", type: "select", options: ["None","QMB","SLMB","QI","QDWI","Full Medicaid"] },
+  { key: "medicaidLevel", label: "Medicaid Level", type: "select", options: ["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"] },
   { key: "planName", label: "New Plan Name", type: "text" },
   { key: "carrier", label: "Carrier", type: "select", options: ["Aetna","Anthem","Cigna","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Devoted Health","Clover Health","Alignment Health","Oscar Health","Other"] },
   { key: "hospitalIndemnity", label: "Hospital Indemnity", type: "select", options: ["Yes","No"] },
@@ -56,7 +56,8 @@ const TRANSITIONS = {
 
 const STORAGE_KEY = "uip-medicare-clients-v5";
 const fmt = d => { if (!d) return "—"; return new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
-const fmtPhone = p => { if (!p) return "—"; const c=p.replace(/\D/g,""); return c.length===10?`(${c.slice(0,3)}) ${c.slice(3,6)}-${c.slice(6)}`:p; };
+const fmtPhone = p => { if (!p) return "—"; const c=p.replace(/\D/g,""); const d=c.length>=11&&c[0]==="1"?c.slice(1):c; return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:d.length===7?`${d.slice(0,3)}-${d.slice(3)}`:p; };
+const fmtCarrier = c => { if(!c) return "—"; const m={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare"}; return m[c.toLowerCase()]||c; };
 const money = n => "$"+(parseFloat(n)||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
 const pct = (n,d) => d===0?"0%":(n/d*100).toFixed(1)+"%";
 const monthKey = d => d?d.slice(0,7):null;
@@ -186,8 +187,11 @@ function MedicareTracker() {
   const openEdit=c=>{setForm({...c});setEditId(c.id);setShowAddModal(true);};
   const handleSave=()=>{
     if(!form.fullName?.trim()){showToast("Full Name required","error");return;}
-    if(editId){save(clients.map(c=>c.id===editId?{...form,id:editId}:c));showToast("Updated");}
-    else{save([...clients,{...form,id:Date.now().toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""}]);showToast("Client added");}
+    const cleaned={...form};
+    if(!cleaned.medicaidNumber?.trim()) cleaned.medicaidLevel="N/A";
+    if(cleaned.carrier){const m={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare"};cleaned.carrier=m[cleaned.carrier.toLowerCase()]||cleaned.carrier;}
+    if(editId){save(clients.map(c=>c.id===editId?{...cleaned,id:editId}:c));showToast("Updated");}
+    else{save([...clients,{...cleaned,id:Date.now().toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""}]);showToast("Client added");}
     setShowAddModal(false);resetForm();
   };
   const deleteClient=id=>{save(clients.filter(c=>c.id!==id));setViewClient(null);showToast("Deleted");setConfirmAction(null);};
@@ -241,7 +245,7 @@ function MedicareTracker() {
   const parseSheet=text=>{const recs=[];let cur=[],fld="",inQ=false,i=0;const fn=text.indexOf("\n"),fl=fn>-1?text.substring(0,fn):text,del=fl.includes("\t")?"\t":",";while(i<text.length){const ch=text[i];if(inQ){if(ch==='"'){if(i+1<text.length&&text[i+1]==='"'){fld+='"';i+=2;}else{inQ=false;i++;}}else{fld+=ch;i++;}}else{if(ch==='"'){inQ=true;i++;}else if(ch===del){cur.push(fld.trim());fld="";i++;}else if(ch==="\n"||ch==="\r"){cur.push(fld.trim());fld="";if(ch==="\r"&&i+1<text.length&&text[i+1]==="\n")i++;i++;if(cur.some(c=>c.length>0))recs.push(cur);cur=[];}else{fld+=ch;i++;}}}cur.push(fld.trim());if(cur.some(c=>c.length>0))recs.push(cur);return recs;};
   const parseBulkData=()=>{const text=bulkRaw.trim();if(!text){showToast("Paste data","error");return;}const all=parseSheet(text);if(all.length<2){showToast("Need header+data","error");return;}let hd=all[0];while(hd.length&&hd[hd.length-1]==="")hd.pop();const cc=hd.length,rows=all.slice(1).map(r=>r.slice(0,cc)).filter(r=>r.filter(c=>c).length>=2);if(!rows.length){showToast("No data","error");return;}setBulkHeaders(hd);setBulkRows(rows);const mm={applicationdate:"applicationDate",appdate:"applicationDate",effectivedate:"effectiveDate",effdate:"effectiveDate",fullname:"fullName",name:"fullName",clientname:"fullName",phone:"phone",phonenumber:"phone",telephone:"phone",cell:"phone",mobile:"phone",email:"email",emailaddress:"email",dateofbirth:"dob",dob:"dob",birthday:"dob",birthdate:"dob",mailingaddress:"mailingAddress",address:"mailingAddress",streetaddress:"mailingAddress",zipcode:"zipCode",zip:"zipCode",postalcode:"zipCode",city:"city",state:"state",mbinumber:"mbiNumber",mbi:"mbiNumber",medicarenumber:"mbiNumber",electionperiod:"electionPeriod",election:"electionPeriod",medicaidnumber:"medicaidNumber",medicaidno:"medicaidNumber",medicaidlevel:"medicaidLevel",newplanname:"planName",planname:"planName",plan:"planName",carrier:"carrier",company:"carrier",hospitalindemnity:"hospitalIndemnity",indemnity:"hospitalIndemnity",sunfirepersonalcode:"sunfireCode",sunfirecode:"sunfireCode",sunfire:"sunfireCode",personalcode:"sunfireCode"};const am={};hd.forEach((h,idx)=>{const l=h.toLowerCase().replace(/[^a-z0-9]/g,"");if(!l)return;const m=mm[l];if(m&&!Object.values(am).includes(m))am[idx]=m;});setBulkMapping(am);const mf=new Set(Object.values(am));setBulkStep(FIELDS.map(f=>f.key).every(k=>mf.has(k))?3:2);};
   const buildPreview=()=>bulkRows.map(row=>{const c={};Object.entries(bulkMapping).forEach(([ci,fk])=>{if(fk&&fk!=="skip"){let v=row[parseInt(ci)]||"";const fd=FIELDS.find(f=>f.key===fk);if(fd&&fd.type==="date")v=normalizeDate(v);v=v.replace(/\s+/g," ").trim();if(v)c[fk]=v;}});return c;});
-  const execImport=()=>{const p=buildPreview(),v=p.filter(c=>c.fullName?.trim());if(!v.length){showToast("No valid clients","error");return;}save([...clients,...v.map((c,i)=>({...c,id:(Date.now()+i).toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""}))]);showToast(`Imported ${v.length} clients!`);setShowBulkModal(false);};
+  const execImport=()=>{const p=buildPreview(),v=p.filter(c=>c.fullName?.trim());if(!v.length){showToast("No valid clients","error");return;}const cm={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare"};save([...clients,...v.map((c,i)=>{if(c.carrier)c.carrier=cm[c.carrier.toLowerCase()]||c.carrier;if(!c.medicaidNumber?.trim())c.medicaidLevel="N/A";return{...c,id:(Date.now()+i).toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""};})]);showToast(`Imported ${v.length} clients!`);setShowBulkModal(false);};
 
   // Analytics
   const analytics = useMemo(()=>{
@@ -337,7 +341,7 @@ function MedicareTracker() {
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:16,marginBottom:20}}>
                 {[
                   {l:"MBI Number",v:rc.mbiNumber,highlight:true},
-                  {l:"Carrier",v:rc.carrier},
+                  {l:"Carrier",v:fmtCarrier(rc.carrier)},
                   {l:"Plan",v:rc.planName},
                   {l:"Effective Date",v:fmt(rc.effectiveDate)},
                   {l:"State",v:rc.state},
@@ -357,7 +361,7 @@ function MedicareTracker() {
                 <div style={{fontSize:12,fontWeight:700,color:"#3B8FD9",marginBottom:4}}>💡 MARX Lookup Tip</div>
                 <div style={{fontSize:12,color:"var(--t2)",lineHeight:1.6}}>
                   Search MBI <strong style={{color:"var(--text)",fontFamily:"'JetBrains Mono',monospace"}}>{rc.mbiNumber||"N/A"}</strong> in MARX.
-                  Verify they're still enrolled in <strong style={{color:"var(--text)"}}>{rc.planName||"their plan"}</strong> with <strong style={{color:"var(--text)"}}>{rc.carrier||"their carrier"}</strong>.
+                  Verify they're still enrolled in <strong style={{color:"var(--text)"}}>{rc.planName||"their plan"}</strong> with <strong style={{color:"var(--text)"}}>{fmtCarrier(rc.carrier)||"their carrier"}</strong>.
                 </div>
               </div>
 
@@ -513,7 +517,7 @@ function MedicareTracker() {
               {filtered.map(c=>{const st=ST[c.status]||ST.active;const dv=c.lastVerified?daysBetween(c.lastVerified,today()):null;const stale=(c.status==="active"||c.status==="paid")&&(!c.lastVerified||dv>=30);
               return <div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 0.9fr 0.7fr 0.9fr 0.8fr",gap:10,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:`1px solid ${stale?"#F59E0B44":"var(--border)"}`,cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"border-color 0.15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#3B8FD9"} onMouseLeave={e=>e.currentTarget.style.borderColor=stale?"#F59E0B44":"var(--border)"}>
                 <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:dark?"#334155":"#E8ECF1",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
-                <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.carrier||"—"}</div>
+                <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtCarrier(c.carrier)}</div>
                 <div style={{fontSize:12}}>{fmt(c.effectiveDate)}</div>
                 <div style={{fontSize:12}}>{c.state||"—"}</div>
                 <div style={{fontSize:12,color:stale?"#F59E0B":"var(--t2)"}}>{c.lastVerified?<>{fmt(c.lastVerified)}{stale&&" ⚠️"}</>:"Never"}</div>
@@ -571,7 +575,7 @@ function MedicareTracker() {
       {viewClient&&!showStatusModal&&<Modal onClose={()=>setViewClient(null)} width={700} title={viewClient.fullName} subtitle={<Badge color={(ST[viewClient.status]||ST.active).color}>{(ST[viewClient.status]||ST.active).icon} {(ST[viewClient.status]||ST.active).label}</Badge>}>
         <div style={{padding:24,maxHeight:"50vh",overflowY:"auto"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-            {FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><div style={{fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.6,marginBottom:3}}>{f.label}</div><div style={{fontSize:14,fontWeight:500}}>{f.type==="date"?fmt(viewClient[f.key]):f.key==="phone"?fmtPhone(viewClient[f.key]):viewClient[f.key]||"—"}</div></div>)}
+            {FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><div style={{fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.6,marginBottom:3}}>{f.label}</div><div style={{fontSize:14,fontWeight:500}}>{f.type==="date"?fmt(viewClient[f.key]):f.key==="phone"?fmtPhone(viewClient[f.key]):f.key==="carrier"?fmtCarrier(viewClient[f.key]):viewClient[f.key]||"—"}</div></div>)}
           </div>
           <div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
             <div style={{fontSize:13,fontWeight:700,marginBottom:12}}>💰 Tracking</div>
