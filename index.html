@@ -148,12 +148,25 @@ function MedicareTracker() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickAddRaw, setQuickAddRaw] = useState("");
   const [reorderPreview, setReorderPreview] = useState(null);
+  const [showMassUpdate, setShowMassUpdate] = useState(false);
+  const [massField, setMassField] = useState("");
+  const [massValue, setMassValue] = useState("");
+
+  const CARRIER_NORM={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus","devoted":"Devoted Health","wellcare":"WellCare"};
+  const normalizeClients = (list) => list.map(c=>{
+    const n={...c};
+    if(n.carrier){const k=n.carrier.toLowerCase();if(CARRIER_NORM[k])n.carrier=CARRIER_NORM[k];}
+    if(!n.medicaidNumber?.trim()&&(!n.medicaidLevel||n.medicaidLevel==="None"))n.medicaidLevel="N/A";
+    if(!n.planType)n.planType="";
+    if(!n.hospitalIndemnity)n.hospitalIndemnity="";
+    return n;
+  });
 
   // Storage
   useEffect(() => {
     let m=true;
     const load = async () => {
-      try { const r=localStorage.getItem(STORAGE_KEY); if(m&&r) setClients(JSON.parse(r)); } catch(e){}
+      try { const r=localStorage.getItem(STORAGE_KEY); if(m&&r){ const parsed=normalizeClients(JSON.parse(r)); setClients(parsed); localStorage.setItem(STORAGE_KEY,JSON.stringify(parsed)); } } catch(e){}
       // migrate from v4/v3
       for (const oldKey of ["uip-medicare-clients-v4","uip-medicare-clients-v3"]) {
         try {
@@ -492,6 +505,7 @@ function MedicareTracker() {
             <button onClick={startReview} style={{...btnO,fontSize:12,display:"flex",alignItems:"center",gap:5,borderColor:analytics.needsReview>0?"#F59E0B":"var(--border)",color:analytics.needsReview>0?"#F59E0B":"var(--text)"}}>
               📋 Monthly Review {analytics.needsReview>0&&<span style={{background:"#F59E0B",color:"#fff",padding:"1px 6px",borderRadius:8,fontSize:10,fontWeight:800}}>{analytics.needsReview}</span>}
             </button>
+            <button onClick={()=>{setMassField("");setMassValue("");setShowMassUpdate(true);}} style={{...btnO,fontSize:12}}>⚡ Mass Update</button>
             <button onClick={()=>{setQuickAddRaw("");setReorderPreview(null);setShowQuickAdd(true);}} style={{...btnO,fontSize:12}}>🔀 Reorder</button>
             <button onClick={openBulkImport} style={{...btnO,fontSize:12}}>📋 Import</button>
             <button onClick={openAdd} style={{...btnP,display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:16,lineHeight:1}}>+</span> Add Client</button>
@@ -671,6 +685,52 @@ function MedicareTracker() {
         {bulkStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{background:"var(--bg-hover)",borderRadius:10,padding:12,marginBottom:16,border:"1px solid var(--border)",fontSize:12,color:"var(--t2)"}}>Found <strong style={{color:"#3B8FD9"}}>{bulkHeaders.length}</strong> columns, <strong style={{color:"#3B8FD9"}}>{bulkRows.length}</strong> rows</div>{bulkHeaders.map((h,idx)=>{const samples=bulkRows.slice(0,3).map(r=>r[idx]||"").filter(Boolean).join(", ");return<div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 32px 1fr",gap:10,alignItems:"center",padding:"10px 14px",borderRadius:8,background:"var(--bg-hover)",border:"1px solid var(--border)",marginBottom:6}}><div><div style={{fontWeight:700,fontSize:13}}>{h}</div><div style={{fontSize:11,color:"var(--t3)",fontStyle:"italic"}}>{samples||"(empty)"}</div></div><div style={{textAlign:"center",color:bulkMapping[idx]&&bulkMapping[idx]!=="skip"?"#3B8FD9":"var(--t3)"}}>{bulkMapping[idx]&&bulkMapping[idx]!=="skip"?"→":"·"}</div><select value={bulkMapping[idx]||"skip"} onChange={e=>setBulkMapping(p=>({...p,[idx]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="skip">— Skip —</option>{FIELDS.map(f=>{const used=Object.entries(bulkMapping).find(([k,v])=>v===f.key&&k!==String(idx));return<option key={f.key} value={f.key} disabled={!!used}>{f.label}{bulkMapping[idx]===f.key?" ✓":""}</option>;})}</select></div>;})}</div>}
         {bulkStep===3&&(()=>{const prev=buildPreview(),valid=prev.filter(c=>c.fullName?.trim()),pcols=["fullName","phone","state","carrier","effectiveDate"].filter(k=>Object.values(bulkMapping).includes(k));return<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{display:"flex",gap:12,marginBottom:16}}><div style={{padding:"8px 14px",borderRadius:8,background:"#F0FDF4",border:"1px solid #BBF7D0",fontSize:13}}><strong style={{color:"#22C55E"}}>{valid.length}</strong> ready</div>{prev.length-valid.length>0&&<div style={{padding:"8px 14px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:13}}><strong style={{color:"#EF4444"}}>{prev.length-valid.length}</strong> skipped</div>}<button onClick={()=>setBulkStep(2)} style={{...btnO,fontSize:12,marginLeft:"auto"}}>Adjust Mapping</button></div><div style={{borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"var(--bg-hover)"}}><th style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)"}}>#</th>{pcols.map(fk=><th key={fk} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap"}}>{FIELDS.find(f=>f.key===fk)?.label||fk}</th>)}<th style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)"}}>Status</th></tr></thead><tbody>{prev.slice(0,50).map((row,i)=>{const ok=row.fullName?.trim();return<tr key={i} style={{background:!ok?"#FEF2F2":i%2?"var(--bg-hover)":"transparent",opacity:ok?1:0.5}}><td style={{padding:"8px 12px",borderBottom:"1px solid var(--border)",color:"var(--t3)"}}>{i+1}</td>{pcols.map(fk=><td key={fk} style={{padding:"8px 12px",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis"}}>{fk.includes("Date")?fmt(row[fk]):(row[fk]||"—")}</td>)}<td style={{padding:"8px 12px",borderBottom:"1px solid var(--border)"}}>{ok?<Badge color="#22C55E">Ready</Badge>:<Badge color="#EF4444">Skip</Badge>}</td></tr>;})}</tbody></table></div></div></div>;})()}
         <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}><button onClick={()=>{if(bulkStep===1)setShowBulkModal(false);else setBulkStep(s=>s-1);}} style={btnO}>{bulkStep===1?"Cancel":"← Back"}</button>{bulkStep===1&&<button onClick={parseBulkData} disabled={!bulkRaw.trim()} style={{...btnP,opacity:bulkRaw.trim()?1:0.4}}>Parse →</button>}{bulkStep===2&&<button onClick={()=>{if(!Object.values(bulkMapping).includes("fullName")){showToast("Map Full Name","error");return;}setBulkStep(3);}} style={btnP}>Preview →</button>}{bulkStep===3&&<button onClick={execImport} style={btnP}>✅ Import {buildPreview().filter(c=>c.fullName?.trim()).length}</button>}</div>
+      </Modal>}
+
+      {showMassUpdate&&<Modal onClose={()=>setShowMassUpdate(false)} width={500} title="⚡ Mass Update" subtitle="Change a field for all clients at once">
+        <div style={{padding:24}}>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Field to update</label>
+              <select value={massField} onChange={e=>{setMassField(e.target.value);setMassValue("");}} style={{...inp,marginTop:4,cursor:"pointer"}}>
+                <option value="">Select field...</option>
+                <option value="hospitalIndemnity">Hospital Indemnity</option>
+                <option value="planType">Plan Type</option>
+                <option value="medicaidLevel">Medicaid Level</option>
+                <option value="carrier">Carrier</option>
+                <option value="electionPeriod">Election Period</option>
+                <option value="state">State</option>
+              </select>
+            </div>
+            {massField&&<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>New value for ALL clients</label>
+              {massField==="hospitalIndemnity"?<select value={massValue} onChange={e=>setMassValue(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
+              :massField==="planType"?<select value={massValue} onChange={e=>setMassValue(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select...</option>{["MAPD","DSNP","CSNP","PDP","Medigap"].map(v=><option key={v} value={v}>{v}</option>)}</select>
+              :massField==="medicaidLevel"?<select value={massValue} onChange={e=>setMassValue(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select...</option>{["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"].map(v=><option key={v} value={v}>{v}</option>)}</select>
+              :massField==="electionPeriod"?<select value={massValue} onChange={e=>setMassValue(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select...</option>{["AEP","OEP","SEP","IEP","ICEP"].map(v=><option key={v} value={v}>{v}</option>)}</select>
+              :<input type="text" value={massValue} onChange={e=>setMassValue(e.target.value)} placeholder="Enter value..." style={{...inp,marginTop:4}} />}
+            </div>}
+            {massField&&massValue&&<div style={{background:"#FEF9ED",border:"1px solid #F59E0B33",borderRadius:10,padding:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#92400E"}}>⚠️ This will update {clients.length} clients</div>
+              <div style={{fontSize:12,color:"#A16207",marginTop:4}}>Set <strong>{FIELDS.find(f=>f.key===massField)?.label||massField}</strong> → <strong>{massValue}</strong> for everyone</div>
+            </div>}
+          </div>
+        </div>
+        <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
+          <button onClick={()=>{
+            const dupes=[];const seen={};
+            clients.forEach(c=>{const k=(c.fullName||"").toLowerCase().trim()+"||"+(c.phone||"").replace(/\D/g,"");if(seen[k])dupes.push(c.id);else seen[k]=true;});
+            if(!dupes.length){showToast("No duplicates found");return;}
+            save(clients.filter(c=>!dupes.includes(c.id)));
+            showToast(`Removed ${dupes.length} duplicates!`);
+          }} style={{...btnO,fontSize:12,borderColor:"#F59E0B",color:"#F59E0B"}}>🧹 Remove Duplicates</button>
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={()=>setShowMassUpdate(false)} style={btnO}>Cancel</button>
+            <button disabled={!massField||!massValue} onClick={()=>{
+              save(clients.map(c=>({...c,[massField]:massValue})));
+              showToast(`Updated ${clients.length} clients!`);
+              setShowMassUpdate(false);
+            }} style={{...btnP,opacity:massField&&massValue?1:0.4}}>⚡ Update All</button>
+          </div>
+        </div>
       </Modal>}
 
       {showQuickAdd&&<Modal onClose={()=>setShowQuickAdd(false)} width={600} title="🔀 Reorder Clients" subtitle="Paste your name list to set the order">
