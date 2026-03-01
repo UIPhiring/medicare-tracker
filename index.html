@@ -162,7 +162,7 @@ function MedicareTracker() {
       if(pn.includes("c-snp")||pn.includes("csnp")) n.planType="CSNP";
       else if(pn.includes("d-snp")||pn.includes("dsnp")) n.planType="DSNP";
       else if(pn.includes("pdp")) n.planType="PDP";
-      else if(pn.includes("mapd")) n.planType="MAPD";
+      else n.planType="MAPD";
     }
     if(!n.hospitalIndemnity)n.hospitalIndemnity="";
     return n;
