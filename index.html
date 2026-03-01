@@ -67,7 +67,7 @@ const monthLabel = mk => { if(!mk) return "—"; return new Date(mk+"-01T00:00:0
 const daysBetween = (a,b) => { if(!a||!b) return null; return Math.floor((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/(86400000)); };
 const today = () => new Date().toISOString().split("T")[0];
 // Commission calc: Initial = $347 - ($29 × (effMonth - 1)). Residuals = $29/mo starting Jan after eff year.
-const calcInitialComm = effDate => { if(!effDate) return 0; const m=new Date(effDate+"T00:00:00").getMonth(); return 347-(29*m); };
+const calcInitialComm = (effDate,electionPeriod) => { if(!effDate) return 0; const m=new Date(effDate+"T00:00:00").getMonth(); const base=347-(29*m); return electionPeriod==="IEP"?base*2:base; };
 const calcResidualMonths = (effDate,asOfDate) => {
   if(!effDate) return 0;
   const effY=new Date(effDate+"T00:00:00").getFullYear();
@@ -77,7 +77,7 @@ const calcResidualMonths = (effDate,asOfDate) => {
   return (now.getFullYear()-resStart.getFullYear())*12+(now.getMonth()-resStart.getMonth())+1;
 };
 const calcResidualEarned = (effDate,asOfDate) => calcResidualMonths(effDate,asOfDate)*29;
-const calcTotalProjected = (effDate) => { if(!effDate) return 0; return calcInitialComm(effDate); };
+const calcTotalProjected = (effDate,ep) => { if(!effDate) return 0; return calcInitialComm(effDate,ep); };
 const residualStartDate = effDate => { if(!effDate) return "—"; const y=new Date(effDate+"T00:00:00").getFullYear(); return "Jan "+(y+1); };
 const CARRIER_COLORS = {"humana":"#22C55E","careplus":"#22C55E","unitedhealthcare":"#3B82F6","uhc":"#3B82F6","aetna":"#EC4899","devoted health":"#F97316","devoted":"#F97316","freedom health":"#EAB308","freedom":"#EAB308"};
 const getCarrierColor = c => { if(!c) return "#78716C"; const k=c.trim().toLowerCase(); return CARRIER_COLORS[k]||CARRIER_COLORS[k.replace(/ health$/,"")]||"#78716C"; };
@@ -178,7 +178,7 @@ function MedicareTracker() {
       else if(pn.includes("pdp")) n.planType="PDP";
       else n.planType="MAPD";
     }
-    if(!n.commissionAmount&&n.effectiveDate) n.commissionAmount=String(calcInitialComm(n.effectiveDate));
+    if(!n.commissionAmount&&n.effectiveDate) n.commissionAmount=String(calcInitialComm(n.effectiveDate,n.electionPeriod));
     if(!n.hospitalIndemnity)n.hospitalIndemnity="";
     return n;
   });
@@ -311,7 +311,7 @@ function MedicareTracker() {
     const t=clients.length,ac=byStatus.active.length,pd=byStatus.paid.length,ina=byStatus.inactive.length,cb=byStatus.chargedBack.length,nie=byStatus.neverInEffect.length;
     const inForce=ac+pd;
     // Commission: projected initial based on formula
-    const projectedInitial=clients.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInitialComm(c.effectiveDate),0);
+    const projectedInitial=clients.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInitialComm(c.effectiveDate,c.electionPeriod),0);
     const totalComm=clients.reduce((s,c)=>s+(parseFloat(c.commissionAmount)||0),0);
     const totalCB=[...byStatus.chargedBack,...byStatus.inactive].reduce((s,c)=>s+(parseFloat(c.chargebackAmount)||parseFloat(c.commissionAmount)||0),0);
     const net=totalComm-totalCB;
@@ -323,13 +323,13 @@ function MedicareTracker() {
     // Projected annual residual (all in-force clients × $29 × 12)
     const annualResidualProjected=inForce*29*12;
     const carrierStats={};
-    clients.forEach(c=>{if(!c.carrier)return;if(!carrierStats[c.carrier])carrierStats[c.carrier]={total:0,active:0,paid:0,inactive:0,cb:0,nie:0,comm:0,projected:0};const cs=carrierStats[c.carrier];cs.total++;cs[c.status==="chargedBack"?"cb":c.status==="neverInEffect"?"nie":c.status]++;cs.comm+=parseFloat(c.commissionAmount)||0;if(c.status==="active"||c.status==="paid")cs.projected+=calcInitialComm(c.effectiveDate);});
+    clients.forEach(c=>{if(!c.carrier)return;if(!carrierStats[c.carrier])carrierStats[c.carrier]={total:0,active:0,paid:0,inactive:0,cb:0,nie:0,comm:0,projected:0};const cs=carrierStats[c.carrier];cs.total++;cs[c.status==="chargedBack"?"cb":c.status==="neverInEffect"?"nie":c.status]++;cs.comm+=parseFloat(c.commissionAmount)||0;if(c.status==="active"||c.status==="paid")cs.projected+=calcInitialComm(c.effectiveDate,c.electionPeriod);});
     const stateStats={};clients.forEach(c=>{if(c.state){stateStats[c.state]=(stateStats[c.state]||0)+1;}});
     const cohorts={};
-    clients.forEach(c=>{if(!c.effectiveDate)return;const mk=appMonthKey(c.effectiveDate);if(!mk)return;if(!cohorts[mk])cohorts[mk]={enrolled:0,inForce:0,dropped:0,projComm:0};cohorts[mk].enrolled++;if(c.status==="active"||c.status==="paid"){cohorts[mk].inForce++;cohorts[mk].projComm+=calcInitialComm(c.effectiveDate);}else cohorts[mk].dropped++;});
+    clients.forEach(c=>{if(!c.effectiveDate)return;const mk=appMonthKey(c.effectiveDate);if(!mk)return;if(!cohorts[mk])cohorts[mk]={enrolled:0,inForce:0,dropped:0,projComm:0};cohorts[mk].enrolled++;if(c.status==="active"||c.status==="paid"){cohorts[mk].inForce++;cohorts[mk].projComm+=calcInitialComm(c.effectiveDate,c.electionPeriod);}else cohorts[mk].dropped++;});
     const commByMonth={};clients.forEach(c=>{if(c.commissionAmount&&c.paidDate){const mk=monthKey(c.paidDate);if(mk)commByMonth[mk]=(commByMonth[mk]||0)+(parseFloat(c.commissionAmount)||0);}});
     // Commission by app month (projected)
-    const commByAppMonth={};clients.forEach(c=>{if(!c.effectiveDate||!(c.status==="active"||c.status==="paid"))return;const mk=appMonthKey(c.effectiveDate);if(mk)commByAppMonth[mk]=(commByAppMonth[mk]||0)+calcInitialComm(c.effectiveDate);});
+    const commByAppMonth={};clients.forEach(c=>{if(!c.effectiveDate||!(c.status==="active"||c.status==="paid"))return;const mk=appMonthKey(c.effectiveDate);if(mk)commByAppMonth[mk]=(commByAppMonth[mk]||0)+calcInitialComm(c.effectiveDate,c.electionPeriod);});
     const needsReview=clients.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=30));
     const overdue60=clients.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=60));
     return {t,ac,pd,ina,cb,nie,inForce,projectedInitial,totalComm,totalCB,net,residualClients:residualClients.length,monthlyResidual:inForce*29,totalResidualEarned,annualResidualProjected,carrierStats,stateStats,cohorts,commByMonth,commByAppMonth,needsReview:needsReview.length,overdue60:overdue60.length};
@@ -714,6 +714,9 @@ function MedicareTracker() {
                 <div>Jan apps → effective Feb → <strong style={{color:"#22C55E"}}>$318</strong> (347 - 29×1)</div>
                 <div>Feb apps → effective Mar → <strong style={{color:"#22C55E"}}>$289</strong> (347 - 29×2)</div>
                 <div>Mar apps → effective Apr → <strong style={{color:"#22C55E"}}>$260</strong> (347 - 29×3)</div>
+                <div style={{marginTop:10}}><strong style={{color:"var(--text)"}}>IEP (Initial Enrollment):</strong></div>
+                <div>First-time Medicare → <strong style={{color:"#22C55E"}}>Double initial commission</strong></div>
+                <div>Example: Feb IEP app → $289 × 2 = <strong style={{color:"#22C55E"}}>$578</strong></div>
                 <div style={{marginTop:10}}><strong style={{color:"var(--text)"}}>Residuals:</strong></div>
                 <div><strong style={{color:"#8B5CF6"}}>$29/month</strong> per client starting January after effective year</div>
                 <div>AEP clients: residuals start Jan of the <em>following</em> year</div>
@@ -743,10 +746,10 @@ function MedicareTracker() {
             <div style={{fontSize:13,fontWeight:700,marginBottom:12}}>💰 Tracking</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
               {[{l:"Last Verified",v:viewClient.lastVerified?fmt(viewClient.lastVerified):"Never",c:(!viewClient.lastVerified||(daysBetween(viewClient.lastVerified,today())>=30))?"#F59E0B":"var(--text)"},
-                {l:"Initial Commission",v:money(calcInitialComm(viewClient.effectiveDate)),c:"#22C55E"},
+                {l:"Initial Commission",v:money(calcInitialComm(viewClient.effectiveDate,viewClient.electionPeriod))+(viewClient.electionPeriod==="IEP"?" (IEP 2×)":""),c:"#22C55E"},
                 {l:"Residuals Started",v:residualStartDate(viewClient.effectiveDate),c:"#3B8FD9"},
                 {l:"Residual Earned",v:money(calcResidualEarned(viewClient.effectiveDate,today())),c:"#8B5CF6"},
-                {l:"Total Earned",v:money(calcInitialComm(viewClient.effectiveDate)+calcResidualEarned(viewClient.effectiveDate,today())),c:"#22C55E"},
+                {l:"Total Earned",v:money(calcInitialComm(viewClient.effectiveDate,viewClient.electionPeriod)+calcResidualEarned(viewClient.effectiveDate,today())),c:"#22C55E"},
                 {l:"Chargeback",v:viewClient.chargebackAmount?money(viewClient.chargebackAmount):"—",c:"#EF4444"},
                 {l:"Notes",v:viewClient.statusNote||"—"}
               ].map(f=><div key={f.l} style={{padding:10,background:"var(--bg-hover)",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginBottom:3}}>{f.l}</div><div style={{fontSize:13,fontWeight:600,color:f.c||"var(--text)"}}>{f.v}</div></div>)}
