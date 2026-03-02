@@ -68,6 +68,7 @@ const ST={
   inactive:{label:"Inactive",color:"#F59E0B",icon:"⚠️",desc:"Left your plan"},
   chargedBack:{label:"Charged Back",color:"#EF4444",icon:"💸",desc:"Chargeback hit"},
   neverInEffect:{label:"Never in Effect",color:"#94A3B8",icon:"🚫",desc:"Pre-effective drop"},
+  heapArchived:{label:"Completed",color:"#6366F1",icon:"✔️",desc:"HEAP — 4 months completed, archived"},
 };
 const TRANSITIONS={active:["paid","inactive","neverInEffect"],paid:["inactive","active"],inactive:["chargedBack","active","paid"],chargedBack:["active"],neverInEffect:["active"]};
 
@@ -93,6 +94,13 @@ const calcResidualMonths=(effDate,asOf)=>{if(!effDate)return 0;const y=new Date(
 const calcResidualEarned=(effDate,asOf)=>calcResidualMonths(effDate,asOf)*29;
 const residualStart=effDate=>{if(!effDate)return"—";return"Jan "+(new Date(effDate+"T00:00:00").getFullYear()+1);};
 const calcHeapComm=agent=>(parseFloat(agent?.heapFrontEnd)||0)+(parseFloat(agent?.heapBackEnd)||0);
+// HEAP totals: $135 FE + $190 BE per sale. Admin keeps the difference.
+const HEAP_TOTAL_FE=135,HEAP_TOTAL_BE=190;
+const calcAdminHeapProfit=agent=>{const agentFE=parseFloat(agent?.heapFrontEnd)||0;const agentBE=parseFloat(agent?.heapBackEnd)||0;return(HEAP_TOTAL_FE-agentFE)+(HEAP_TOTAL_BE-agentBE);};
+// HEAP: client must stay 4 months past effective. If early drop, FE charges back + BE removed.
+const heapMonthsPast=(effDate)=>{if(!effDate)return 0;const eff=new Date(effDate+"T00:00:00");const now=new Date();return(now.getFullYear()-eff.getFullYear())*12+(now.getMonth()-eff.getMonth());};
+const isHeapArchivable=(c)=>c.effectiveDate&&heapMonthsPast(c.effectiveDate)>=4;
+const isHeapEarned=(c)=>isHeapArchivable(c)&&(c.status==="active"||c.status==="paid"||c.status==="heapArchived");
 
 const normalizeClient=c=>{
   const n={...c};
@@ -195,6 +203,18 @@ function MedicareTracker({currentUser,userProfile}){
     return()=>unsub();
   },[isAdmin]);
 
+  // ── HEAP Auto-Archive: archive clients 4+ months past effective ──
+  useEffect(()=>{
+    if(!clients.length||!teamUsers.length)return;
+    const heapAgentIds=new Set(teamUsers.filter(u=>u.role==="heap").map(u=>u.uid));
+    const toArchive=clients.filter(c=>heapAgentIds.has(c.agentId)&&(c.status==="active"||c.status==="paid")&&isHeapArchivable(c));
+    if(toArchive.length>0){
+      const batch=db.batch();
+      toArchive.forEach(c=>batch.update(db.collection("clients").doc(c.id),{status:"heapArchived",heapArchived:true}));
+      batch.commit();
+    }
+  },[clients,teamUsers]);
+
   // ── Migrate localStorage (one-time for admin) ──
   useEffect(()=>{
     if(!isAdmin)return;
@@ -215,10 +235,19 @@ function MedicareTracker({currentUser,userProfile}){
   },[isAdmin,currentUser.uid]);
 
   // ── Filtered by agent ──
-  const displayClients=useMemo(()=>{
+  // allClients = everything including heapArchived (for analytics)
+  // displayClients = active view (no heapArchived for HEAP agents, admin sees all)
+  const agentFilteredClients=useMemo(()=>{
     if(!isAdmin||selectedAgent==="all")return clients;
     return clients.filter(c=>c.agentId===selectedAgent);
   },[clients,isAdmin,selectedAgent]);
+  const displayClients=useMemo(()=>{
+    if(isAdmin)return agentFilteredClients.filter(c=>c.status!=="heapArchived");
+    if(userProfile?.role==="heap")return agentFilteredClients.filter(c=>c.status!=="heapArchived");
+    return agentFilteredClients;
+  },[agentFilteredClients,isAdmin,userProfile]);
+  // For analytics, include heapArchived as "earned"
+  const analyticsClients=agentFilteredClients;
 
   // ── CRUD ──
   const saveClient=async(data)=>{
@@ -303,7 +332,7 @@ function MedicareTracker({currentUser,userProfile}){
   };
 
   // ── Computed ──
-  const byStatus=useMemo(()=>{const r={active:[],paid:[],inactive:[],chargedBack:[],neverInEffect:[]};displayClients.forEach(c=>{if(r[c.status])r[c.status].push(c);else r.active.push(c);});return r;},[displayClients]);
+  const byStatus=useMemo(()=>{const r={active:[],paid:[],inactive:[],chargedBack:[],neverInEffect:[],heapArchived:[]};displayClients.forEach(c=>{if(r[c.status])r[c.status].push(c);else r.active.push(c);});return r;},[displayClients]);
   const isPending=c=>c.effectiveDate&&new Date(c.effectiveDate+"T00:00:00")>new Date();
   const bookClients=useMemo(()=>displayClients.filter(c=>c.status==="active"||c.status==="paid"),[displayClients]);
 
@@ -326,30 +355,67 @@ function MedicareTracker({currentUser,userProfile}){
 
   // ── Analytics ──
   const analytics=useMemo(()=>{
-    const cl=displayClients;const t=cl.length,ac=byStatus.active.length,pd=byStatus.paid.length,ina=byStatus.inactive.length,cb=byStatus.chargedBack.length,nie=byStatus.neverInEffect.length;
+    const cl=analyticsClients;const t=cl.filter(c=>c.status!=="heapArchived").length;
+    const ac=cl.filter(c=>c.status==="active").length,pd=cl.filter(c=>c.status==="paid").length,ina=cl.filter(c=>c.status==="inactive").length,cb=cl.filter(c=>c.status==="chargedBack").length,nie=cl.filter(c=>c.status==="neverInEffect").length;
+    const archived=cl.filter(c=>c.status==="heapArchived").length;
     const inForce=ac+pd;
     const projectedInitial=cl.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+getCommForClient(c),0);
-    const totalCB=[...byStatus.chargedBack,...byStatus.inactive].reduce((s,c)=>s+(parseFloat(c.chargebackAmount)||0),0);
+    const totalCB=cl.filter(c=>c.status==="chargedBack"||c.status==="inactive").reduce((s,c)=>s+(parseFloat(c.chargebackAmount)||0),0);
     const td=today();const totalResidualEarned=cl.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcResidualEarned(c.effectiveDate,td),0);
-    const carrierStats={};cl.forEach(c=>{if(!c.carrier)return;if(!carrierStats[c.carrier])carrierStats[c.carrier]={total:0,active:0,paid:0,inactive:0,cb:0,nie:0,projected:0};const cs=carrierStats[c.carrier];cs.total++;cs[c.status==="chargedBack"?"cb":c.status==="neverInEffect"?"nie":c.status]++;if(c.status==="active"||c.status==="paid")cs.projected+=getCommForClient(c);});
-    const stateStats={};cl.forEach(c=>{if(c.state)stateStats[c.state]=(stateStats[c.state]||0)+1;});
-    const cohorts={};cl.forEach(c=>{if(!c.effectiveDate)return;const mk=appMonthKey(c.effectiveDate);if(!mk)return;if(!cohorts[mk])cohorts[mk]={enrolled:0,inForce:0,dropped:0,projComm:0};cohorts[mk].enrolled++;if(c.status==="active"||c.status==="paid"){cohorts[mk].inForce++;cohorts[mk].projComm+=getCommForClient(c);}else cohorts[mk].dropped++;});
-    const commByAppMonth={};cl.forEach(c=>{if(!c.effectiveDate||!(c.status==="active"||c.status==="paid"))return;const mk=appMonthKey(c.effectiveDate);if(mk)commByAppMonth[mk]=(commByAppMonth[mk]||0)+getCommForClient(c);});
+    // HEAP analytics for admin
+    const heapAgentIds=new Set(teamUsers.filter(u=>u.role==="heap").map(u=>u.uid));
+    const heapClients=cl.filter(c=>heapAgentIds.has(c.agentId));
+    const heapEarned=heapClients.filter(c=>c.status==="heapArchived"||((c.status==="active"||c.status==="paid")&&isHeapArchivable(c))).length;
+    const heapActive=heapClients.filter(c=>c.status==="active"||c.status==="paid").length;
+    const heapDropped=heapClients.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;
+    const heapNIE=heapClients.filter(c=>c.status==="neverInEffect").length;
+    // Admin profit from HEAP: earned clients × admin margin, minus early drops
+    let adminHeapProfit=0;
+    heapClients.forEach(c=>{
+      const agent=teamUsers.find(u=>u.uid===c.agentId);if(!agent)return;
+      const adminMargin=calcAdminHeapProfit(agent);
+      if(c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&isHeapArchivable(c)){adminHeapProfit+=adminMargin;}
+      else if(c.status==="active"||c.status==="paid"){adminHeapProfit+=(HEAP_TOTAL_BE-(parseFloat(agent.heapBackEnd)||0));} // BE pending until 4 months
+    });
+    // Per-agent HEAP breakdown
+    const heapByAgent={};heapClients.forEach(c=>{
+      const agent=teamUsers.find(u=>u.uid===c.agentId);if(!agent)return;
+      if(!heapByAgent[agent.uid])heapByAgent[agent.uid]={name:agent.displayName,total:0,earned:0,dropped:0,nie:0,agentPay:0,adminProfit:0,agentFE:parseFloat(agent.heapFrontEnd)||0,agentBE:parseFloat(agent.heapBackEnd)||0};
+      const hba=heapByAgent[agent.uid];hba.total++;
+      if(c.status==="heapArchived"||(c.status==="active"||c.status==="paid")){
+        if(c.status==="heapArchived"||isHeapArchivable(c)){hba.earned++;hba.agentPay+=calcHeapComm(agent);hba.adminProfit+=calcAdminHeapProfit(agent);}
+        else{hba.earned++;hba.agentPay+=parseFloat(agent.heapFrontEnd)||0;hba.adminProfit+=(HEAP_TOTAL_BE-(parseFloat(agent.heapBackEnd)||0));}
+      }else if(c.status==="inactive"||c.status==="chargedBack"){hba.dropped++;}else if(c.status==="neverInEffect"){hba.nie++;}
+    });
+    const carrierStats={};cl.filter(c=>c.status!=="heapArchived").forEach(c=>{if(!c.carrier)return;if(!carrierStats[c.carrier])carrierStats[c.carrier]={total:0,active:0,paid:0,inactive:0,cb:0,nie:0,projected:0};const cs=carrierStats[c.carrier];cs.total++;cs[c.status==="chargedBack"?"cb":c.status==="neverInEffect"?"nie":c.status]++;if(c.status==="active"||c.status==="paid")cs.projected+=getCommForClient(c);});
+    const stateStats={};cl.filter(c=>c.status!=="heapArchived").forEach(c=>{if(c.state)stateStats[c.state]=(stateStats[c.state]||0)+1;});
+    const cohorts={};cl.forEach(c=>{if(!c.effectiveDate)return;const mk=appMonthKey(c.effectiveDate);if(!mk)return;if(!cohorts[mk])cohorts[mk]={enrolled:0,inForce:0,dropped:0,projComm:0};cohorts[mk].enrolled++;if(c.status==="active"||c.status==="paid"||c.status==="heapArchived"){cohorts[mk].inForce++;cohorts[mk].projComm+=getCommForClient(c);}else cohorts[mk].dropped++;});
+    const commByAppMonth={};cl.forEach(c=>{if(!c.effectiveDate||!(c.status==="active"||c.status==="paid"||c.status==="heapArchived"))return;const mk=appMonthKey(c.effectiveDate);if(mk)commByAppMonth[mk]=(commByAppMonth[mk]||0)+getCommForClient(c);});
     const survival={};const dropped=cl.filter(c=>c.status==="inactive"||c.status==="chargedBack");
     dropped.forEach(c=>{if(!c.effectiveDate)return;let mob=0;if(c.cancelMonth){const eff=new Date(c.effectiveDate+"T00:00:00");const can=new Date(c.cancelMonth+"-01T00:00:00");mob=Math.max(0,(can.getFullYear()-eff.getFullYear())*12+(can.getMonth()-eff.getMonth()));}else if(c.inactiveDate){const eff=new Date(c.effectiveDate+"T00:00:00");const ina2=new Date(c.inactiveDate+"T00:00:00");mob=Math.max(0,Math.round((ina2-eff)/(30.44*86400000)));}const bucket=mob<=0?"<1 mo":mob===1?"1 mo":mob<=3?"2-3 mo":mob<=6?"4-6 mo":mob<=12?"7-12 mo":"12+ mo";survival[bucket]=(survival[bucket]||0)+1;});
     const survOrder=["<1 mo","1 mo","2-3 mo","4-6 mo","7-12 mo","12+ mo"];const survData=survOrder.filter(k=>survival[k]).map(k=>[k,survival[k]]);
     const nieClients=cl.filter(c=>c.status==="neverInEffect");const nieByCarrier={};nieClients.forEach(c=>{const cr=c.carrier||"Unknown";nieByCarrier[cr]=(nieByCarrier[cr]||0)+1;});
     const nieLostComm=nieClients.reduce((s,c)=>s+getCommForClient(c),0);
     const needsReview=cl.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=30));
-    return{t,ac,pd,ina,cb,nie,inForce,projectedInitial,totalCB,monthlyResidual:inForce*29,annualResidualProjected:inForce*29*12,totalResidualEarned,carrierStats,stateStats,cohorts,commByAppMonth,survData,droppedTotal:dropped.length,nieByCarrier,nieLostComm,needsReview:needsReview.length};
-  },[displayClients,byStatus,teamUsers]);
+    return{t,ac,pd,ina,cb,nie,archived,inForce,projectedInitial,totalCB,monthlyResidual:inForce*29,annualResidualProjected:inForce*29*12,totalResidualEarned,carrierStats,stateStats,cohorts,commByAppMonth,survData,droppedTotal:dropped.length,nieByCarrier,nieLostComm,needsReview:needsReview.length,heapEarned,heapActive,heapDropped,heapNIE,adminHeapProfit,heapByAgent,heapTotal:heapClients.length};
+  },[analyticsClients,byStatus,teamUsers]);
 
   // ── Agent Stats ──
   const agentStats=useMemo(()=>{
     if(!isAdmin)return[];
-    return teamUsers.map(u=>{const ac=clients.filter(c=>c.agentId===u.uid);const inf=ac.filter(c=>c.status==="active"||c.status==="paid").length;const dr=ac.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;
-    const pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>{return u.role==="heap"?s+calcHeapComm(u):s+calcInitialComm(c.effectiveDate,c.electionPeriod);},0);
-    return{...u,totalClients:ac.length,inForce:inf,dropped:dr,projComm:pc};});
+    return teamUsers.map(u=>{const ac=clients.filter(c=>c.agentId===u.uid);const inf=ac.filter(c=>c.status==="active"||c.status==="paid").length;const dr=ac.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;const archived=ac.filter(c=>c.status==="heapArchived").length;
+    let pc=0,adminProfit=0;
+    if(u.role==="heap"){
+      const earned=ac.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&isHeapArchivable(c));
+      pc=earned.length*calcHeapComm(u);
+      adminProfit=earned.length*calcAdminHeapProfit(u);
+      // Pending (not yet 4 months): admin only gets BE margin so far
+      const pending=ac.filter(c=>(c.status==="active"||c.status==="paid")&&!isHeapArchivable(c));
+      adminProfit+=pending.length*(HEAP_TOTAL_BE-(parseFloat(u.heapBackEnd)||0));
+    }else{
+      pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInitialComm(c.effectiveDate,c.electionPeriod),0);
+    }
+    return{...u,totalClients:ac.length,inForce:inf,dropped:dr,archived,projComm:pc,adminProfit};});
   },[isAdmin,teamUsers,clients]);
 
   // ── Styles ──
@@ -482,15 +548,40 @@ function MedicareTracker({currentUser,userProfile}){
             <div><h1 style={{fontSize:24,fontWeight:800}}>Team Management</h1><p style={{fontSize:13,color:"var(--t3)"}}>{teamUsers.length} members</p></div>
             <button onClick={()=>{setNewUser({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});setCreateUserError("");setShowCreateUser(true);}} style={btnP}>+ Add Agent</button>
           </div>
+          {/* HEAP Summary */}
+          {analytics.heapTotal>0&&<div style={{marginBottom:20}}>
+            <Card title="📊 HEAP Overview">
+              <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:16}}>
+                <div style={{textAlign:"center",padding:14,background:"var(--bg-hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#22C55E"}}>{money(analytics.adminHeapProfit)}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Your HEAP Profit</div></div>
+                <div style={{textAlign:"center",padding:14,background:"var(--bg-hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800}}>{analytics.heapTotal}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Total HEAP Sales</div></div>
+                <div style={{textAlign:"center",padding:14,background:"var(--bg-hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#6366F1"}}>{analytics.heapEarned}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Earned (4+ mo)</div></div>
+                <div style={{textAlign:"center",padding:14,background:"var(--bg-hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#F59E0B"}}>{analytics.heapActive}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Active (<4 mo)</div></div>
+                <div style={{textAlign:"center",padding:14,background:"var(--bg-hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#EF4444"}}>{analytics.heapDropped}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Early Drops</div></div>
+              </div>
+              {Object.keys(analytics.heapByAgent).length>0&&<MiniTable headers={["Agent","Total","Earned","Dropped","NIE","Agent Pay","Your Profit","FE/BE"]} rows={Object.values(analytics.heapByAgent).map(a=>[
+                <strong>{a.name}</strong>,<strong>{a.total}</strong>,
+                <span style={{color:"#22C55E",fontWeight:700}}>{a.earned}</span>,
+                <span style={{color:"#EF4444",fontWeight:700}}>{a.dropped}</span>,
+                <span style={{color:"#94A3B8",fontWeight:700}}>{a.nie}</span>,
+                <strong>{money(a.agentPay)}</strong>,
+                <strong style={{color:"#22C55E"}}>{money(a.adminProfit)}</strong>,
+                <span style={{fontSize:11}}>${a.agentFE}/${a.agentBE}</span>
+              ])} />}
+              <div style={{marginTop:12,padding:10,background:"var(--bg-hover)",borderRadius:8,fontSize:12,color:"var(--t2)"}}>
+                HEAP total per sale: <strong>${HEAP_TOTAL_FE} FE + ${HEAP_TOTAL_BE} BE = ${HEAP_TOTAL_FE+HEAP_TOTAL_BE}</strong>. Your margin = total minus agent pay. Early drops (&lt;4 months): FE charges back to agent, BE removed.
+              </div>
+            </Card>
+          </div>}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <div style={{display:"grid",gridTemplateColumns:"1.5fr 0.8fr 0.6fr 0.6fr 0.6fr 0.8fr 1fr 0.6fr",gap:10,padding:"8px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Name</div><div>Role</div><div>Clients</div><div>In Force</div><div>Dropped</div><div>Commission</div><div>Pay Structure</div><div>Actions</div></div>
-            {agentStats.map(u=><div key={u.uid} style={{display:"grid",gridTemplateColumns:"1.5fr 0.8fr 0.6fr 0.6fr 0.6fr 0.8fr 1fr 0.6fr",gap:10,padding:"14px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",alignItems:"center",boxShadow:"var(--cs)"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1.5fr 0.7fr 0.5fr 0.5fr 0.5fr 0.7fr 0.7fr 1fr 0.5fr",gap:10,padding:"8px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Name</div><div>Role</div><div>Clients</div><div>In Force</div><div>Dropped</div><div>Commission</div><div>Your Profit</div><div>Pay Structure</div><div>Actions</div></div>
+            {agentStats.map(u=><div key={u.uid} style={{display:"grid",gridTemplateColumns:"1.5fr 0.7fr 0.5fr 0.5fr 0.5fr 0.7fr 0.7fr 1fr 0.5fr",gap:10,padding:"14px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",alignItems:"center",boxShadow:"var(--cs)"}}>
               <div><div style={{fontWeight:700,fontSize:14}}>{u.displayName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{u.email}</div></div>
               <Badge color={u.role==="admin"?"#3B8FD9":u.role==="heap"?"#F97316":"#22C55E"}>{u.role}</Badge>
-              <div style={{fontWeight:700}}>{u.totalClients}</div>
+              <div style={{fontWeight:700}}>{u.totalClients}{u.archived>0&&<span style={{fontSize:10,color:"var(--t3)"}}> +{u.archived}</span>}</div>
               <div style={{fontWeight:700,color:"#22C55E"}}>{u.inForce}</div>
               <div style={{fontWeight:700,color:"#EF4444"}}>{u.dropped}</div>
               <div style={{fontWeight:700,color:"#22C55E"}}>{money(u.projComm)}</div>
+              <div style={{fontWeight:700,color:u.role==="heap"?"#3B8FD9":"var(--t3)"}}>{u.role==="heap"?money(u.adminProfit):"—"}</div>
               <div style={{fontSize:12}}>{u.role==="heap"?<span>FE: {money(u.heapFrontEnd||0)} / BE: {money(u.heapBackEnd||0)}</span>:u.role==="broker"?"Broker formula":"Admin"}</div>
               <div style={{display:"flex",gap:6}}>
                 <button onClick={()=>{setSelectedAgent(u.uid);setTab("analytics");}} style={{...btnO,fontSize:11,padding:"4px 10px"}}>📊</button>
