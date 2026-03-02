@@ -270,7 +270,9 @@ const toggleAgent=async(uid,disabled)=>{await db.collection("users").doc(uid).up
 
 /* Monthly Review Mode */
 const revClients=useMemo(()=>{
-if(revPass===1)return disp.filter(c=>c.status==="active"||c.status==="paid");
+const now=new Date();const cutoff=new Date(now.getFullYear(),now.getMonth(),1);
+const eligible=c=>{if(!c.effectiveDate)return true;const ed=new Date(c.effectiveDate+"T00:00:00");return ed<=cutoff};
+if(revPass===1)return disp.filter(c=>(c.status==="active"||c.status==="paid")&&eligible(c));
 return disp.filter(c=>c.status==="active"&&c.lastVerified===td());
 },[disp,revPass]);
 const startReview=(pass)=>{setRevPass(pass||1);setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skipped:0,noEnroll:0,diffPlan:0});setRevMode(true)};
@@ -759,10 +761,12 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>MBI Number</div><div style={{fontSize:18,fontWeight:800,marginTop:4,letterSpacing:1,userSelect:"all"}}>{c.mbiNumber||"\u2014"}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Carrier / Plan</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtCar(c.carrier)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{c.planName||"\u2014"}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>App Date</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmt(c.applicationDate)}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Effective</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmt(c.effectiveDate)}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Commission</div><div style={{fontSize:14,fontWeight:600,marginTop:4,color:"#22C55E"}}>{money(getComm(c))}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Phone</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtPh(c.phone)}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>State</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{c.state||"\u2014"}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Election Period</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{c.electionPeriod||"\u2014"}</div></div>
 </div>
 {revPass===1?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8}}>
 <button onClick={()=>revAction("active")} style={{padding:12,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\u2705"}</div><div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginTop:4}}>On Book</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 1</div></button>
