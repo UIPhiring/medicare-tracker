@@ -1,770 +1,508 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UIP Medicare Sales Tracker</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚕️</text></svg>">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <style>
-    html, body, #root { margin: 0; padding: 0; height: 100%; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UIP Medicare Sales Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--font:'Inter',sans-serif;--bg:#F5F7FA;--card:#fff;--text:#0F172A;--t2:#475569;--t3:#94A3B8;--border:#E2E8F0;--accent:#3B8FD9;--bar-track:#F1F5F9;--cs:0 1px 3px rgba(0,0,0,0.04);--bg-hover:#F8FAFC;--tab-bg:#EFF6FF;}
+.dark{--bg:#0F172A;--card:#1E293B;--text:#F1F5F9;--t2:#94A3B8;--t3:#64748B;--border:#334155;--bar-track:#1E293B;--cs:0 1px 3px rgba(0,0,0,0.3);--bg-hover:#334155;--tab-bg:#1E3A5F;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;transition:background 0.3s,color 0.3s;}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+input,select,textarea{font-family:var(--font);}
+</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-const { useState, useEffect, useMemo, useCallback } = React;
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useCallback,useRef}=React;
 
-const FIELDS = [
-  { key: "applicationDate", label: "Application Date", type: "date" },
-  { key: "effectiveDate", label: "Effective Date", type: "date" },
-  { key: "fullName", label: "Full Name", type: "text" },
-  { key: "phone", label: "Phone", type: "tel" },
-  { key: "email", label: "Email", type: "email" },
-  { key: "dob", label: "Date of Birth", type: "date" },
-  { key: "mailingAddress", label: "Mailing Address", type: "text" },
-  { key: "zipCode", label: "Zip Code", type: "text" },
-  { key: "city", label: "City", type: "text" },
-  { key: "state", label: "State", type: "select", options: ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"] },
-  { key: "mbiNumber", label: "MBI Number", type: "text" },
-  { key: "electionPeriod", label: "Election Period", type: "select", options: ["AEP","OEP","SEP","IEP","ICEP"] },
-  { key: "medicaidNumber", label: "Medicaid Number", type: "text" },
-  { key: "medicaidLevel", label: "Medicaid Level", type: "select", options: ["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"] },
-  { key: "planName", label: "New Plan Name", type: "text" },
-  { key: "planType", label: "Plan Type", type: "select", options: ["MAPD","DSNP","CSNP","PDP","Medigap"] },
-  { key: "carrier", label: "Carrier", type: "select", options: ["Aetna","Anthem","CarePlus","Cigna","Devoted Health","Freedom Health","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Clover Health","Alignment Health","Oscar Health","Other"] },
-  { key: "hospitalIndemnity", label: "Hospital Indemnity", type: "select", options: ["Yes","No"] },
-  { key: "sunfireCode", label: "Sunfire Personal Code", type: "text" },
+// ═══ FIREBASE ═══
+firebase.initializeApp({
+  apiKey:"AIzaSyB2sP2fRpap3fbbyi7g7oNCAFXXFkzGBPo",
+  authDomain:"uip-tracker-77729.firebaseapp.com",
+  projectId:"uip-tracker-77729",
+  storageBucket:"uip-tracker-77729.firebasestorage.app",
+  messagingSenderId:"388506730267",
+  appId:"1:388506730267:web:ed1bb132a506c6cac29dbe"
+});
+const auth=firebase.auth();
+const db=firebase.firestore();
+let secondaryApp;try{secondaryApp=firebase.initializeApp({apiKey:"AIzaSyB2sP2fRpap3fbbyi7g7oNCAFXXFkzGBPo",authDomain:"uip-tracker-77729.firebaseapp.com",projectId:"uip-tracker-77729"},"Secondary");}catch(e){secondaryApp=firebase.app("Secondary");}
+const secondaryAuth=secondaryApp.auth();
+
+// ═══ FIELD DEFS ═══
+const FIELDS=[
+  {key:"fullName",label:"Full Name",type:"text"},
+  {key:"phone",label:"Phone",type:"tel"},
+  {key:"email",label:"Email",type:"email"},
+  {key:"dob",label:"Date of Birth",type:"date"},
+  {key:"applicationDate",label:"Application Date",type:"date"},
+  {key:"effectiveDate",label:"Effective Date",type:"date"},
+  {key:"mailingAddress",label:"Mailing Address",type:"text"},
+  {key:"city",label:"City",type:"text"},
+  {key:"state",label:"State",type:"select",options:["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"]},
+  {key:"zipCode",label:"Zip Code",type:"text"},
+  {key:"mbiNumber",label:"MBI Number",type:"text"},
+  {key:"electionPeriod",label:"Election Period",type:"select",options:["AEP","OEP","SEP","IEP","ICEP"]},
+  {key:"medicaidNumber",label:"Medicaid Number",type:"text"},
+  {key:"medicaidLevel",label:"Medicaid Level",type:"select",options:["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"]},
+  {key:"carrier",label:"Carrier",type:"select",options:["Aetna","Anthem","CarePlus","Cigna","Devoted Health","Freedom Health","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Clover Health","Alignment Health","Oscar Health","Other"]},
+  {key:"planName",label:"Plan Name",type:"text"},
+  {key:"planType",label:"Plan Type",type:"select",options:["MAPD","DSNP","CSNP","PDP","Medigap"]},
+  {key:"hospitalIndemnity",label:"Hospital Indemnity",type:"select",options:["Yes","No"]},
+  {key:"sunfireCode",label:"Sunfire Code",type:"text"},
 ];
-
-const ST = {
-  active:        { label: "Active",          color: "#22C55E", icon: "✅", desc: "Enrolled — awaiting first commission" },
-  paid:          { label: "Paid",            color: "#3B8FD9", icon: "💰", desc: "Commission received — still on your book" },
-  inactive:      { label: "Inactive",        color: "#F59E0B", icon: "⚠️", desc: "Left your plan per MARX — pending chargeback" },
-  chargedBack:   { label: "Charged Back",    color: "#EF4444", icon: "💸", desc: "Chargeback has hit your commission" },
-  neverInEffect: { label: "Never in Effect", color: "#94A3B8", icon: "🚫", desc: "Never went active — pre-effective drop" },
+const ST={
+  active:{label:"Active",color:"#22C55E",icon:"✅",desc:"Enrolled — awaiting first commission"},
+  paid:{label:"Paid",color:"#3B8FD9",icon:"💰",desc:"Commission received"},
+  inactive:{label:"Inactive",color:"#F59E0B",icon:"⚠️",desc:"Left your plan"},
+  chargedBack:{label:"Charged Back",color:"#EF4444",icon:"💸",desc:"Chargeback hit"},
+  neverInEffect:{label:"Never in Effect",color:"#94A3B8",icon:"🚫",desc:"Pre-effective drop"},
 };
-// What you can change TO from each status
-const TRANSITIONS = {
-  active:        ["paid", "inactive", "neverInEffect"],
-  paid:          ["inactive", "active"],
-  inactive:      ["chargedBack", "active", "paid"],
-  chargedBack:   ["active"],
-  neverInEffect: ["active"],
+const TRANSITIONS={active:["paid","inactive","neverInEffect"],paid:["inactive","active"],inactive:["chargedBack","active","paid"],chargedBack:["active"],neverInEffect:["active"]};
+
+// ═══ UTILITIES ═══
+const fmt=d=>{if(!d)return"—";return new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});};
+const fmtPhone=p=>{if(!p)return"—";const c=p.replace(/\D/g,"");const d=c.length>=11&&c[0]==="1"?c.slice(1):c;return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:d.length===7?`${d.slice(0,3)}-${d.slice(3)}`:p;};
+const CN={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus","devoted":"Devoted Health","devoted health":"Devoted Health","wellcare":"WellCare","humana":"Humana","aetna":"Aetna"};
+const fmtCarrier=c=>{if(!c)return"—";return CN[c.toLowerCase()]||c;};
+const money=n=>"$"+(parseFloat(n)||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
+const pct=(n,d)=>d===0?"0%":(n/d*100).toFixed(1)+"%";
+const appMonthKey=d=>{if(!d)return null;const dt=new Date(d+"T00:00:00");dt.setMonth(dt.getMonth()-1);return dt.toISOString().slice(0,7);};
+const monthLabel=mk=>{if(!mk)return"—";return new Date(mk+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"2-digit"});};
+const daysBetween=(a,b)=>{if(!a||!b)return null;return Math.floor((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/86400000);};
+const today=()=>new Date().toISOString().split("T")[0];
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const appMonthToEffMonth=m=>m===11?0:m+1;
+const CC={"humana":"#22C55E","careplus":"#22C55E","unitedhealthcare":"#3B82F6","aetna":"#EC4899","devoted health":"#F97316","freedom health":"#EAB308"};
+const getCC=c=>{if(!c)return"#78716C";const k=c.trim().toLowerCase();return CC[k]||CC[k.replace(/ health$/,"")]||"#78716C";};
+
+// Commission
+const calcInitialComm=(effDate,ep)=>{if(!effDate)return 0;const m=new Date(effDate+"T00:00:00").getMonth();const base=347-(29*m);return ep==="IEP"?base*2:base;};
+const calcResidualMonths=(effDate,asOf)=>{if(!effDate)return 0;const y=new Date(effDate+"T00:00:00").getFullYear();const rs=new Date(y+1,0,1);const now=asOf?new Date(asOf+"T00:00:00"):new Date();if(now<rs)return 0;return(now.getFullYear()-rs.getFullYear())*12+(now.getMonth()-rs.getMonth())+1;};
+const calcResidualEarned=(effDate,asOf)=>calcResidualMonths(effDate,asOf)*29;
+const residualStart=effDate=>{if(!effDate)return"—";return"Jan "+(new Date(effDate+"T00:00:00").getFullYear()+1);};
+const calcHeapComm=agent=>(parseFloat(agent?.heapFrontEnd)||0)+(parseFloat(agent?.heapBackEnd)||0);
+
+const normalizeClient=c=>{
+  const n={...c};
+  if(n.carrier){n.carrier=n.carrier.trim();const k=n.carrier.toLowerCase();if(CN[k])n.carrier=CN[k];}
+  if(!n.medicaidNumber?.trim()&&(!n.medicaidLevel||n.medicaidLevel==="None"))n.medicaidLevel="N/A";
+  if(!n.planType||n.planType===""){const pn=(n.planName||"").toLowerCase();if(pn.includes("c-snp")||pn.includes("csnp"))n.planType="CSNP";else if(pn.includes("d-snp")||pn.includes("dsnp"))n.planType="DSNP";else if(pn.includes("pdp"))n.planType="PDP";else if(pn.length>0)n.planType="MAPD";}
+  if(!n.hospitalIndemnity)n.hospitalIndemnity="";
+  return n;
 };
 
-const STORAGE_KEY = "uip-medicare-clients-v5";
-const fmt = d => { if (!d) return "—"; return new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
-const fmtPhone = p => { if (!p) return "—"; const c=p.replace(/\D/g,""); const d=c.length>=11&&c[0]==="1"?c.slice(1):c; return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:d.length===7?`${d.slice(0,3)}-${d.slice(3)}`:p; };
-const fmtCarrier = c => { if(!c) return "—"; const m={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus"}; return m[c.toLowerCase()]||c; };
-const money = n => "$"+(parseFloat(n)||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
-const pct = (n,d) => d===0?"0%":(n/d*100).toFixed(1)+"%";
-const monthKey = d => d?d.slice(0,7):null;
-const appMonthKey = d => { if(!d) return null; const dt=new Date(d+"T00:00:00"); dt.setMonth(dt.getMonth()-1); return dt.toISOString().slice(0,7); };
-const monthLabel = mk => { if(!mk) return "—"; return new Date(mk+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"2-digit"}); };
-const daysBetween = (a,b) => { if(!a||!b) return null; return Math.floor((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/(86400000)); };
-const today = () => new Date().toISOString().split("T")[0];
-// Commission calc: Initial = $347 - ($29 × (effMonth - 1)). Residuals = $29/mo starting Jan after eff year.
-const calcInitialComm = (effDate,electionPeriod) => { if(!effDate) return 0; const m=new Date(effDate+"T00:00:00").getMonth(); const base=347-(29*m); return electionPeriod==="IEP"?base*2:base; };
-const calcResidualMonths = (effDate,asOfDate) => {
-  if(!effDate) return 0;
-  const effY=new Date(effDate+"T00:00:00").getFullYear();
-  const resStart=new Date(effY+1,0,1); // Jan 1 of year after effective
-  const now=asOfDate?new Date(asOfDate+"T00:00:00"):new Date();
-  if(now<resStart) return 0;
-  return (now.getFullYear()-resStart.getFullYear())*12+(now.getMonth()-resStart.getMonth())+1;
-};
-const calcResidualEarned = (effDate,asOfDate) => calcResidualMonths(effDate,asOfDate)*29;
-const calcTotalProjected = (effDate,ep) => { if(!effDate) return 0; return calcInitialComm(effDate,ep); };
-const residualStartDate = effDate => { if(!effDate) return "—"; const y=new Date(effDate+"T00:00:00").getFullYear(); return "Jan "+(y+1); };
-const CARRIER_COLORS = {"humana":"#22C55E","careplus":"#22C55E","unitedhealthcare":"#3B82F6","uhc":"#3B82F6","aetna":"#EC4899","devoted health":"#F97316","devoted":"#F97316","freedom health":"#EAB308","freedom":"#EAB308"};
-const getCarrierColor = c => { if(!c) return "#78716C"; const k=c.trim().toLowerCase(); return CARRIER_COLORS[k]||CARRIER_COLORS[k.replace(/ health$/,"")]||"#78716C"; };
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const appMonthToEffMonth = m => m===11?0:m+1; // Jan app → Feb eff, Dec app → Jan eff
+// ═══ UI COMPONENTS ═══
+function Badge({children,color="var(--accent)"}){return<span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,letterSpacing:0.6,background:`${color}14`,color,textTransform:"uppercase"}}>{children}</span>;}
+function StatCard({label,value,sub,icon,color,small}){return<div style={{background:"var(--card)",borderRadius:12,padding:small?"14px 16px":"20px 24px",border:"1px solid var(--border)",flex:small?"1 1 140px":"1 1 180px",minWidth:small?130:170,boxShadow:"var(--cs)"}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:small?8:12}}><span style={{fontSize:small?14:18}}>{icon}</span><span style={{fontSize:small?9:11,fontWeight:700,letterSpacing:0.8,textTransform:"uppercase",color:"var(--t3)"}}>{label}</span></div><div style={{fontSize:small?24:36,fontWeight:800,color:color||"var(--text)",lineHeight:1}}>{value}</div>{sub&&<div style={{fontSize:small?10:12,color:"var(--t3)",marginTop:small?3:6}}>{sub}</div>}</div>;}
+function BarChart({data,color="#3B8FD9",maxBars=8}){const s=data.slice(0,maxBars);const mx=Math.max(...s.map(d=>d[1]),1);return<div style={{display:"flex",flexDirection:"column",gap:6}}>{s.map(([l,v])=><div key={l} style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:95,fontSize:12,textAlign:"right",color:"var(--t2)",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</div><div style={{flex:1,background:"var(--bar-track)",borderRadius:6,height:26,overflow:"hidden"}}><div style={{height:"100%",borderRadius:6,background:color,width:`${(v/mx)*100}%`,transition:"width 0.5s",display:"flex",alignItems:"center",paddingLeft:8,fontSize:11,fontWeight:700,color:"#fff",minWidth:32}}>{typeof v==="number"&&v>999?money(v):v}</div></div></div>)}</div>;}
+function MiniTable({headers,rows,emptyMsg}){return<div style={{borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"var(--bg-hover)"}}>{headers.map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontWeight:700,color:"var(--t3)",fontSize:10,textTransform:"uppercase",letterSpacing:0.6,borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={headers.length} style={{padding:20,textAlign:"center",color:"var(--t3)"}}>{emptyMsg||"No data"}</td></tr>:rows.map((r,i)=><tr key={i} style={{background:i%2?"var(--bg-hover)":"transparent"}}>{r.map((c,j)=><td key={j} style={{padding:"8px 12px",borderBottom:"1px solid var(--border)"}}>{c}</td>)}</tr>)}</tbody></table></div>;}
+function Card({title,children}){return<div style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",overflow:"hidden",boxShadow:"var(--cs)"}}><div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:700,fontSize:15}}>{title}</div><div style={{padding:20}}>{children}</div></div>;}
+function Modal({children,onClose,title,subtitle,width=560}){return<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fadeIn 0.15s",padding:20}}><div onClick={e=>e.stopPropagation()} style={{background:"var(--card)",borderRadius:16,width:"100%",maxWidth:width,maxHeight:"90vh",overflow:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",border:"1px solid var(--border)"}}>{title&&<div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)"}}><div style={{fontSize:18,fontWeight:800}}>{title}</div>{subtitle&&<div style={{marginTop:4}}>{subtitle}</div>}</div>}{children}</div></div>;}
 
-function Badge({children, color="var(--accent)", bg}) {
-  return <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,letterSpacing:0.6,background:bg||`${color}14`,color,textTransform:"uppercase"}}>{children}</span>;
-}
-function StatCard({label,value,sub,icon,color,small}) {
-  return <div style={{background:"var(--card)",borderRadius:12,padding:small?"14px 16px":"20px 24px",border:"1px solid var(--border)",flex:small?"1 1 140px":"1 1 180px",minWidth:small?130:170,boxShadow:"var(--cs)"}}>
-    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:small?8:12}}><span style={{fontSize:small?14:18}}>{icon}</span><span style={{fontSize:small?9:11,fontWeight:700,letterSpacing:0.8,textTransform:"uppercase",color:"var(--t3)"}}>{label}</span></div>
-    <div style={{fontSize:small?24:36,fontWeight:800,color:color||"var(--text)",lineHeight:1}}>{value}</div>
-    {sub&&<div style={{fontSize:small?10:12,color:"var(--t3)",marginTop:small?3:6}}>{sub}</div>}
-  </div>;
-}
-function BarChart({data, color="#3B8FD9", maxBars=8}) {
-  const s=data.slice(0,maxBars); const mx=Math.max(...s.map(d=>d[1]),1);
-  return <div style={{display:"flex",flexDirection:"column",gap:6}}>{s.map(([l,v])=><div key={l} style={{display:"flex",alignItems:"center",gap:10}}>
-    <div style={{width:95,fontSize:12,textAlign:"right",color:"var(--t2)",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</div>
-    <div style={{flex:1,background:"var(--bar-track)",borderRadius:6,height:26,overflow:"hidden"}}><div style={{height:"100%",borderRadius:6,background:color,width:`${(v/mx)*100}%`,transition:"width 0.5s",display:"flex",alignItems:"center",paddingLeft:8,fontSize:11,fontWeight:700,color:"#fff",minWidth:32}}>{typeof v==="number"&&v>999?money(v):v}</div></div>
-  </div>)}</div>;
-}
-function MiniTable({headers,rows,emptyMsg}) {
-  return <div style={{borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-    <thead><tr style={{background:"var(--bg-hover)"}}>{headers.map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontWeight:700,color:"var(--t3)",fontSize:10,textTransform:"uppercase",letterSpacing:0.6,borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead>
-    <tbody>{rows.length===0?<tr><td colSpan={headers.length} style={{padding:20,textAlign:"center",color:"var(--t3)"}}>{emptyMsg||"No data"}</td></tr>:rows.map((r,i)=><tr key={i} style={{background:i%2?"var(--bg-hover)":"transparent"}}>{r.map((c,j)=><td key={j} style={{padding:"8px 12px",borderBottom:"1px solid var(--border)"}}>{c}</td>)}</tr>)}</tbody>
-  </table></div>;
-}
-function Card({title,icon,children,span}) {
-  return <div style={{background:"var(--card)",borderRadius:12,padding:22,border:"1px solid var(--border)",boxShadow:"var(--cs)",gridColumn:span||"auto"}}>
-    {title&&<div style={{fontSize:14,fontWeight:700,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>{icon&&<span style={{fontSize:16}}>{icon}</span>}{title}</div>}{children}
-  </div>;
-}
-function Modal({children,onClose,width=700,title,subtitle}) {
-  return <div style={{position:"fixed",inset:0,background:"var(--overlay)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:200,padding:"36px 14px",overflowY:"auto",animation:"fadeIn 0.2s"}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:"var(--card)",borderRadius:16,width,maxWidth:"100%",border:"1px solid var(--border)",boxShadow:"var(--shadow)",animation:"slideUp 0.25s"}}>
-      <div style={{padding:"18px 24px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div><div style={{fontSize:18,fontWeight:700}}>{title}</div>{subtitle&&<div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{subtitle}</div>}</div>
-        <button onClick={onClose} style={{width:30,height:30,borderRadius:8,border:"1px solid var(--border)",background:"var(--bg)",cursor:"pointer",fontSize:14,color:"var(--t2)",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-      </div>{children}
+// ═══ LOGIN SCREEN ═══
+function LoginScreen(){
+  const[email,setEmail]=useState("");const[pw,setPw]=useState("");const[err,setErr]=useState("");const[loading,setLoading]=useState(false);const[mode,setMode]=useState("login");
+  const doLogin=async()=>{setErr("");setLoading(true);try{await auth.signInWithEmailAndPassword(email,pw);}catch(e){setErr(e.code==="auth/invalid-credential"?"Invalid email or password":e.message);}setLoading(false);};
+  const doSetup=async()=>{setErr("");setLoading(true);try{const cred=await auth.createUserWithEmailAndPassword(email,pw);await db.collection("users").doc(cred.user.uid).set({email,displayName:"Admin",role:"admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});}catch(e){setErr(e.message);}setLoading(false);};
+  const inp2={width:"100%",padding:"12px 16px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:14,fontFamily:"var(--font)",background:"#fff",color:"#0F172A",outline:"none"};
+  return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#EFF6FF 0%,#F5F7FA 50%,#EFF6FF 100%)",padding:20}}>
+    <div style={{background:"#fff",borderRadius:20,padding:40,maxWidth:420,width:"100%",boxShadow:"0 8px 32px rgba(0,0,0,0.08)",border:"1px solid #E2E8F0"}}>
+      <div style={{textAlign:"center",marginBottom:32}}>
+        <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:56,height:56,borderRadius:16,background:"#3B8FD9",marginBottom:16}}><span style={{fontSize:24,color:"#fff",fontWeight:900}}>U</span></div>
+        <div style={{fontSize:22,fontWeight:900,color:"#0F172A"}}>United Insurance</div>
+        <div style={{fontSize:11,fontWeight:800,letterSpacing:2,color:"#3B8FD9",textTransform:"uppercase"}}>PROFESSIONALS</div>
+        <div style={{fontSize:14,color:"#64748B",marginTop:8}}>{mode==="setup"?"Create Admin Account":"Sign in to your tracker"}</div>
+      </div>
+      {err&&<div style={{padding:"10px 14px",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,color:"#DC2626",fontSize:13,marginBottom:16}}>{err}</div>}
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email" style={inp2} onKeyDown={e=>e.key==="Enter"&&(mode==="setup"?doSetup():doLogin())} />
+        <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Password" style={inp2} onKeyDown={e=>e.key==="Enter"&&(mode==="setup"?doSetup():doLogin())} />
+        <button onClick={mode==="setup"?doSetup:doLogin} disabled={loading||!email||!pw} style={{padding:"12px 20px",borderRadius:10,border:"none",background:loading?"#94A3B8":"#3B8FD9",color:"#fff",fontSize:15,fontWeight:700,cursor:loading?"wait":"pointer",fontFamily:"var(--font)",opacity:!email||!pw?0.5:1}}>{loading?"...":(mode==="setup"?"Create Admin Account":"Sign In")}</button>
+      </div>
+      <div style={{textAlign:"center",marginTop:16}}>
+        {mode==="login"?<button onClick={()=>setMode("setup")} style={{background:"none",border:"none",color:"#3B8FD9",cursor:"pointer",fontSize:13,fontFamily:"var(--font)"}}>First time? Set up admin account</button>
+        :<button onClick={()=>setMode("login")} style={{background:"none",border:"none",color:"#3B8FD9",cursor:"pointer",fontSize:13,fontFamily:"var(--font)"}}>Back to sign in</button>}
+      </div>
     </div>
   </div>;
 }
 
-// ═══════════════════════════════════════
-function MedicareTracker() {
-  const [dark, setDark] = useState(false);
-  const [tab, setTab] = useState("dashboard");
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({});
-  const [editId, setEditId] = useState(null);
-  const [filters, setFilters] = useState({});
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [viewClient, setViewClient] = useState(null);
-  const [showStatusModal, setShowStatusModal] = useState(null);
-  const [statusForm, setStatusForm] = useState({});
-  const [sortField, setSortField] = useState("custom");
-  const [sortDir, setSortDir] = useState("desc");
-  const [toast, setToast] = useState(null);
-  const [confirmAction, setConfirmAction] = useState(null);
-  const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkStep, setBulkStep] = useState(1);
-  const [bulkRaw, setBulkRaw] = useState("");
-  const [bulkHeaders, setBulkHeaders] = useState([]);
-  const [bulkRows, setBulkRows] = useState([]);
-  const [bulkMapping, setBulkMapping] = useState({});
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [carrierColors, setCarrierColors] = useState(false);
-  const [appMonthFilter, setAppMonthFilter] = useState("all");
-  const [quickEdit, setQuickEdit] = useState(null);
-  // Monthly review
-  const [reviewMode, setReviewMode] = useState(false);
-  const [reviewIdx, setReviewIdx] = useState(0);
-  const [reviewList, setReviewList] = useState([]);
-  const [reviewDone, setReviewDone] = useState([]);
-  const [reviewSubAction, setReviewSubAction] = useState(null);
-  const [tempAmount, setTempAmount] = useState("");
-  const [tempNote, setTempNote] = useState("");
-  const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [quickAddRaw, setQuickAddRaw] = useState("");
-  const [reorderPreview, setReorderPreview] = useState(null);
-  const [showMassUpdate, setShowMassUpdate] = useState(false);
-  const [massField, setMassField] = useState("");
-  const [massValue, setMassValue] = useState("");
+// ═══ MAIN TRACKER ═══
+function MedicareTracker({currentUser,userProfile}){
+  const isAdmin=userProfile?.role==="admin";
+  const[dark,setDark]=useState(false);
+  const[tab,setTab]=useState("dashboard");
+  const[clients,setClients]=useState([]);
+  const[teamUsers,setTeamUsers]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[toast,setToast]=useState(null);
+  const[form,setForm]=useState({});
+  const[showAddModal,setShowAddModal]=useState(false);
+  const[editId,setEditId]=useState(null);
+  const[viewClient,setViewClient]=useState(null);
+  const[searchTerm,setSearchTerm]=useState("");
+  const[statusFilter,setStatusFilter]=useState("all");
+  const[carrierColors,setCarrierColors]=useState(false);
+  const[appMonthFilter,setAppMonthFilter]=useState("all");
+  const[quickEdit,setQuickEdit]=useState(null);
+  const[filters,setFilters]=useState({});
+  const[sortField,setSortField]=useState("custom");
+  const[sortDir,setSortDir]=useState("asc");
+  const[statusForm,setStatusForm]=useState({});
+  const[showStatusModal,setShowStatusModal]=useState(null);
+  const[confirmAction,setConfirmAction]=useState(null);
+  const[showMassUpdate,setShowMassUpdate]=useState(false);
+  const[massField,setMassField]=useState("");
+  const[massValue,setMassValue]=useState("");
+  const[showCreateUser,setShowCreateUser]=useState(false);
+  const[newUser,setNewUser]=useState({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});
+  const[createUserError,setCreateUserError]=useState("");
+  const[selectedAgent,setSelectedAgent]=useState("all");
+  const[editingAgent,setEditingAgent]=useState(null);
+  const[showBulkModal,setShowBulkModal]=useState(false);
+  const[bulkRaw,setBulkRaw]=useState("");
+  const[bulkStep,setBulkStep]=useState(1);
+  const[bulkHeaders,setBulkHeaders]=useState([]);
+  const[bulkRows,setBulkRows]=useState([]);
+  const[bulkMapping,setBulkMapping]=useState({});
 
-  const CARRIER_NORM={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus","devoted":"Devoted Health","devoted health":"Devoted Health","wellcare":"WellCare","humana":"Humana","aetna":"Aetna"};
-  const normalizeClients = (list) => list.map(c=>{
-    const n={...c};
-    if(n.carrier){n.carrier=n.carrier.trim();const k=n.carrier.toLowerCase();if(CARRIER_NORM[k])n.carrier=CARRIER_NORM[k];}
-    if(!n.medicaidNumber?.trim()&&(!n.medicaidLevel||n.medicaidLevel==="None"))n.medicaidLevel="N/A";
-    if(!n.planType||n.planType===""){
-      const pn=(n.planName||"").toLowerCase();
-      if(pn.includes("c-snp")||pn.includes("csnp")) n.planType="CSNP";
-      else if(pn.includes("d-snp")||pn.includes("dsnp")) n.planType="DSNP";
-      else if(pn.includes("pdp")) n.planType="PDP";
-      else n.planType="MAPD";
+  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3000);};
+
+  // ── Load Clients ──
+  useEffect(()=>{
+    let unsub;
+    if(isAdmin){unsub=db.collection("clients").orderBy("createdAt","desc").onSnapshot(snap=>{setClients(snap.docs.map(d=>({id:d.id,...d.data()})));setLoading(false);},()=>setLoading(false));}
+    else{unsub=db.collection("clients").where("agentId","==",currentUser.uid).onSnapshot(snap=>{setClients(snap.docs.map(d=>({id:d.id,...d.data()})));setLoading(false);},()=>setLoading(false));}
+    return()=>unsub&&unsub();
+  },[currentUser.uid,isAdmin]);
+
+  // ── Load Team ──
+  useEffect(()=>{
+    if(!isAdmin)return;
+    const unsub=db.collection("users").onSnapshot(snap=>setTeamUsers(snap.docs.map(d=>({uid:d.id,...d.data()}))));
+    return()=>unsub();
+  },[isAdmin]);
+
+  // ── Migrate localStorage (one-time for admin) ──
+  useEffect(()=>{
+    if(!isAdmin)return;
+    if(localStorage.getItem("uip-firebase-migrated"))return;
+    const keys=["uip-medicare-clients-v5","uip-medicare-clients-v4","uip-medicare-clients-v3"];
+    for(const key of keys){
+      const raw=localStorage.getItem(key);
+      if(raw){try{
+        const old=JSON.parse(raw);
+        if(old.length>0){
+          const batch=db.batch();
+          old.forEach(c=>{const ref=db.collection("clients").doc();const nc=normalizeClient({...c,agentId:currentUser.uid});if(!nc.commissionAmount&&nc.effectiveDate)nc.commissionAmount=String(calcInitialComm(nc.effectiveDate,nc.electionPeriod));delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();batch.set(ref,nc);});
+          batch.commit().then(()=>{localStorage.setItem("uip-firebase-migrated","true");showToast(`Migrated ${old.length} clients!`);});
+        }
+      }catch(e){console.error(e);}break;}
     }
-    if(!n.commissionAmount&&n.effectiveDate) n.commissionAmount=String(calcInitialComm(n.effectiveDate,n.electionPeriod));
-    if(!n.hospitalIndemnity)n.hospitalIndemnity="";
-    return n;
-  });
+    localStorage.setItem("uip-firebase-migrated","true");
+  },[isAdmin,currentUser.uid]);
 
-  // Storage
-  useEffect(() => {
-    let m=true;
-    const load = async () => {
-      try { const r=localStorage.getItem(STORAGE_KEY); if(m&&r){ const parsed=normalizeClients(JSON.parse(r)); setClients(parsed); localStorage.setItem(STORAGE_KEY,JSON.stringify(parsed)); } } catch(e){}
-      // migrate from v4/v3
-      for (const oldKey of ["uip-medicare-clients-v4","uip-medicare-clients-v3"]) {
-        try {
-          if(true){
-            const cur = { value: localStorage.getItem(STORAGE_KEY) };
-            if(cur&&cur.value) break;
-            const old={ value: localStorage.getItem(oldKey) };
-            if(m&&old&&old.value){
-              const migrated=JSON.parse(old.value).map(c=>({...c, status:c.status==="former"?"neverInEffect":(c.status||"active"), lastVerified:"", commissionAmount:c.commissionAmount||"", paidDate:c.paidDate||"", inactiveDate:"", chargebackDate:c.chargebackDate||"", chargebackAmount:c.chargebackAmount||"", statusNote:c.statusNote||"" }));
-              setClients(migrated); localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated)); break;
-            }
-          }
-        } catch(e){}
-      }
-      if(m) setLoading(false);
-    };
-    const t=setTimeout(()=>{if(m)setLoading(false);},2000); load(); return ()=>{m=false;clearTimeout(t);};
-  }, []);
+  // ── Filtered by agent ──
+  const displayClients=useMemo(()=>{
+    if(!isAdmin||selectedAgent==="all")return clients;
+    return clients.filter(c=>c.agentId===selectedAgent);
+  },[clients,isAdmin,selectedAgent]);
 
-  const save = useCallback(async nc => { const clean=normalizeClients(nc); setClients(clean); try{localStorage.setItem(STORAGE_KEY,JSON.stringify(clean));}catch(e){} }, []);
-  const showToast = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
+  // ── CRUD ──
+  const saveClient=async(data)=>{
+    const nc=normalizeClient({...data,agentId:data.agentId||currentUser.uid});
+    if(!nc.commissionAmount&&nc.effectiveDate&&userProfile?.role!=="heap")nc.commissionAmount=String(calcInitialComm(nc.effectiveDate,nc.electionPeriod));
+    if(nc.id){const id=nc.id;delete nc.id;await db.collection("clients").doc(id).update(nc);}
+    else{delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection("clients").add(nc);}
+  };
+  const deleteClient=async id=>{await db.collection("clients").doc(id).delete();setViewClient(null);showToast("Deleted");setConfirmAction(null);};
+  const updateClient=async(id,u)=>await db.collection("clients").doc(id).update(u);
 
-  const byStatus = useMemo(()=>{
-    const r={active:[],paid:[],inactive:[],chargedBack:[],neverInEffect:[]};
-    clients.forEach(c=>{if(r[c.status])r[c.status].push(c);else r.active.push(c);}); return r;
-  },[clients]);
-
-  const applyFilters = useCallback(list=>{
-    let f=[...list];
-    if(searchTerm){const s=searchTerm.toLowerCase();const sDigits=s.replace(/\D/g,"");f=f.filter(c=>{
-      if(c.fullName?.toLowerCase().includes(s)) return true;
-      if(c.phone&&(c.phone.includes(s)||c.phone.replace(/\D/g,"").includes(sDigits))) return true;
-      if(c.email?.toLowerCase().includes(s)) return true;
-      if(c.mailingAddress?.toLowerCase().includes(s)) return true;
-      if(c.city?.toLowerCase().includes(s)) return true;
-      if(c.zipCode?.includes(s)) return true;
-      if(c.mbiNumber?.toLowerCase().includes(s)) return true;
-      if(c.carrier?.toLowerCase().includes(s)) return true;
-      if(c.planName?.toLowerCase().includes(s)) return true;
-      if(c.medicaidNumber?.toLowerCase().includes(s)) return true;
-      if(c.sunfireCode?.toLowerCase().includes(s)) return true;
-      if(c.statusNote?.toLowerCase().includes(s)) return true;
-      if(c.applicationDate?.includes(s)) return true;
-      if(c.effectiveDate?.includes(s)) return true;
-      return false;
-    });}
-    if(statusFilter&&statusFilter!=="all")f=f.filter(c=>c.status===statusFilter);
-    if(appMonthFilter&&appMonthFilter!=="all"){const effMo=appMonthToEffMonth(parseInt(appMonthFilter));f=f.filter(c=>{if(!c.effectiveDate)return false;const m=new Date(c.effectiveDate+"T00:00:00").getMonth();return m===effMo;});}
-    Object.entries(filters).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v);});
-    if(sortField!=="custom") f.sort((a,b)=>{const av=a[sortField]||"",bv=b[sortField]||"";const c=av<bv?-1:av>bv?1:0;return sortDir==="asc"?c:-c;});
-    return f;
-  },[searchTerm,statusFilter,appMonthFilter,filters,sortField,sortDir]);
-
+  // ── Form ──
   const resetForm=()=>{setForm({});setEditId(null);};
-  const openAdd=()=>{resetForm();setShowAddModal(true);};
   const openEdit=c=>{setForm({...c});setEditId(c.id);setShowAddModal(true);};
-  const handleSave=()=>{
-    if(!form.fullName?.trim()){showToast("Full Name required","error");return;}
+  const handleSave=async()=>{
+    if(!form.fullName?.trim()){showToast("Name required","error");return;}
     const cleaned={...form};
-    if(!cleaned.medicaidNumber?.trim()) cleaned.medicaidLevel="N/A";
-    if(cleaned.carrier){const m={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus"};cleaned.carrier=m[cleaned.carrier.toLowerCase()]||cleaned.carrier;}
-    if(editId){save(clients.map(c=>c.id===editId?{...cleaned,id:editId}:c));showToast("Updated");}
-    else{save([...clients,{...cleaned,id:Date.now().toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""}]);showToast("Client added");}
+    if(cleaned.carrier){cleaned.carrier=cleaned.carrier.trim();const k=cleaned.carrier.toLowerCase();if(CN[k])cleaned.carrier=CN[k];}
+    if(!cleaned.medicaidNumber?.trim())cleaned.medicaidLevel="N/A";
+    cleaned.agentId=cleaned.agentId||currentUser.uid;
+    if(editId)cleaned.id=editId;
+    await saveClient(cleaned);
+    showToast(editId?"Updated":"Added");
     setShowAddModal(false);resetForm();
   };
-  const deleteClient=id=>{save(clients.filter(c=>c.id!==id));setViewClient(null);showToast("Deleted");setConfirmAction(null);};
 
-  // Status changes
-  const openStatusChange=(client,newStatus)=>{
-    setStatusForm({newStatus,commissionAmount:client.commissionAmount||String(calcInitialComm(client.effectiveDate,client.electionPeriod)),paidDate:client.paidDate||today(),chargebackDate:client.chargebackDate||today(),chargebackAmount:client.chargebackAmount||client.commissionAmount||"",cancelMonth:"",statusNote:""});
+  // ── Status ──
+  const openStatusChange=(client,ns)=>{
+    const agent=teamUsers.find(u=>u.uid===client.agentId);
+    const commAmt=agent?.role==="heap"?String(calcHeapComm(agent)):(client.commissionAmount||String(calcInitialComm(client.effectiveDate,client.electionPeriod)));
+    setStatusForm({newStatus:ns,commissionAmount:commAmt,paidDate:client.paidDate||today(),chargebackDate:client.chargebackDate||today(),chargebackAmount:client.chargebackAmount||commAmt||"",cancelMonth:"",statusNote:""});
     setShowStatusModal(client);
   };
-  const confirmStatusChange=()=>{
-    const c=showStatusModal; const ns=statusForm.newStatus;
+  const confirmStatusChange=async()=>{
+    const c=showStatusModal;const ns=statusForm.newStatus;
     const u={status:ns,statusNote:statusForm.statusNote||c.statusNote||""};
     if(ns==="paid"){u.commissionAmount=statusForm.commissionAmount;u.paidDate=statusForm.paidDate||today();}
     if(ns==="inactive"){u.inactiveDate=today();u.cancelMonth=statusForm.cancelMonth||"";}
     if(ns==="chargedBack"){u.chargebackDate=statusForm.chargebackDate||today();u.chargebackAmount=statusForm.chargebackAmount;}
     if(ns==="neverInEffect"){u.inactiveDate=today();u.cancelMonth="";}
-    if(ns==="active"&&(c.status==="inactive"||c.status==="chargedBack")){u.lastVerified=today();}
-    save(clients.map(x=>x.id===c.id?{...x,...u}:x));
+    if(ns==="active"&&(c.status==="inactive"||c.status==="chargedBack"))u.lastVerified=today();
+    await updateClient(c.id,u);
     showToast(`${c.fullName} → ${ST[ns].label}`);
     setShowStatusModal(null);setViewClient(null);
   };
 
-  // ── Monthly Review Mode ──
-  const startReview=()=>{
-    // Review all active + paid clients
-    const toReview = clients.filter(c=>c.status==="active"||c.status==="paid").sort((a,b)=>(a.carrier||"").localeCompare(b.carrier||"")||(a.fullName||"").localeCompare(b.fullName||""));
-    if(!toReview.length){showToast("No active/paid clients to review","error");return;}
-    setReviewList(toReview); setReviewIdx(0); setReviewDone([]); setReviewMode(true); setReviewSubAction(null); setTempAmount(""); setTempNote("");
-  };
-  const reviewAction=(action,extra={})=>{
-    const c=reviewList[reviewIdx]; const t=today();
-    let updates={};
-    if(action==="verified"){updates={lastVerified:t};}
-    else if(action==="paid"){updates={status:"paid",commissionAmount:extra.amount||"",paidDate:extra.date||t,lastVerified:t};}
-    else if(action==="inactive"){updates={status:"inactive",inactiveDate:t,statusNote:extra.note||""};}
-    else if(action==="neverInEffect"){updates={status:"neverInEffect",inactiveDate:t};}
-    else if(action==="skip"){}
-    if(Object.keys(updates).length>0){
-      const nc=clients.map(x=>x.id===c.id?{...x,...updates}:x);
-      save(nc);
-    }
-    setReviewDone(p=>[...p,{id:c.id,name:c.fullName,action}]);
-    setReviewSubAction(null); setTempAmount(""); setTempNote("");
-    if(reviewIdx<reviewList.length-1) setReviewIdx(reviewIdx+1);
-    else { setReviewMode(false); showToast(`Monthly review complete! Reviewed ${reviewList.length} clients.`); }
+  // ── Create User ──
+  const handleCreateUser=async()=>{
+    setCreateUserError("");
+    try{
+      const cred=await secondaryAuth.createUserWithEmailAndPassword(newUser.email,newUser.password);
+      await secondaryAuth.signOut();
+      const ud={email:newUser.email,displayName:newUser.displayName,role:newUser.role,createdBy:currentUser.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+      if(newUser.role==="heap"){ud.heapFrontEnd=newUser.heapFrontEnd||"0";ud.heapBackEnd=newUser.heapBackEnd||"0";}
+      await db.collection("users").doc(cred.user.uid).set(ud);
+      showToast(`Created ${newUser.displayName}!`);
+      setShowCreateUser(false);setNewUser({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});
+    }catch(e){setCreateUserError(e.message);}
   };
 
-  // ── Bulk Import (same as before) ──
-  const openBulkImport=()=>{setBulkRaw("");setBulkHeaders([]);setBulkRows([]);setBulkMapping({});setBulkStep(1);setShowBulkModal(true);};
-  const normalizeDate=val=>{if(!val)return"";const cl=val.trim();if(/^\d{4}-\d{2}-\d{2}$/.test(cl))return cl;const sm=cl.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);if(sm){let[_,m,d,y]=sm;if(y.length===2)y=(parseInt(y)>50?"19":"20")+y;return`${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;}const tm=cl.match(/^(\d{2})(\d{2})[\/\-](\d{4})$/);if(tm){let[_,m,d,y]=tm;return`${y}-${m}-${d}`;}const pm=cl.match(/^(\d{1,2})[\/\-](\d{4})$/);if(pm){let[_,m,y]=pm;return`${y}-${m.padStart(2,"0")}-01`;}const p=new Date(cl);if(!isNaN(p.getTime()))return p.toISOString().split("T")[0];return cl;};
-  const parseSheet=text=>{const recs=[];let cur=[],fld="",inQ=false,i=0;const fn=text.indexOf("\n"),fl=fn>-1?text.substring(0,fn):text,del=fl.includes("\t")?"\t":",";while(i<text.length){const ch=text[i];if(inQ){if(ch==='"'){if(i+1<text.length&&text[i+1]==='"'){fld+='"';i+=2;}else{inQ=false;i++;}}else{fld+=ch;i++;}}else{if(ch==='"'){inQ=true;i++;}else if(ch===del){cur.push(fld.trim());fld="";i++;}else if(ch==="\n"||ch==="\r"){cur.push(fld.trim());fld="";if(ch==="\r"&&i+1<text.length&&text[i+1]==="\n")i++;i++;if(cur.some(c=>c.length>0))recs.push(cur);cur=[];}else{fld+=ch;i++;}}}cur.push(fld.trim());if(cur.some(c=>c.length>0))recs.push(cur);return recs;};
-  const parseBulkData=()=>{const text=bulkRaw.trim();if(!text){showToast("Paste data","error");return;}const all=parseSheet(text);if(all.length<2){showToast("Need header+data","error");return;}let hd=all[0];while(hd.length&&hd[hd.length-1]==="")hd.pop();const cc=hd.length,rows=all.slice(1).map(r=>r.slice(0,cc)).filter(r=>r.filter(c=>c).length>=2);if(!rows.length){showToast("No data","error");return;}setBulkHeaders(hd);setBulkRows(rows);const mm={applicationdate:"applicationDate",appdate:"applicationDate",effectivedate:"effectiveDate",effdate:"effectiveDate",fullname:"fullName",name:"fullName",clientname:"fullName",phone:"phone",phonenumber:"phone",telephone:"phone",cell:"phone",mobile:"phone",email:"email",emailaddress:"email",dateofbirth:"dob",dob:"dob",birthday:"dob",birthdate:"dob",mailingaddress:"mailingAddress",address:"mailingAddress",streetaddress:"mailingAddress",zipcode:"zipCode",zip:"zipCode",postalcode:"zipCode",city:"city",state:"state",mbinumber:"mbiNumber",mbi:"mbiNumber",medicarenumber:"mbiNumber",electionperiod:"electionPeriod",election:"electionPeriod",medicaidnumber:"medicaidNumber",medicaidno:"medicaidNumber",medicaidlevel:"medicaidLevel",newplanname:"planName",planname:"planName",plan:"planName",carrier:"carrier",company:"carrier",hospitalindemnity:"hospitalIndemnity",indemnity:"hospitalIndemnity",sunfirepersonalcode:"sunfireCode",sunfirecode:"sunfireCode",sunfire:"sunfireCode",personalcode:"sunfireCode",plantype:"planType",dsnp:"planType",csnp:"planType",mapd:"planType",pdp:"planType"};const am={};hd.forEach((h,idx)=>{const l=h.toLowerCase().replace(/[^a-z0-9]/g,"");if(!l)return;const m=mm[l];if(m&&!Object.values(am).includes(m))am[idx]=m;});setBulkMapping(am);const mf=new Set(Object.values(am));setBulkStep(FIELDS.map(f=>f.key).every(k=>mf.has(k))?3:2);};
-  const buildPreview=()=>bulkRows.map(row=>{const c={};Object.entries(bulkMapping).forEach(([ci,fk])=>{if(fk&&fk!=="skip"){let v=row[parseInt(ci)]||"";const fd=FIELDS.find(f=>f.key===fk);if(fd&&fd.type==="date")v=normalizeDate(v);v=v.replace(/\s+/g," ").trim();if(v)c[fk]=v;}});return c;});
-  const execImport=()=>{const p=buildPreview(),v=p.filter(c=>c.fullName?.trim());if(!v.length){showToast("No valid clients","error");return;}const cm={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","united health care":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus"};save([...clients,...v.map((c,i)=>{if(c.carrier)c.carrier=cm[c.carrier.toLowerCase()]||c.carrier;if(!c.medicaidNumber?.trim())c.medicaidLevel="N/A";return{...c,id:(Date.now()+i).toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""};})]);showToast(`Imported ${v.length} clients!`);setShowBulkModal(false);};
+  const updateAgentComm=async(uid,updates)=>{await db.collection("users").doc(uid).update(updates);showToast("Updated commission");setEditingAgent(null);};
 
-  // Analytics
-  const analytics = useMemo(()=>{
-    const t=clients.length,ac=byStatus.active.length,pd=byStatus.paid.length,ina=byStatus.inactive.length,cb=byStatus.chargedBack.length,nie=byStatus.neverInEffect.length;
-    const inForce=ac+pd;
-    // Commission: projected initial based on formula
-    const projectedInitial=clients.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInitialComm(c.effectiveDate,c.electionPeriod),0);
-    const totalComm=clients.reduce((s,c)=>s+(parseFloat(c.commissionAmount)||0),0);
-    const totalCB=[...byStatus.chargedBack,...byStatus.inactive].reduce((s,c)=>s+(parseFloat(c.chargebackAmount)||parseFloat(c.commissionAmount)||0),0);
-    const net=totalComm-totalCB;
-    // Residuals: $29/mo per in-force client starting Jan after effective year
-    const td=today();
-    const residualClients=clients.filter(c=>(c.status==="active"||c.status==="paid")&&c.effectiveDate&&calcResidualMonths(c.effectiveDate,td)>0);
-    const monthlyResidual=clients.filter(c=>(c.status==="active"||c.status==="paid")&&c.effectiveDate).reduce((s,c)=>{const effY=new Date(c.effectiveDate+"T00:00:00").getFullYear();const now=new Date();return now.getFullYear()>effY||now.getMonth()>=0&&now.getFullYear()>effY?s+29:s;},0);
-    const totalResidualEarned=clients.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcResidualEarned(c.effectiveDate,td),0);
-    // Projected annual residual (all in-force clients × $29 × 12)
-    const annualResidualProjected=inForce*29*12;
-    const carrierStats={};
-    clients.forEach(c=>{if(!c.carrier)return;if(!carrierStats[c.carrier])carrierStats[c.carrier]={total:0,active:0,paid:0,inactive:0,cb:0,nie:0,comm:0,projected:0};const cs=carrierStats[c.carrier];cs.total++;cs[c.status==="chargedBack"?"cb":c.status==="neverInEffect"?"nie":c.status]++;cs.comm+=parseFloat(c.commissionAmount)||0;if(c.status==="active"||c.status==="paid")cs.projected+=calcInitialComm(c.effectiveDate,c.electionPeriod);});
-    const stateStats={};clients.forEach(c=>{if(c.state){stateStats[c.state]=(stateStats[c.state]||0)+1;}});
-    const cohorts={};
-    clients.forEach(c=>{if(!c.effectiveDate)return;const mk=appMonthKey(c.effectiveDate);if(!mk)return;if(!cohorts[mk])cohorts[mk]={enrolled:0,inForce:0,dropped:0,projComm:0};cohorts[mk].enrolled++;if(c.status==="active"||c.status==="paid"){cohorts[mk].inForce++;cohorts[mk].projComm+=calcInitialComm(c.effectiveDate,c.electionPeriod);}else cohorts[mk].dropped++;});
-    const commByMonth={};clients.forEach(c=>{if(c.commissionAmount&&c.paidDate){const mk=monthKey(c.paidDate);if(mk)commByMonth[mk]=(commByMonth[mk]||0)+(parseFloat(c.commissionAmount)||0);}});
-    // Commission by app month (projected)
-    const commByAppMonth={};clients.forEach(c=>{if(!c.effectiveDate||!(c.status==="active"||c.status==="paid"))return;const mk=appMonthKey(c.effectiveDate);if(mk)commByAppMonth[mk]=(commByAppMonth[mk]||0)+calcInitialComm(c.effectiveDate,c.electionPeriod);});
-    // Survival curve: months on book before canceling
-    const survival={};const droppedClients=clients.filter(c=>c.status==="inactive"||c.status==="chargedBack");
-    droppedClients.forEach(c=>{
-      if(!c.effectiveDate) return;
-      let monthsOnBook=0;
-      if(c.cancelMonth){const eff=new Date(c.effectiveDate+"T00:00:00");const can=new Date(c.cancelMonth+"-01T00:00:00");monthsOnBook=Math.max(0,(can.getFullYear()-eff.getFullYear())*12+(can.getMonth()-eff.getMonth()));}
-      else if(c.inactiveDate){const eff=new Date(c.effectiveDate+"T00:00:00");const ina=new Date(c.inactiveDate+"T00:00:00");monthsOnBook=Math.max(0,Math.round((ina-eff)/(30.44*86400000)));}
-      const bucket=monthsOnBook<=0?"<1 month":monthsOnBook===1?"1 month":monthsOnBook<=3?"2-3 months":monthsOnBook<=6?"4-6 months":monthsOnBook<=12?"7-12 months":"12+ months";
-      survival[bucket]=(survival[bucket]||0)+1;
-    });
-    const survivalOrder=["<1 month","1 month","2-3 months","4-6 months","7-12 months","12+ months"];
-    const survivalData=survivalOrder.filter(k=>survival[k]).map(k=>[k,survival[k]]);
-    // Never in Effect analysis
-    const nieClients=clients.filter(c=>c.status==="neverInEffect");
-    const nieByCarrier={};nieClients.forEach(c=>{const cr=c.carrier||"Unknown";nieByCarrier[cr]=(nieByCarrier[cr]||0)+1;});
-    const nieByMonth={};nieClients.forEach(c=>{if(!c.effectiveDate)return;const mk=appMonthKey(c.effectiveDate);if(mk)nieByMonth[mk]=(nieByMonth[mk]||0)+1;});
-    const nieLostComm=nieClients.reduce((s,c)=>s+calcInitialComm(c.effectiveDate,c.electionPeriod),0);
-    const needsReview=clients.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=30));
-    const overdue60=clients.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=60));
-    return {t,ac,pd,ina,cb,nie,inForce,projectedInitial,totalComm,totalCB,net,residualClients:residualClients.length,monthlyResidual:inForce*29,totalResidualEarned,annualResidualProjected,carrierStats,stateStats,cohorts,commByMonth,commByAppMonth,survivalData,droppedTotal:droppedClients.length,nieByCarrier,nieByMonth,nieLostComm,needsReview:needsReview.length,overdue60:overdue60.length};
-  },[clients,byStatus]);
+  // ── Bulk Import ──
+  const parseBulkData=()=>{
+    const lines=[];let inQ=false,cur="",row=[];
+    for(let i=0;i<bulkRaw.length;i++){const ch=bulkRaw[i];if(ch==='"'){if(inQ&&bulkRaw[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}else if(!inQ&&ch==="\t"){row.push(cur.trim());cur="";}else if(!inQ&&(ch==="\n"||(ch==="\r"&&bulkRaw[i+1]==="\n"))){if(ch==="\r")i++;row.push(cur.trim());if(row.some(c=>c))lines.push(row);cur="";row=[];}else cur+=ch;}
+    row.push(cur.trim());if(row.some(c=>c))lines.push(row);
+    if(lines.length<2){showToast("Need headers + data","error");return;}
+    const hdrs=lines[0];const rows=lines.slice(1);setBulkHeaders(hdrs);setBulkRows(rows);
+    const autoMap={};const fieldMap={};FIELDS.forEach(f=>{fieldMap[f.label.toLowerCase()]=f.key;fieldMap[f.key.toLowerCase()]=f.key;});
+    hdrs.forEach((h,i)=>{const k=h.toLowerCase().trim();if(fieldMap[k])autoMap[i]=fieldMap[k];else if(k.includes("name")&&!autoMap[Object.keys(autoMap).find(x=>autoMap[x]==="fullName")])autoMap[i]="fullName";});
+    setBulkMapping(autoMap);setBulkStep(2);
+  };
+  const buildPreview=()=>bulkRows.map(row=>{const obj={};Object.entries(bulkMapping).forEach(([idx,fk])=>{if(fk&&fk!=="skip")obj[fk]=row[parseInt(idx)]||"";});return obj;});
+  const execImport=async()=>{
+    const preview=buildPreview().filter(c=>c.fullName?.trim());
+    const batch=db.batch();
+    preview.forEach(c=>{const ref=db.collection("clients").doc();const nc=normalizeClient({...c,agentId:currentUser.uid,status:"active"});if(!nc.commissionAmount&&nc.effectiveDate)nc.commissionAmount=String(calcInitialComm(nc.effectiveDate,nc.electionPeriod));nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();batch.set(ref,nc);});
+    await batch.commit();
+    showToast(`Imported ${preview.length} clients!`);
+    setShowBulkModal(false);setBulkRaw("");setBulkStep(1);setBulkHeaders([]);setBulkRows([]);setBulkMapping({});
+  };
+
+  // ── Computed ──
+  const byStatus=useMemo(()=>{const r={active:[],paid:[],inactive:[],chargedBack:[],neverInEffect:[]};displayClients.forEach(c=>{if(r[c.status])r[c.status].push(c);else r.active.push(c);});return r;},[displayClients]);
+  const isPending=c=>c.effectiveDate&&new Date(c.effectiveDate+"T00:00:00")>new Date();
+  const bookClients=useMemo(()=>displayClients.filter(c=>c.status==="active"||c.status==="paid"),[displayClients]);
+
+  const getCommForClient=c=>{const agent=teamUsers.find(u=>u.uid===c.agentId);if(agent?.role==="heap")return calcHeapComm(agent);return calcInitialComm(c.effectiveDate,c.electionPeriod);};
+
+  const applyFilters=useCallback(list=>{
+    let f=[...list];
+    if(searchTerm){const s=searchTerm.toLowerCase();const sd=s.replace(/\D/g,"");f=f.filter(c=>(c.fullName?.toLowerCase().includes(s))||(c.phone&&(c.phone.includes(s)||c.phone.replace(/\D/g,"").includes(sd)))||(c.email?.toLowerCase().includes(s))||(c.mailingAddress?.toLowerCase().includes(s))||(c.city?.toLowerCase().includes(s))||(c.zipCode?.includes(s))||(c.mbiNumber?.toLowerCase().includes(s))||(c.carrier?.toLowerCase().includes(s))||(c.planName?.toLowerCase().includes(s))||(c.statusNote?.toLowerCase().includes(s)));}
+    if(statusFilter&&statusFilter!=="all")f=f.filter(c=>c.status===statusFilter);
+    if(appMonthFilter&&appMonthFilter!=="all"){const em=appMonthToEffMonth(parseInt(appMonthFilter));f=f.filter(c=>{if(!c.effectiveDate)return false;return new Date(c.effectiveDate+"T00:00:00").getMonth()===em;});}
+    Object.entries(filters).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v);});
+    if(sortField!=="custom")f.sort((a,b)=>{const av=a[sortField]||"",bv=b[sortField]||"";return sortDir==="asc"?(av<bv?-1:1):(av>bv?-1:1);});
+    return f;
+  },[searchTerm,statusFilter,appMonthFilter,filters,sortField,sortDir]);
 
   const uniqueVals=useCallback((f,l)=>[...new Set(l.map(c=>c[f]).filter(Boolean))].sort(),[]);
   const countVals=useCallback((f,v,l)=>l.filter(c=>c[f]===v).length,[]);
-  const exportCSV=()=>{
-    const allFields=[...FIELDS,{key:"status",label:"Status"},{key:"commissionAmount",label:"Commission"},{key:"paidDate",label:"Date Paid"},{key:"chargebackAmount",label:"Chargeback Amount"},{key:"chargebackDate",label:"Chargeback Date"},{key:"lastVerified",label:"Last Verified"},{key:"statusNote",label:"Notes"}];
-    const header=allFields.map(f=>f.label).join(",");
-    const rows=clients.map(c=>allFields.map(f=>{let v=c[f.key]||"";if(typeof v==="string"&&(v.includes(",")||v.includes('"')))v='"'+v.replace(/"/g,'""')+'"';return v;}).join(","));
-    const csv=header+"\n"+rows.join("\n");
-    const blob=new Blob([csv],{type:"text/csv"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download="medicare-clients-"+today()+".csv";a.click();URL.revokeObjectURL(url);
-    showToast("Exported "+clients.length+" clients!");
-  };
-  const quickSave=(id,field,value)=>{
-    save(clients.map(c=>c.id===id?{...c,[field]:value}:c));
-    setQuickEdit(null);
-    showToast("Updated");
-  };
+  const quickSave=async(id,field,val)=>{await updateClient(id,{[field]:val});setQuickEdit(null);showToast("Updated");};
+  const exportCSV=()=>{const af=[...FIELDS,{key:"status",label:"Status"},{key:"commissionAmount",label:"Commission"},{key:"statusNote",label:"Notes"}];const h=af.map(f=>f.label).join(",");const r=displayClients.map(c=>af.map(f=>{let v=c[f.key]||"";if(typeof v==="string"&&(v.includes(",")||v.includes('"')))v='"'+v.replace(/"/g,'""')+'"';return v;}).join(","));const bl=new Blob([h+"\n"+r.join("\n")],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download="medicare-"+today()+".csv";a.click();showToast("Exported!");};
 
-  // Themes
-  const LT={"--bg":"#F7F8FA","--card":"#FFFFFF","--border":"#E2E8F0","--text":"#1A2332","--t2":"#64748B","--t3":"#94A3B8","--accent":"#3B8FD9","--bg-hover":"#F1F5F9","--input-bg":"#FFF","--input-border":"#E2E8F0","--shadow":"0 4px 24px rgba(0,0,0,0.06)","--cs":"0 1px 3px rgba(0,0,0,0.04)","--overlay":"rgba(15,23,42,0.45)","--header-bg":"#FFF","--header-border":"#E2E8F0","--bar-track":"#F1F5F9","--tab-bg":"#EDF4FC"};
-  const DT={"--bg":"#0F172A","--card":"#1E293B","--border":"#334155","--text":"#F1F5F9","--t2":"#94A3B8","--t3":"#64748B","--accent":"#3B8FD9","--bg-hover":"#273548","--input-bg":"#1E293B","--input-border":"#475569","--shadow":"0 4px 24px rgba(0,0,0,0.4)","--cs":"0 1px 3px rgba(0,0,0,0.2)","--overlay":"rgba(0,0,0,0.6)","--header-bg":"#1E293B","--header-border":"#334155","--bar-track":"#273548","--tab-bg":"#1A2840"};
-  const theme=dark?DT:LT;
-  const isPending = c => c.effectiveDate && new Date(c.effectiveDate+"T00:00:00") > new Date();
-  const bookClients = useMemo(()=>clients.filter(c=>c.status==="active"||c.status==="paid"),[clients]);
-  const tabs2=[{id:"dashboard",label:"Dashboard",icon:"📊"},{id:"book",label:"Book of Business",icon:"📖",count:bookClients.length},{id:"clients",label:"All Clients",icon:"👥",count:clients.length},{id:"analytics",label:"Analytics",icon:"📈"}];
+  // ── Analytics ──
+  const analytics=useMemo(()=>{
+    const cl=displayClients;const t=cl.length,ac=byStatus.active.length,pd=byStatus.paid.length,ina=byStatus.inactive.length,cb=byStatus.chargedBack.length,nie=byStatus.neverInEffect.length;
+    const inForce=ac+pd;
+    const projectedInitial=cl.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+getCommForClient(c),0);
+    const totalCB=[...byStatus.chargedBack,...byStatus.inactive].reduce((s,c)=>s+(parseFloat(c.chargebackAmount)||0),0);
+    const td=today();const totalResidualEarned=cl.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcResidualEarned(c.effectiveDate,td),0);
+    const carrierStats={};cl.forEach(c=>{if(!c.carrier)return;if(!carrierStats[c.carrier])carrierStats[c.carrier]={total:0,active:0,paid:0,inactive:0,cb:0,nie:0,projected:0};const cs=carrierStats[c.carrier];cs.total++;cs[c.status==="chargedBack"?"cb":c.status==="neverInEffect"?"nie":c.status]++;if(c.status==="active"||c.status==="paid")cs.projected+=getCommForClient(c);});
+    const stateStats={};cl.forEach(c=>{if(c.state)stateStats[c.state]=(stateStats[c.state]||0)+1;});
+    const cohorts={};cl.forEach(c=>{if(!c.effectiveDate)return;const mk=appMonthKey(c.effectiveDate);if(!mk)return;if(!cohorts[mk])cohorts[mk]={enrolled:0,inForce:0,dropped:0,projComm:0};cohorts[mk].enrolled++;if(c.status==="active"||c.status==="paid"){cohorts[mk].inForce++;cohorts[mk].projComm+=getCommForClient(c);}else cohorts[mk].dropped++;});
+    const commByAppMonth={};cl.forEach(c=>{if(!c.effectiveDate||!(c.status==="active"||c.status==="paid"))return;const mk=appMonthKey(c.effectiveDate);if(mk)commByAppMonth[mk]=(commByAppMonth[mk]||0)+getCommForClient(c);});
+    const survival={};const dropped=cl.filter(c=>c.status==="inactive"||c.status==="chargedBack");
+    dropped.forEach(c=>{if(!c.effectiveDate)return;let mob=0;if(c.cancelMonth){const eff=new Date(c.effectiveDate+"T00:00:00");const can=new Date(c.cancelMonth+"-01T00:00:00");mob=Math.max(0,(can.getFullYear()-eff.getFullYear())*12+(can.getMonth()-eff.getMonth()));}else if(c.inactiveDate){const eff=new Date(c.effectiveDate+"T00:00:00");const ina2=new Date(c.inactiveDate+"T00:00:00");mob=Math.max(0,Math.round((ina2-eff)/(30.44*86400000)));}const bucket=mob<=0?"<1 mo":mob===1?"1 mo":mob<=3?"2-3 mo":mob<=6?"4-6 mo":mob<=12?"7-12 mo":"12+ mo";survival[bucket]=(survival[bucket]||0)+1;});
+    const survOrder=["<1 mo","1 mo","2-3 mo","4-6 mo","7-12 mo","12+ mo"];const survData=survOrder.filter(k=>survival[k]).map(k=>[k,survival[k]]);
+    const nieClients=cl.filter(c=>c.status==="neverInEffect");const nieByCarrier={};nieClients.forEach(c=>{const cr=c.carrier||"Unknown";nieByCarrier[cr]=(nieByCarrier[cr]||0)+1;});
+    const nieLostComm=nieClients.reduce((s,c)=>s+getCommForClient(c),0);
+    const needsReview=cl.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=30));
+    return{t,ac,pd,ina,cb,nie,inForce,projectedInitial,totalCB,monthlyResidual:inForce*29,annualResidualProjected:inForce*29*12,totalResidualEarned,carrierStats,stateStats,cohorts,commByAppMonth,survData,droppedTotal:dropped.length,nieByCarrier,nieLostComm,needsReview:needsReview.length};
+  },[displayClients,byStatus,teamUsers]);
 
-  if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F7F8FA",fontFamily:"'Inter',system-ui,sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:12}}>⚕️</div><div style={{fontSize:13,fontWeight:600,letterSpacing:0.5}}>LOADING...</div></div></div>;
+  // ── Agent Stats ──
+  const agentStats=useMemo(()=>{
+    if(!isAdmin)return[];
+    return teamUsers.map(u=>{const ac=clients.filter(c=>c.agentId===u.uid);const inf=ac.filter(c=>c.status==="active"||c.status==="paid").length;const dr=ac.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;
+    const pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>{return u.role==="heap"?s+calcHeapComm(u):s+calcInitialComm(c.effectiveDate,c.electionPeriod);},0);
+    return{...u,totalClients:ac.length,inForce:inf,dropped:dr,projComm:pc};});
+  },[isAdmin,teamUsers,clients]);
 
-  const btnP={padding:"8px 18px",borderRadius:8,border:"none",background:"#3B8FD9",color:"#fff",cursor:"pointer",fontWeight:700,fontSize:13,boxShadow:"0 1px 3px rgba(59,143,217,0.3)"};
-  const btnO={padding:"8px 16px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--text)",cursor:"pointer",fontWeight:600,fontSize:13};
-  const inp={width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid var(--input-border)",background:"var(--input-bg)",color:"var(--text)",fontSize:13,outline:"none",fontFamily:"var(--font)"};
+  // ── Styles ──
+  const inp={width:"100%",padding:"10px 14px",borderRadius:10,border:"1px solid var(--border)",fontSize:13,background:"var(--card)",color:"var(--text)",fontFamily:"var(--font)",outline:"none"};
+  const btnP={padding:"10px 20px",borderRadius:10,border:"none",background:"#3B8FD9",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"var(--font)"};
+  const btnO={padding:"8px 16px",borderRadius:10,border:"1px solid var(--border)",background:"var(--card)",color:"var(--text)",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"var(--font)"};
 
-  // ═══════════════════════════════════════════
-  // MONTHLY REVIEW MODE
-  // ═══════════════════════════════════════════
-  if(reviewMode) {
-    const rc = reviewList[reviewIdx];
-    const st = ST[rc.status]||ST.active;
-    const progress = reviewIdx / reviewList.length * 100;
-    const daysUnverified = rc.lastVerified ? daysBetween(rc.lastVerified, today()) : null;
+  const tabs2=[{id:"dashboard",label:"Dashboard",icon:"📊"},{id:"book",label:"Book of Business",icon:"📖",count:bookClients.length},{id:"clients",label:"All Clients",icon:"👥",count:displayClients.length},{id:"analytics",label:"Analytics",icon:"📈"},...(isAdmin?[{id:"team",label:"Team",icon:"🏢"}]:[])];
 
-    return (
-      <div style={{...theme,"--font":"'Inter',system-ui,sans-serif",fontFamily:"var(--font)",background:"var(--bg)",color:"var(--text)",minHeight:"100vh"}}>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-        <style>{`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}input,select,textarea,button{font-family:var(--font)}@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}`}</style>
+  if(loading)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
 
-        {/* Review Header */}
-        <div style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"14px 24px"}}>
-          <div style={{maxWidth:800,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <span style={{fontSize:22}}>📋</span>
-              <div><div style={{fontSize:16,fontWeight:800}}>Monthly Review</div><div style={{fontSize:12,color:"var(--t3)"}}>MARX Lookup — {new Date().toLocaleDateString("en-US",{month:"long",year:"numeric"})}</div></div>
-            </div>
-            <button onClick={()=>setReviewMode(false)} style={{...btnO,fontSize:12}}>✕ Exit Review</button>
-          </div>
+  // ── Render Row ──
+  const renderRow=(c,showPending=false)=>{const st=ST[c.status]||ST.active;const cc=carrierColors?getCC(c.carrier):null;const pend=isPending(c);
+  return<div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"box-shadow 0.15s",borderLeft:cc?`4px solid ${cc}`:"none"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"} onMouseLeave={e=>e.currentTarget.style.boxShadow="var(--cs)"}>
+    <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:cc?`${cc}18`:(dark?"#334155":"#E8ECF1"),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:cc||"var(--text)"}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
+    <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:cc||"var(--text)"}}>{fmtCarrier(c.carrier)}</div>
+    <div style={{fontSize:12}}>{fmt(c.effectiveDate)}{pend&&" ⏳"}</div>
+    <div style={{fontSize:12}}>{c.state||"—"}</div>
+    <div>{c.planType?<Badge color={c.planType==="DSNP"?"#8B5CF6":c.planType==="CSNP"?"#EC4899":"var(--accent)"}>{c.planType}</Badge>:<span style={{fontSize:11,color:"var(--t3)"}}>—</span>}</div>
+    {showPending&&pend?<Badge color="#6366F1">⏳ Pending</Badge>:<Badge color={st.color}>{st.icon} {st.label}</Badge>}
+    <div style={{fontSize:11,color:"var(--t3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} onClick={e=>{e.stopPropagation();setQuickEdit({id:c.id,field:"statusNote",value:c.statusNote||""});}}>{quickEdit?.id===c.id?<input autoFocus value={quickEdit.value} onChange={e=>setQuickEdit({...quickEdit,value:e.target.value})} onBlur={()=>quickSave(c.id,"statusNote",quickEdit.value)} onKeyDown={e=>{if(e.key==="Enter")quickSave(c.id,"statusNote",quickEdit.value);if(e.key==="Escape")setQuickEdit(null);}} onClick={e=>e.stopPropagation()} style={{...inp,padding:"4px 8px",fontSize:11,width:"100%"}} />:(c.statusNote||<span style={{fontStyle:"italic",opacity:0.5}}>+ note</span>)}</div>
+  </div>;};
+
+  // ── Filter Bar ──
+  const renderFilters=(src)=><div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
+    <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+      <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:0.4}}>🔍</span><input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search..." style={{...inp,paddingLeft:36}} /></div>
+      <select value={filters.carrier||"all"} onChange={e=>setFilters(p=>({...p,carrier:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Carrier: All</option>{uniqueVals("carrier",src).map(v=><option key={v} value={v}>{fmtCarrier(v)} ({countVals("carrier",v,src)})</option>)}</select>
+      <select value={filters.state||"all"} onChange={e=>setFilters(p=>({...p,state:e.target.value}))} style={{...inp,width:"auto",minWidth:80,cursor:"pointer"}}><option value="all">State: All</option>{uniqueVals("state",src).map(v=><option key={v} value={v}>{v} ({countVals("state",v,src)})</option>)}</select>
+      <select value={filters.planType||"all"} onChange={e=>setFilters(p=>({...p,planType:e.target.value}))} style={{...inp,width:"auto",minWidth:90,cursor:"pointer"}}><option value="all">Plan: All</option>{["MAPD","DSNP","CSNP","PDP","Medigap"].map(v=><option key={v} value={v}>{v} ({countVals("planType",v,src)})</option>)}</select>
+    </div>
+    <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginTop:10}}>
+      {isAdmin&&<select value={selectedAgent} onChange={e=>setSelectedAgent(e.target.value)} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">Agent: All</option>{teamUsers.map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select>}
+      <button onClick={()=>setCarrierColors(!carrierColors)} style={{...btnO,fontSize:11,padding:"6px 12px",borderColor:carrierColors?"#3B8FD9":"var(--border)",color:carrierColors?"#3B8FD9":"var(--t2)"}}>{carrierColors?"🎨 On":"🎨 Off"}</button>
+      <button onClick={exportCSV} style={{...btnO,fontSize:11,padding:"6px 12px"}}>📥 CSV</button>
+      {(searchTerm||statusFilter!=="all"||appMonthFilter!=="all"||Object.values(filters).some(v=>v&&v!=="all"))&&<button onClick={()=>{setSearchTerm("");setStatusFilter("all");setAppMonthFilter("all");setFilters({});}} style={{...btnO,fontSize:11,padding:"6px 12px"}}>✕ Clear</button>}
+    </div>
+  </div>;
+
+  const colHdr=<div style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Type</div><div>Status</div><div>Notes</div></div>;
+
+  return(
+    <div className={dark?"dark":""} style={{minHeight:"100vh",background:"var(--bg)",transition:"all 0.3s"}}>
+      {toast&&<div style={{position:"fixed",top:20,right:20,padding:"12px 20px",borderRadius:12,background:toast.type==="error"?"#EF4444":"#22C55E",color:"#fff",fontWeight:700,fontSize:13,zIndex:9999,animation:"slideUp 0.3s",boxShadow:"0 4px 12px rgba(0,0,0,0.15)"}}>{toast.msg}</div>}
+      {confirmAction&&<Modal onClose={()=>setConfirmAction(null)} width={380} title={confirmAction.title}><div style={{padding:24,fontSize:14,color:"var(--t2)"}}>{confirmAction.message}</div><div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setConfirmAction(null)} style={btnO}>Cancel</button><button onClick={confirmAction.onConfirm} style={{...btnP,background:confirmAction.danger?"#EF4444":"#3B8FD9"}}>{confirmAction.label||"Confirm"}</button></div></Modal>}
+
+      {/* HEADER */}
+      <header style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,boxShadow:"var(--cs)",position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:40,height:40,borderRadius:12,background:"#3B8FD9",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontWeight:900,fontSize:18}}>U</span></div><div><div style={{fontWeight:800,fontSize:15,lineHeight:1.1}}>United Insurance</div><div style={{fontSize:9,fontWeight:800,letterSpacing:2,color:"#3B8FD9",textTransform:"uppercase"}}>PROFESSIONALS</div></div></div>
         </div>
-
-        {/* Progress bar */}
-        <div style={{background:"var(--border)",height:4}}>
-          <div style={{height:"100%",background:"#3B8FD9",width:`${progress}%`,transition:"width 0.3s"}} />
-        </div>
-
-        <div style={{maxWidth:800,margin:"0 auto",padding:24}}>
-          {/* Counter */}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-            <div style={{fontSize:13,color:"var(--t2)"}}>Client <strong style={{color:"var(--text)"}}>{reviewIdx+1}</strong> of <strong style={{color:"var(--text)"}}>{reviewList.length}</strong></div>
-            <div style={{display:"flex",gap:12,fontSize:12}}>
-              <span style={{color:"#22C55E"}}>✅ {reviewDone.filter(d=>d.action==="verified").length} verified</span>
-              <span style={{color:"#3B8FD9"}}>💰 {reviewDone.filter(d=>d.action==="paid").length} paid</span>
-              <span style={{color:"#F59E0B"}}>⚠️ {reviewDone.filter(d=>d.action==="inactive").length} inactive</span>
-            </div>
-          </div>
-
-          {/* Client Card */}
-          <div style={{background:"var(--card)",borderRadius:16,border:"1px solid var(--border)",boxShadow:"var(--shadow)",overflow:"hidden",animation:"slideUp 0.25s"}}>
-            {/* Card header */}
-            <div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--bg-hover)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:14}}>
-                <div style={{width:48,height:48,borderRadius:"50%",background:`${st.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:800,color:st.color}}>{rc.fullName?.charAt(0)?.toUpperCase()}</div>
-                <div>
-                  <div style={{fontSize:20,fontWeight:800}}>{rc.fullName}</div>
-                  <div style={{fontSize:13,color:"var(--t2)"}}>{fmtPhone(rc.phone)} {rc.email ? `· ${rc.email}` : ""}</div>
-                </div>
-              </div>
-              <Badge color={st.color}>{st.icon} {st.label}</Badge>
-            </div>
-
-            {/* Key details */}
-            <div style={{padding:24}}>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:16,marginBottom:20}}>
-                {[
-                  {l:"MBI Number",v:rc.mbiNumber,highlight:true},
-                  {l:"Carrier",v:fmtCarrier(rc.carrier)},
-                  {l:"Plan",v:rc.planName},
-                  {l:"Effective Date",v:fmt(rc.effectiveDate)},
-                  {l:"State",v:rc.state},
-                  {l:"Election Period",v:rc.electionPeriod},
-                  {l:"Last Verified",v:rc.lastVerified?fmt(rc.lastVerified):"Never", warn:!rc.lastVerified||daysUnverified>=30},
-                  {l:"Commission",v:rc.commissionAmount?money(rc.commissionAmount):"—"},
-                ].map(f=>(
-                  <div key={f.l} style={{padding:12,background:f.highlight?"var(--tab-bg)":"var(--bg-hover)",borderRadius:8,border:f.highlight?"1px solid #3B8FD933":"1px solid transparent"}}>
-                    <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:"var(--t3)",marginBottom:4}}>{f.l}</div>
-                    <div style={{fontSize:f.highlight?16:14,fontWeight:f.highlight?800:500,color:f.warn?"#F59E0B":"var(--text)",fontFamily:f.highlight?"'JetBrains Mono',monospace":"var(--font)"}}>{f.v||"—"}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* MARX tip */}
-              <div style={{background:"var(--tab-bg)",borderRadius:10,padding:14,border:"1px solid #3B8FD922",marginBottom:20}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#3B8FD9",marginBottom:4}}>💡 MARX Lookup Tip</div>
-                <div style={{fontSize:12,color:"var(--t2)",lineHeight:1.6}}>
-                  Search MBI <strong style={{color:"var(--text)",fontFamily:"'JetBrains Mono',monospace"}}>{rc.mbiNumber||"N/A"}</strong> in MARX.
-                  Verify they're still enrolled in <strong style={{color:"var(--text)"}}>{rc.planName||"their plan"}</strong> with <strong style={{color:"var(--text)"}}>{fmtCarrier(rc.carrier)||"their carrier"}</strong>.
-                </div>
-              </div>
-
-              {/* Sub-action forms */}
-              {reviewSubAction==="paid" && (
-                <div style={{background:"#3B8FD90A",borderRadius:10,padding:16,border:"1px solid #3B8FD933",marginBottom:16,animation:"slideUp 0.2s"}}>
-                  <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#3B8FD9"}}>💰 Mark as Paid</div>
-                  <div style={{display:"flex",gap:10}}>
-                    <div style={{flex:1}}><label style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Commission ($)</label><input type="number" step="0.01" value={tempAmount} onChange={e=>setTempAmount(e.target.value)} placeholder="e.g. 250" style={{...inp,marginTop:4}} /></div>
-                  </div>
-                  <div style={{display:"flex",gap:8,marginTop:12}}>
-                    <button onClick={()=>setReviewSubAction(null)} style={{...btnO,fontSize:12}}>Cancel</button>
-                    <button onClick={()=>{reviewAction("paid",{amount:tempAmount});setReviewSubAction(null);setTempAmount("");}} style={{...btnP,fontSize:12,background:"#3B8FD9"}}>Confirm Paid</button>
-                  </div>
-                </div>
-              )}
-              {reviewSubAction==="inactive" && (
-                <div style={{background:"#F59E0B0A",borderRadius:10,padding:16,border:"1px solid #F59E0B33",marginBottom:16,animation:"slideUp 0.2s"}}>
-                  <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#F59E0B"}}>⚠️ Mark as Inactive</div>
-                  <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Note (optional)</label>
-                  <input type="text" value={tempNote} onChange={e=>setTempNote(e.target.value)} placeholder="Why did they leave?" style={{...inp,marginTop:4}} />
-                  <div style={{display:"flex",gap:8,marginTop:12}}>
-                    <button onClick={()=>setReviewSubAction(null)} style={{...btnO,fontSize:12}}>Cancel</button>
-                    <button onClick={()=>{reviewAction("inactive",{note:tempNote});setReviewSubAction(null);setTempNote("");}} style={{...btnP,fontSize:12,background:"#F59E0B"}}>Confirm Inactive</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              {!reviewSubAction && (
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                  <button onClick={()=>reviewAction("verified")} style={{padding:16,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E08",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#22C55E15"} onMouseLeave={e=>e.currentTarget.style.background="#22C55E08"}>
-                    <div style={{fontSize:24,marginBottom:4}}>✅</div>
-                    <div style={{fontSize:14,fontWeight:800,color:"#22C55E"}}>Still Active</div>
-                    <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>Verified in MARX — still enrolled</div>
-                  </button>
-                  <button onClick={()=>setReviewSubAction("paid")} style={{padding:16,borderRadius:12,border:"2px solid #3B8FD9",background:"#3B8FD908",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#3B8FD915"} onMouseLeave={e=>e.currentTarget.style.background="#3B8FD908"}>
-                    <div style={{fontSize:24,marginBottom:4}}>💰</div>
-                    <div style={{fontSize:14,fontWeight:800,color:"#3B8FD9"}}>Mark Paid</div>
-                    <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>Commission received for this client</div>
-                  </button>
-                  <button onClick={()=>setReviewSubAction("inactive")} style={{padding:16,borderRadius:12,border:"2px solid #F59E0B",background:"#F59E0B08",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#F59E0B15"} onMouseLeave={e=>e.currentTarget.style.background="#F59E0B08"}>
-                    <div style={{fontSize:24,marginBottom:4}}>⚠️</div>
-                    <div style={{fontSize:14,fontWeight:800,color:"#F59E0B"}}>Gone Inactive</div>
-                    <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>MARX shows they left your plan</div>
-                  </button>
-                  <button onClick={()=>reviewAction("skip")} style={{padding:16,borderRadius:12,border:"2px solid var(--border)",background:"transparent",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="var(--bg-hover)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <div style={{fontSize:24,marginBottom:4}}>⏭️</div>
-                    <div style={{fontSize:14,fontWeight:800,color:"var(--t2)"}}>Skip</div>
-                    <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>Come back to this one later</div>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ═══════════════════════════════════════════
-  // NORMAL UI
-  // ═══════════════════════════════════════════
-  return (
-    <div style={{...theme,"--font":"'Inter',system-ui,sans-serif",fontFamily:"var(--font)",background:"var(--bg)",color:"var(--text)",minHeight:"100vh",transition:"background 0.3s"}}>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-      <style>{`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}input,select,textarea,button{font-family:var(--font)}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes toastSlide{from{opacity:0;transform:translateY(-16px) translateX(-50%)}to{opacity:1;transform:translateY(0) translateX(-50%)}}`}</style>
-
-      {toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",padding:"10px 22px",borderRadius:10,zIndex:9999,background:toast.type==="error"?"#EF4444":"#22C55E",color:"#fff",fontWeight:600,fontSize:13,animation:"toastSlide 0.3s",boxShadow:"0 6px 28px rgba(0,0,0,0.2)"}}>{toast.type==="error"?"⚠️":"✓"} {toast.msg}</div>}
-
-      {confirmAction&&<div style={{position:"fixed",inset:0,background:"var(--overlay)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9998}} onClick={()=>setConfirmAction(null)}><div onClick={e=>e.stopPropagation()} style={{background:"var(--card)",borderRadius:14,padding:28,width:400,maxWidth:"90vw",border:"1px solid var(--border)",boxShadow:"var(--shadow)"}}><div style={{fontSize:17,fontWeight:700,marginBottom:6}}>{confirmAction.title}</div><div style={{color:"var(--t2)",marginBottom:22,fontSize:13,lineHeight:1.5}}>{confirmAction.message}</div><div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button onClick={()=>setConfirmAction(null)} style={btnO}>Cancel</button><button onClick={confirmAction.onConfirm} style={{...btnP,background:confirmAction.danger?"#EF4444":"#3B8FD9"}}>{confirmAction.label||"Confirm"}</button></div></div></div>}
-
-      <header style={{background:"var(--header-bg)",borderBottom:"1px solid var(--header-border)",padding:"0 24px",position:"sticky",top:0,zIndex:100}}>
-        <div style={{maxWidth:1400,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",height:58}}>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#1A2332,#2A3A52)",display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #3B8FD9"}}><span style={{color:"#3B8FD9",fontWeight:900,fontSize:16}}>U</span></div>
-            <div><span style={{fontSize:15,fontWeight:800}}>United Insurance</span><div style={{fontSize:9.5,fontWeight:700,letterSpacing:1.6,textTransform:"uppercase",color:"#3B8FD9",marginTop:-1}}>PROFESSIONALS</div></div>
-            <div style={{width:1,height:28,background:"var(--border)",margin:"0 8px"}} />
-            <span style={{fontSize:14,fontWeight:600}}>📊 Medicare Sales Tracker</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div onClick={()=>setDark(!dark)} style={{width:34,height:34,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"1px solid var(--border)",background:"var(--bg)",fontSize:16}}>{dark?"🌙":"☀️"}</div>
-            <button onClick={startReview} style={{...btnO,fontSize:12,display:"flex",alignItems:"center",gap:5,borderColor:analytics.needsReview>0?"#F59E0B":"var(--border)",color:analytics.needsReview>0?"#F59E0B":"var(--text)"}}>
-              📋 Monthly Review {analytics.needsReview>0&&<span style={{background:"#F59E0B",color:"#fff",padding:"1px 6px",borderRadius:8,fontSize:10,fontWeight:800}}>{analytics.needsReview}</span>}
-            </button>
-            <button onClick={()=>{setMassField("");setMassValue("");setShowMassUpdate(true);}} style={{...btnO,fontSize:12}}>⚡ Mass Update</button>
-            <button onClick={()=>{setQuickAddRaw("");setReorderPreview(null);setShowQuickAdd(true);}} style={{...btnO,fontSize:12}}>🔀 Reorder</button>
-            <button onClick={openBulkImport} style={{...btnO,fontSize:12}}>📋 Import</button>
-            <button onClick={openAdd} style={{...btnP,display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:16,lineHeight:1}}>+</span> Add Client</button>
-          </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:12,color:"var(--t3)"}}>{userProfile?.displayName} ({userProfile?.role})</span>
+          <button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:20}}>{dark?"☀️":"🌙"}</button>
+          <button onClick={()=>{setBulkRaw("");setBulkStep(1);setShowBulkModal(true);}} style={{...btnO,fontSize:12}}>📋 Import</button>
+          <button onClick={()=>{resetForm();setShowAddModal(true);}} style={btnP}>+ Add Client</button>
+          <button onClick={()=>auth.signOut()} style={{...btnO,fontSize:12,borderColor:"#EF4444",color:"#EF4444"}}>Sign Out</button>
         </div>
       </header>
 
-      <div style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 24px"}}>
-        <div style={{maxWidth:1400,margin:"0 auto",display:"flex",gap:4}}>
-          {tabs2.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setFilters({});setSearchTerm("");setStatusFilter("all");setAppMonthFilter("all");}} style={{padding:"12px 18px",border:"none",background:"transparent",color:tab===t.id?"#3B8FD9":"var(--t2)",borderBottom:tab===t.id?"2px solid #3B8FD9":"2px solid transparent",cursor:"pointer",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:7,fontFamily:"var(--font)"}}>
-            <span style={{fontSize:14}}>{t.icon}</span>{t.label}{t.count!==undefined&&<span style={{background:tab===t.id?"#3B8FD9":"var(--bg-hover)",color:tab===t.id?"#fff":"var(--t2)",padding:"1px 7px",borderRadius:8,fontSize:11,fontWeight:700}}>{t.count}</span>}
-          </button>)}
-        </div>
-      </div>
+      {/* TABS */}
+      <nav style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 24px",display:"flex",overflow:"auto"}}>
+        {tabs2.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setFilters({});setSearchTerm("");setStatusFilter("all");setAppMonthFilter("all");}} style={{padding:"12px 18px",border:"none",background:"transparent",color:tab===t.id?"#3B8FD9":"var(--t2)",borderBottom:tab===t.id?"2px solid #3B8FD9":"2px solid transparent",cursor:"pointer",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:7,fontFamily:"var(--font)"}}><span>{t.icon}</span>{t.label}{t.count!=null&&<span style={{background:tab===t.id?"#3B8FD9":"var(--border)",color:tab===t.id?"#fff":"var(--t2)",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700}}>{t.count}</span>}</button>)}
+      </nav>
 
       <main style={{maxWidth:1400,margin:"0 auto",padding:24}}>
+
         {/* DASHBOARD */}
         {tab==="dashboard"&&<div style={{animation:"slideUp 0.3s"}}>
-          <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:2}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>Overview & quick stats</p></div>
-
-          {/* Alert banner if reviews needed */}
-          {analytics.needsReview>0&&<div style={{background:"#FEF9ED",border:"1px solid #F59E0B33",borderRadius:12,padding:"14px 20px",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between",animation:"slideUp 0.3s"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:20}}>📋</span><div><div style={{fontWeight:700,fontSize:14,color:"#92400E"}}>{analytics.needsReview} client{analytics.needsReview!==1?"s":""} need MARX verification</div><div style={{fontSize:12,color:"#A16207"}}>{analytics.overdue60>0?`${analytics.overdue60} overdue 60+ days · `:""}Last check was over 30 days ago</div></div></div>
-            <button onClick={startReview} style={{...btnP,background:"#F59E0B",fontSize:12}}>Start Review →</button>
-          </div>}
-
+          <div style={{marginBottom:24}}><h1 style={{fontSize:28,fontWeight:900}}>Dashboard</h1></div>
           <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
-            <StatCard icon="📋" value={analytics.t} label="Total Clients" sub="All time" />
-            <StatCard icon="✅" value={analytics.ac} label="Active" sub="Enrolled, pre-pay" color="#22C55E" />
-            <StatCard icon="💰" value={analytics.pd} label="Paid" sub="Commission recv'd" color="#3B8FD9" />
-            <StatCard icon="⚠️" value={analytics.ina} label="Inactive" sub="Left plan" color="#F59E0B" />
-            <StatCard icon="💸" value={analytics.cb} label="Charged Back" sub={pct(analytics.cb,analytics.t)} color="#EF4444" />
-          </div>
-          <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:24}}>
-            <StatCard icon="💵" value={money(analytics.totalComm)} label="Gross Commission" color="#22C55E" small />
-            <StatCard icon="📉" value={money(analytics.totalCB)} label="Chargebacks" color="#EF4444" small />
-            <StatCard icon="💎" value={money(analytics.net)} label="Net Commission" color="#3B8FD9" small />
-            <StatCard icon="📈" value={pct(analytics.inForce,analytics.t)} label="Retention" sub={`${analytics.inForce} in force`} small />
-            <StatCard icon="🚫" value={analytics.nie} label="Never in Effect" sub={pct(analytics.nie,analytics.t)} color="#94A3B8" small />
+            <StatCard icon="📋" value={analytics.t} label="Total Clients" small />
+            <StatCard icon="✅" value={analytics.inForce} label="In Force" color="#22C55E" small />
+            <StatCard icon="💵" value={money(analytics.projectedInitial)} label="Projected Initial" color="#22C55E" small />
+            <StatCard icon="🔁" value={money(analytics.monthlyResidual)+"/mo"} label="Residual" color="#8B5CF6" small />
+            <StatCard icon="📈" value={analytics.t>0?pct(analytics.inForce,analytics.t):"—"} label="Retention" small />
+            {analytics.needsReview>0&&<StatCard icon="⚠️" value={analytics.needsReview} label="Need Review" color="#F59E0B" small />}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(340px,1fr))",gap:18}}>
-            <Card title="🏢 Carrier Production">{Object.keys(analytics.carrierStats).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<BarChart data={Object.entries(analytics.carrierStats).sort((a,b)=>b[1].total-a[1].total).map(([c,s])=>[c,s.total])} />}</Card>
+            <Card title="🏢 Carrier Production">{Object.keys(analytics.carrierStats).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<BarChart data={Object.entries(analytics.carrierStats).sort((a,b)=>b[1].total-a[1].total).map(([c2,s])=>[c2,s.total])} />}</Card>
             <Card title="🗺️ States">{Object.keys(analytics.stateStats).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<BarChart data={Object.entries(analytics.stateStats).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA" />}</Card>
           </div>
         </div>}
 
-        {/* BOOK OF BUSINESS */}
+        {/* BOOK */}
         {tab==="book"&&<div style={{animation:"slideUp 0.3s"}}>
-          <div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div><h1 style={{fontSize:24,fontWeight:800,marginBottom:2}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>{bookClients.length} active clients on your book</p></div>
-          </div>
-          <div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-              <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:0.4}}>🔍</span><input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search name, phone, email, MBI, address, zip..." style={{...inp,paddingLeft:36}} /></div>
-              <select value={filters.carrier||"all"} onChange={e=>setFilters(p=>({...p,carrier:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Carrier: All</option>{uniqueVals("carrier",bookClients).map(v=><option key={v} value={v}>{fmtCarrier(v)} ({countVals("carrier",v,bookClients)})</option>)}</select>
-              <select value={filters.state||"all"} onChange={e=>setFilters(p=>({...p,state:e.target.value}))} style={{...inp,width:"auto",minWidth:80,cursor:"pointer"}}><option value="all">State: All</option>{uniqueVals("state",bookClients).map(v=><option key={v} value={v}>{v} ({countVals("state",v,bookClients)})</option>)}</select>
-              <select value={filters.planType||"all"} onChange={e=>setFilters(p=>({...p,planType:e.target.value}))} style={{...inp,width:"auto",minWidth:90,cursor:"pointer"}}><option value="all">Plan Type: All</option>{["MAPD","DSNP","CSNP","PDP","Medigap"].map(v=><option key={v} value={v}>{v} ({countVals("planType",v,bookClients)})</option>)}</select>
-              <select value={appMonthFilter} onChange={e=>setAppMonthFilter(e.target.value)} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">App Month: All</option>{MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}</select>
-            </div>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginTop:10}}>
-              <select value={filters.hospitalIndemnity||"all"} onChange={e=>setFilters(p=>({...p,hospitalIndemnity:e.target.value}))} style={{...inp,width:"auto",minWidth:120,cursor:"pointer"}}><option value="all">Hosp Indemnity: All</option><option value="Yes">Yes ({countVals("hospitalIndemnity","Yes",bookClients)})</option><option value="No">No ({countVals("hospitalIndemnity","No",bookClients)})</option></select>
-              <select value={filters.medicaidLevel||"all"} onChange={e=>setFilters(p=>({...p,medicaidLevel:e.target.value}))} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">Medicaid: All</option>{["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"].map(v=><option key={v} value={v}>{v} ({countVals("medicaidLevel",v,bookClients)})</option>)}</select>
-              <select value={filters.electionPeriod||"all"} onChange={e=>setFilters(p=>({...p,electionPeriod:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Election: All</option>{uniqueVals("electionPeriod",bookClients).map(v=><option key={v} value={v}>{v} ({countVals("electionPeriod",v,bookClients)})</option>)}</select>
-              <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-                <button onClick={()=>setCarrierColors(!carrierColors)} style={{...btnO,fontSize:11,padding:"6px 12px",borderColor:carrierColors?"#3B8FD9":"var(--border)",color:carrierColors?"#3B8FD9":"var(--t2)"}}>{carrierColors?"🎨 Colors On":"🎨 Colors Off"}</button>
-                {(searchTerm||appMonthFilter!=="all"||Object.values(filters).some(v=>v&&v!=="all"))&&<button onClick={()=>{setSearchTerm("");setAppMonthFilter("all");setFilters({});}} style={{...btnO,fontSize:11,padding:"6px 12px"}}>✕ Clear</button>}
-              </div>
-            </div>
-          </div>
-          {(()=>{
-            const filtered=applyFilters(bookClients);
-            return filtered.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}><div style={{fontSize:42,marginBottom:10}}>📖</div><div style={{fontSize:15,fontWeight:600}}>No clients match filters</div></div>:
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              <div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{filtered.length} of {bookClients.length} on book</div>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Type</div><div>Status</div><div>Notes</div></div>
-              {filtered.map(c=>{const st=ST[c.status]||ST.active;const cc=carrierColors?getCarrierColor(c.carrier):null;const pending=isPending(c);
-              return <div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"box-shadow 0.15s",borderLeft:cc?`4px solid ${cc}`:"none"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"} onMouseLeave={e=>e.currentTarget.style.boxShadow="var(--cs)"}>
-                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:cc?`${cc}18`:(dark?"#334155":"#E8ECF1"),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:cc||"var(--text)"}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
-                <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:cc||"var(--text)"}}>{fmtCarrier(c.carrier)}</div>
-                <div style={{fontSize:12}}>{fmt(c.effectiveDate)}{pending&&" ⏳"}</div>
-                <div style={{fontSize:12}}>{c.state||"—"}</div>
-                <div>{c.planType?<Badge color={c.planType==="DSNP"?"#8B5CF6":c.planType==="CSNP"?"#EC4899":"var(--accent)"}>{c.planType}</Badge>:<span style={{fontSize:11,color:"var(--t3)"}}>—</span>}</div>
-                <div>{pending?<Badge color="#6366F1">⏳ Pending</Badge>:<Badge color={st.color}>{st.icon} {st.label}</Badge>}</div>
-                <div style={{fontSize:11,color:"var(--t3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} onClick={e=>{e.stopPropagation();setQuickEdit({id:c.id,field:"statusNote",value:c.statusNote||""});}}>{quickEdit&&quickEdit.id===c.id&&quickEdit.field==="statusNote"?<input autoFocus value={quickEdit.value} onChange={e=>setQuickEdit({...quickEdit,value:e.target.value})} onBlur={()=>quickSave(c.id,"statusNote",quickEdit.value)} onKeyDown={e=>{if(e.key==="Enter")quickSave(c.id,"statusNote",quickEdit.value);if(e.key==="Escape")setQuickEdit(null);}} onClick={e=>e.stopPropagation()} style={{...inp,padding:"4px 8px",fontSize:11,width:"100%"}} />:(c.statusNote||<span style={{fontStyle:"italic",opacity:0.5}}>+ note</span>)}</div>
-              </div>;})}
-            </div>;
-          })()}
+          <div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>{bookClients.length} active clients</p></div>
+          {renderFilters(bookClients)}
+          {(()=>{const fl=applyFilters(bookClients);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}><div style={{fontSize:42,marginBottom:10}}>📖</div>No clients match</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length} shown</div>{colHdr}{fl.map(c=>renderRow(c,true))}</div>;})()}
         </div>}
 
-        {/* CLIENTS */}
+        {/* ALL CLIENTS */}
         {tab==="clients"&&<div style={{animation:"slideUp 0.3s"}}>
-          <div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:2}}>All Clients</h1><p style={{fontSize:13,color:"var(--t3)"}}>Everyone you've ever sold — on book and off book</p></div>
-          <div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-              <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:0.4}}>🔍</span><input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search name, phone, email, MBI, address, zip..." style={{...inp,paddingLeft:36}} /></div>
-              <select value={filters.carrier||"all"} onChange={e=>setFilters(p=>({...p,carrier:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Carrier: All</option>{uniqueVals("carrier",clients).map(v=><option key={v} value={v}>{fmtCarrier(v)} ({countVals("carrier",v,clients)})</option>)}</select>
-              <select value={filters.state||"all"} onChange={e=>setFilters(p=>({...p,state:e.target.value}))} style={{...inp,width:"auto",minWidth:80,cursor:"pointer"}}><option value="all">State: All</option>{uniqueVals("state",clients).map(v=><option key={v} value={v}>{v} ({countVals("state",v,clients)})</option>)}</select>
-              <select value={filters.planType||"all"} onChange={e=>setFilters(p=>({...p,planType:e.target.value}))} style={{...inp,width:"auto",minWidth:90,cursor:"pointer"}}><option value="all">Plan Type: All</option>{["MAPD","DSNP","CSNP","PDP","Medigap"].map(v=><option key={v} value={v}>{v} ({countVals("planType",v,clients)})</option>)}</select>
-              <select value={appMonthFilter} onChange={e=>setAppMonthFilter(e.target.value)} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">App Month: All</option>{MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}</select>
-            </div>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginTop:10}}>
-              <select value={filters.hospitalIndemnity||"all"} onChange={e=>setFilters(p=>({...p,hospitalIndemnity:e.target.value}))} style={{...inp,width:"auto",minWidth:120,cursor:"pointer"}}><option value="all">Hosp Indemnity: All</option><option value="Yes">Yes ({countVals("hospitalIndemnity","Yes",clients)})</option><option value="No">No ({countVals("hospitalIndemnity","No",clients)})</option></select>
-              <select value={filters.medicaidLevel||"all"} onChange={e=>setFilters(p=>({...p,medicaidLevel:e.target.value}))} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">Medicaid: All</option>{["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"].map(v=><option key={v} value={v}>{v} ({countVals("medicaidLevel",v,clients)})</option>)}</select>
-              <select value={filters.electionPeriod||"all"} onChange={e=>setFilters(p=>({...p,electionPeriod:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Election: All</option>{uniqueVals("electionPeriod",clients).map(v=><option key={v} value={v}>{v} ({countVals("electionPeriod",v,clients)})</option>)}</select>
-              <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-                <button onClick={()=>setCarrierColors(!carrierColors)} style={{...btnO,fontSize:11,padding:"6px 12px",borderColor:carrierColors?"#3B8FD9":"var(--border)",color:carrierColors?"#3B8FD9":"var(--t2)"}}>{carrierColors?"🎨 Colors On":"🎨 Colors Off"}</button>
-                <button onClick={exportCSV} style={{...btnO,fontSize:11,padding:"6px 12px"}}>📥 Export CSV</button>
-                {(searchTerm||statusFilter!=="all"||appMonthFilter!=="all"||Object.values(filters).some(v=>v&&v!=="all"))&&<button onClick={()=>{setSearchTerm("");setStatusFilter("all");setAppMonthFilter("all");setFilters({});}} style={{...btnO,fontSize:11,padding:"6px 12px"}}>✕ Clear</button>}
-              </div>
-            </div>
-          </div>
+          <div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800}}>All Clients</h1><p style={{fontSize:13,color:"var(--t3)"}}>On book and off book</p></div>
+          {renderFilters(displayClients)}
           <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-            <button onClick={()=>setStatusFilter("all")} style={{...btnO,fontSize:12,background:statusFilter==="all"?"var(--tab-bg)":"var(--card)",borderColor:statusFilter==="all"?"#3B8FD9":"var(--border)",color:statusFilter==="all"?"#3B8FD9":"var(--t2)"}}>All ({clients.length})</button>
+            <button onClick={()=>setStatusFilter("all")} style={{...btnO,fontSize:12,background:statusFilter==="all"?"var(--tab-bg)":"var(--card)",borderColor:statusFilter==="all"?"#3B8FD9":"var(--border)",color:statusFilter==="all"?"#3B8FD9":"var(--t2)"}}>All ({displayClients.length})</button>
             {Object.entries(ST).map(([k,v])=><button key={k} onClick={()=>setStatusFilter(k)} style={{...btnO,fontSize:12,background:statusFilter===k?`${v.color}10`:"var(--card)",borderColor:statusFilter===k?v.color:"var(--border)",color:statusFilter===k?v.color:"var(--t2)"}}>{v.icon} {v.label} ({byStatus[k]?.length||0})</button>)}
           </div>
-          {(()=>{
-            const filtered=applyFilters(clients);
-            return filtered.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}><div style={{fontSize:42,marginBottom:10}}>👥</div><div style={{fontSize:15,fontWeight:600}}>No clients found</div></div>:
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              <div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{filtered.length} of {clients.length} clients</div>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Type</div><div>Status</div><div>Notes</div></div>
-              {filtered.map(c=>{const st=ST[c.status]||ST.active;const dv=c.lastVerified?daysBetween(c.lastVerified,today()):null;const stale=(c.status==="active"||c.status==="paid")&&(!c.lastVerified||dv>=30);const cc=carrierColors?getCarrierColor(c.carrier):null;const pending=isPending(c);
-              return <div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.7fr 0.6fr 0.6fr 0.8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:`1px solid ${stale?"#F59E0B44":"var(--border)"}`,cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"box-shadow 0.15s",borderLeft:cc?`4px solid ${cc}`:"none"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"} onMouseLeave={e=>e.currentTarget.style.boxShadow="var(--cs)"}>
-                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:cc?`${cc}18`:(dark?"#334155":"#E8ECF1"),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:cc||"var(--text)"}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
-                <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:cc||"var(--text)"}}>{fmtCarrier(c.carrier)}</div>
-                <div style={{fontSize:12}}>{fmt(c.effectiveDate)}{pending&&" ⏳"}</div>
-                <div style={{fontSize:12}}>{c.state||"—"}</div>
-                <div>{c.planType?<Badge color={c.planType==="DSNP"?"#8B5CF6":c.planType==="CSNP"?"#EC4899":"var(--accent)"}>{c.planType}</Badge>:<span style={{fontSize:11,color:"var(--t3)"}}>—</span>}</div>
-                {pending?<Badge color="#6366F1">⏳ Pending</Badge>:<Badge color={st.color}>{st.icon} {st.label}</Badge>}
-                <div style={{fontSize:11,color:"var(--t3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} onClick={e=>{e.stopPropagation();setQuickEdit({id:c.id,field:"statusNote",value:c.statusNote||""});}}>{quickEdit&&quickEdit.id===c.id&&quickEdit.field==="statusNote"?<input autoFocus value={quickEdit.value} onChange={e=>setQuickEdit({...quickEdit,value:e.target.value})} onBlur={()=>quickSave(c.id,"statusNote",quickEdit.value)} onKeyDown={e=>{if(e.key==="Enter")quickSave(c.id,"statusNote",quickEdit.value);if(e.key==="Escape")setQuickEdit(null);}} onClick={e=>e.stopPropagation()} style={{...inp,padding:"4px 8px",fontSize:11,width:"100%"}} />:(c.statusNote||<span style={{fontStyle:"italic",opacity:0.5}}>+ note</span>)}</div>
-              </div>;})}
-            </div>;
-          })()}
+          {(()=>{const fl=applyFilters(displayClients);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}><div style={{fontSize:42,marginBottom:10}}>👥</div>No clients</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length} shown</div>{colHdr}{fl.map(c=>renderRow(c,true))}</div>;})()}
         </div>}
 
         {/* ANALYTICS */}
         {tab==="analytics"&&<div style={{animation:"slideUp 0.3s"}}>
-          <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:2}}>Analytics & Tracking</h1><p style={{fontSize:13,color:"var(--t3)"}}>Commission, retention, cohort tracking — 1st of each month</p></div>
+          <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800}}>Analytics & Tracking</h1>{isAdmin&&<select value={selectedAgent} onChange={e=>setSelectedAgent(e.target.value)} style={{...inp,width:"auto",minWidth:150,marginTop:8,cursor:"pointer"}}><option value="all">All Agents</option>{teamUsers.map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select>}</div>
           <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
-            <StatCard icon="💵" value={money(analytics.projectedInitial)} label="Projected Initial" color="#22C55E" sub={analytics.inForce+" in-force clients"} small />
-            <StatCard icon="🔁" value={money(analytics.monthlyResidual)+"/mo"} label="Monthly Residual" color="#8B5CF6" sub={"$29 × "+analytics.inForce+" clients"} small />
-            <StatCard icon="📊" value={money(analytics.annualResidualProjected)} label="Annual Residual" color="#3B8FD9" sub="Projected if all stay on book" small />
+            <StatCard icon="💵" value={money(analytics.projectedInitial)} label="Projected Initial" color="#22C55E" sub={analytics.inForce+" in-force"} small />
+            <StatCard icon="🔁" value={money(analytics.monthlyResidual)+"/mo"} label="Monthly Residual" color="#8B5CF6" sub={"$29 × "+analytics.inForce} small />
+            <StatCard icon="📊" value={money(analytics.annualResidualProjected)} label="Annual Residual" color="#3B8FD9" small />
             <StatCard icon="📉" value={money(analytics.totalCB)} label="Chargebacks" color="#EF4444" small />
-            <StatCard icon="📈" value={pct(analytics.inForce,analytics.t)} label="Retention" small />
-            <StatCard icon="💸" value={pct(analytics.cb,analytics.t)} label="Chargeback Rate" color="#EF4444" small />
+            <StatCard icon="📈" value={analytics.t>0?pct(analytics.inForce,analytics.t):"0%"} label="Retention" small />
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
-            <Card title="💵 Projected Commission by App Month">{Object.keys(analytics.commByAppMonth).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<BarChart data={Object.entries(analytics.commByAppMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[monthLabel(mk),v])} color="#22C55E" />}</Card>
-            <Card title="📅 Cohort Retention by App Month">
-              {Object.keys(analytics.cohorts).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:
-              <MiniTable headers={["App Month","Enrolled","In Force","Dropped","Commission","Retention"]} rows={Object.entries(analytics.cohorts).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,d])=>[
-                monthLabel(mk),<strong>{d.enrolled}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{d.inForce}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.dropped}</span>,
-                <strong style={{color:"#22C55E"}}>{money(d.projComm)}</strong>,
-                <span style={{fontWeight:800,color:d.enrolled>0&&d.inForce/d.enrolled>=0.85?"#22C55E":d.inForce/d.enrolled>=0.7?"#F59E0B":"#EF4444"}}>{pct(d.inForce,d.enrolled)}</span>
-              ])} />}
-            </Card>
+            <Card title="💵 Commission by App Month">{Object.keys(analytics.commByAppMonth).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<BarChart data={Object.entries(analytics.commByAppMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[monthLabel(mk),v])} color="#22C55E" />}</Card>
+            <Card title="📅 Cohort Retention">{Object.keys(analytics.cohorts).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MiniTable headers={["App Mo","Enrolled","In Force","Dropped","Comm","Retention"]} rows={Object.entries(analytics.cohorts).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,d])=>[monthLabel(mk),<strong>{d.enrolled}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{d.inForce}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.dropped}</span>,<strong style={{color:"#22C55E"}}>{money(d.projComm)}</strong>,<span style={{fontWeight:800,color:d.enrolled>0&&d.inForce/d.enrolled>=0.85?"#22C55E":"#EF4444"}}>{pct(d.inForce,d.enrolled)}</span>])} />}</Card>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
-            <Card title="📉 Drop-Off & Retention">
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
-                {[{l:"Pre-Effective",v:pct(analytics.nie,analytics.t),c:"#94A3B8"},{l:"Inactive",v:pct(analytics.ina,analytics.t),c:"#F59E0B"},{l:"Charged Back",v:pct(analytics.cb,analytics.t),c:"#EF4444"},{l:"Retention",v:pct(analytics.inForce,analytics.t),c:"#22C55E"}].map(d=>
-                  <div key={d.l} style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:d.c}}>{d.v}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginTop:4}}>{d.l}</div></div>
-                )}
+            <Card title="🏢 Carrier Production"><MiniTable headers={["Carrier","Total","Active","Paid","Inactive","CB","Comm"]} rows={Object.entries(analytics.carrierStats).sort((a,b)=>b[1].total-a[1].total).map(([cr,s])=>[<strong>{cr}</strong>,<strong>{s.total}</strong>,<span style={{color:"#22C55E"}}>{s.active}</span>,<span style={{color:"#3B8FD9"}}>{s.paid}</span>,<span style={{color:"#F59E0B"}}>{s.inactive}</span>,<span style={{color:"#EF4444"}}>{s.cb}</span>,<strong style={{color:"#22C55E"}}>{money(s.projected)}</strong>])} /></Card>
+            <Card title="📉 Client Fall-Off">{analytics.survData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients</div>:<BarChart data={analytics.survData} color="#EF4444" />}</Card>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+            <Card title="🗺️ States"><BarChart data={Object.entries(analytics.stateStats).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA" /></Card>
+            <Card title="🚫 Never in Effect">{analytics.nie===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>None</div>:<div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}><div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{analytics.nie}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Count</div></div><div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#EF4444"}}>{money(analytics.nieLostComm)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Lost</div></div><div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{pct(analytics.nie,analytics.t)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Rate</div></div></div><BarChart data={Object.entries(analytics.nieByCarrier).sort((a,b)=>b[1]-a[1]).map(([c2,n])=>[c2,n])} color="#94A3B8" /></div>}</Card>
+          </div>
+        </div>}
+
+        {/* TEAM */}
+        {tab==="team"&&isAdmin&&<div style={{animation:"slideUp 0.3s"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+            <div><h1 style={{fontSize:24,fontWeight:800}}>Team Management</h1><p style={{fontSize:13,color:"var(--t3)"}}>{teamUsers.length} members</p></div>
+            <button onClick={()=>{setNewUser({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});setCreateUserError("");setShowCreateUser(true);}} style={btnP}>+ Add Agent</button>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"grid",gridTemplateColumns:"1.5fr 0.8fr 0.6fr 0.6fr 0.6fr 0.8fr 1fr 0.6fr",gap:10,padding:"8px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Name</div><div>Role</div><div>Clients</div><div>In Force</div><div>Dropped</div><div>Commission</div><div>Pay Structure</div><div>Actions</div></div>
+            {agentStats.map(u=><div key={u.uid} style={{display:"grid",gridTemplateColumns:"1.5fr 0.8fr 0.6fr 0.6fr 0.6fr 0.8fr 1fr 0.6fr",gap:10,padding:"14px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",alignItems:"center",boxShadow:"var(--cs)"}}>
+              <div><div style={{fontWeight:700,fontSize:14}}>{u.displayName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{u.email}</div></div>
+              <Badge color={u.role==="admin"?"#3B8FD9":u.role==="heap"?"#F97316":"#22C55E"}>{u.role}</Badge>
+              <div style={{fontWeight:700}}>{u.totalClients}</div>
+              <div style={{fontWeight:700,color:"#22C55E"}}>{u.inForce}</div>
+              <div style={{fontWeight:700,color:"#EF4444"}}>{u.dropped}</div>
+              <div style={{fontWeight:700,color:"#22C55E"}}>{money(u.projComm)}</div>
+              <div style={{fontSize:12}}>{u.role==="heap"?<span>FE: {money(u.heapFrontEnd||0)} / BE: {money(u.heapBackEnd||0)}</span>:u.role==="broker"?"Broker formula":"Admin"}</div>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>{setSelectedAgent(u.uid);setTab("analytics");}} style={{...btnO,fontSize:11,padding:"4px 10px"}}>📊</button>
+                {u.role!=="admin"&&<button onClick={()=>setEditingAgent({...u})} style={{...btnO,fontSize:11,padding:"4px 10px"}}>✏️</button>}
               </div>
-            </Card>
-            <Card title="🏢 Carrier Production"><MiniTable headers={["Carrier","Total","Active","Paid","Inactive","CB","Initial Comm"]} rows={Object.entries(analytics.carrierStats).sort((a,b)=>b[1].total-a[1].total).map(([cr,s])=>[<strong>{cr}</strong>,<strong>{s.total}</strong>,<span style={{color:"#22C55E"}}>{s.active}</span>,<span style={{color:"#3B8FD9"}}>{s.paid}</span>,<span style={{color:"#F59E0B"}}>{s.inactive}</span>,<span style={{color:"#EF4444"}}>{s.cb}</span>,<strong style={{color:"#22C55E"}}>{money(s.projected)}</strong>])} emptyMsg="No data" /></Card>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
-            <Card title="🗺️ States">{Object.keys(analytics.stateStats).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<BarChart data={Object.entries(analytics.stateStats).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA" />}</Card>
-            <Card title="💡 Commission Breakdown">
-              <div style={{padding:10,fontSize:13,color:"var(--t2)",lineHeight:1.8}}>
-                <div style={{marginBottom:10}}><strong style={{color:"var(--text)"}}>Initial Commission Formula:</strong></div>
-                <div>AEP apps (Oct 15–Dec 31) → effective Jan → <strong style={{color:"#22C55E"}}>$347</strong></div>
-                <div>Jan apps → effective Feb → <strong style={{color:"#22C55E"}}>$318</strong> (347 - 29×1)</div>
-                <div>Feb apps → effective Mar → <strong style={{color:"#22C55E"}}>$289</strong> (347 - 29×2)</div>
-                <div style={{marginTop:10}}><strong style={{color:"var(--text)"}}>IEP (Initial Enrollment):</strong></div>
-                <div>First-time Medicare → <strong style={{color:"#22C55E"}}>Double initial commission</strong></div>
-                <div style={{marginTop:10}}><strong style={{color:"var(--text)"}}>Residuals:</strong></div>
-                <div><strong style={{color:"#8B5CF6"}}>$29/month</strong> per client starting January after effective year</div>
-              </div>
-            </Card>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
-            <Card title="📉 Client Fall-Off Timeline">
-              {analytics.survivalData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients yet</div>:
-              <div>
-                <div style={{fontSize:12,color:"var(--t2)",marginBottom:12}}>When clients fell off your book ({analytics.droppedTotal} total dropped)</div>
-                <BarChart data={analytics.survivalData} color="#EF4444" />
-                <div style={{marginTop:12,padding:10,background:"var(--bg-hover)",borderRadius:8,fontSize:12,color:"var(--t2)"}}>
-                  Average monthly drop rate: <strong style={{color:"#EF4444"}}>{analytics.t>0?pct(analytics.droppedTotal,analytics.t):"0%"}</strong> of all clients
-                </div>
-              </div>}
-            </Card>
-            <Card title="🚫 Never in Effect Analysis">
-              {analytics.nie===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No pre-effective drops — great retention!</div>:
-              <div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
-                  <div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{analytics.nie}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Never in Effect</div></div>
-                  <div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#EF4444"}}>{money(analytics.nieLostComm)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Lost Commission</div></div>
-                  <div style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{pct(analytics.nie,analytics.t)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>NIE Rate</div></div>
-                </div>
-                {Object.keys(analytics.nieByCarrier).length>0&&<><div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginBottom:6}}>By Carrier</div><BarChart data={Object.entries(analytics.nieByCarrier).sort((a,b)=>b[1]-a[1]).map(([c,n])=>[c,n])} color="#94A3B8" /></>}
-                {Object.keys(analytics.nieByMonth).length>0&&<><div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginTop:14,marginBottom:6}}>By App Month</div><BarChart data={Object.entries(analytics.nieByMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,n])=>[monthLabel(mk),n])} color="#94A3B8" /></>}
-              </div>}
-            </Card>
+            </div>)}
           </div>
         </div>}
       </main>
 
-      {/* MODALS */}
+      {/* ═══ MODALS ═══ */}
+
       {showAddModal&&<Modal onClose={()=>{setShowAddModal(false);resetForm();}} title={editId?"Edit Client":"Add New Client"}>
         <div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxHeight:"60vh",overflowY:"auto"}}>
           {FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>{f.label}{f.key==="fullName"&&<span style={{color:"#EF4444"}}> *</span>}</label>
@@ -783,17 +521,11 @@ function MedicareTracker() {
           <div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
             <div style={{fontSize:13,fontWeight:700,marginBottom:12}}>💰 Tracking</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
-              {[{l:"Last Verified",v:viewClient.lastVerified?fmt(viewClient.lastVerified):"Never",c:(!viewClient.lastVerified||(daysBetween(viewClient.lastVerified,today())>=30))?"#F59E0B":"var(--text)"},
-                {l:"Initial Commission",v:money(calcInitialComm(viewClient.effectiveDate,viewClient.electionPeriod))+(viewClient.electionPeriod==="IEP"?" (IEP 2×)":""),c:"#22C55E"},
-                {l:"Residuals Started",v:residualStartDate(viewClient.effectiveDate),c:"#3B8FD9"},
-                {l:"Residual Earned",v:money(calcResidualEarned(viewClient.effectiveDate,today())),c:"#8B5CF6"},
-                {l:"Total Earned",v:money(calcInitialComm(viewClient.effectiveDate,viewClient.electionPeriod)+calcResidualEarned(viewClient.effectiveDate,today())),c:"#22C55E"},
-                {l:"Chargeback",v:viewClient.chargebackAmount?money(viewClient.chargebackAmount):"—",c:"#EF4444"},
-                {l:"Cancelled",v:viewClient.cancelMonth?new Date(viewClient.cancelMonth+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"numeric"}):"—",c:viewClient.cancelMonth?"#F59E0B":"var(--text)"},
-                {l:"Notes",v:viewClient.statusNote||"—"}
+              {[{l:"Initial Commission",v:money(getCommForClient(viewClient)),c:"#22C55E"},{l:"Residuals Started",v:residualStart(viewClient.effectiveDate),c:"#3B8FD9"},{l:"Residual Earned",v:money(calcResidualEarned(viewClient.effectiveDate,today())),c:"#8B5CF6"},{l:"Total Earned",v:money(getCommForClient(viewClient)+calcResidualEarned(viewClient.effectiveDate,today())),c:"#22C55E"},{l:"Chargeback",v:viewClient.chargebackAmount?money(viewClient.chargebackAmount):"—",c:"#EF4444"},{l:"Cancelled",v:viewClient.cancelMonth?new Date(viewClient.cancelMonth+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"numeric"}):"—",c:viewClient.cancelMonth?"#F59E0B":"var(--text)"},{l:"Notes",v:viewClient.statusNote||"—"}
               ].map(f=><div key={f.l} style={{padding:10,background:"var(--bg-hover)",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginBottom:3}}>{f.l}</div><div style={{fontSize:13,fontWeight:600,color:f.c||"var(--text)"}}>{f.v}</div></div>)}
             </div>
           </div>
+          {isAdmin&&<div style={{fontSize:11,color:"var(--t3)",marginTop:12}}>Agent: {teamUsers.find(u=>u.uid===viewClient.agentId)?.displayName||"—"}</div>}
         </div>
         <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
           <button onClick={()=>setConfirmAction({title:"Delete",danger:true,label:"Delete",message:`Delete ${viewClient.fullName}?`,onConfirm:()=>deleteClient(viewClient.id)})} style={{...btnO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>🗑 Delete</button>
@@ -808,111 +540,85 @@ function MedicareTracker() {
         <div style={{padding:24}}>
           <div style={{display:"flex",alignItems:"center",gap:10,padding:14,background:`${ST[statusForm.newStatus]?.color}10`,borderRadius:10,border:`1px solid ${ST[statusForm.newStatus]?.color}30`,marginBottom:18}}><span style={{fontSize:22}}>{ST[statusForm.newStatus]?.icon}</span><div><div style={{fontWeight:700,fontSize:14}}>{ST[statusForm.newStatus]?.label}</div><div style={{fontSize:12,color:"var(--t2)"}}>{ST[statusForm.newStatus]?.desc}</div></div></div>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            {statusForm.newStatus==="paid"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Commission ($)</label><input type="number" step="0.01" value={statusForm.commissionAmount} onChange={e=>setStatusForm(p=>({...p,commissionAmount:e.target.value}))} placeholder="250" style={{...inp,marginTop:4}} /></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Date Paid</label><input type="date" value={statusForm.paidDate} onChange={e=>setStatusForm(p=>({...p,paidDate:e.target.value}))} style={{...inp,marginTop:4}} /></div></>}
-            {statusForm.newStatus==="inactive"&&<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>What month did they cancel?</label><input type="month" value={statusForm.cancelMonth} onChange={e=>setStatusForm(p=>({...p,cancelMonth:e.target.value}))} style={{...inp,marginTop:4}} /></div>}
-            {statusForm.newStatus==="chargedBack"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Chargeback Amount ($)</label><input type="number" step="0.01" value={statusForm.chargebackAmount} onChange={e=>setStatusForm(p=>({...p,chargebackAmount:e.target.value}))} placeholder="Amount" style={{...inp,marginTop:4}} /></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Chargeback Date</label><input type="date" value={statusForm.chargebackDate} onChange={e=>setStatusForm(p=>({...p,chargebackDate:e.target.value}))} style={{...inp,marginTop:4}} /></div></>}
-            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Notes</label><input type="text" value={statusForm.statusNote} onChange={e=>setStatusForm(p=>({...p,statusNote:e.target.value}))} placeholder="Reason..." style={{...inp,marginTop:4}} /></div>
+            {statusForm.newStatus==="paid"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Commission ($)</label><input type="number" step="0.01" value={statusForm.commissionAmount} onChange={e=>setStatusForm(p=>({...p,commissionAmount:e.target.value}))} style={{...inp,marginTop:4}} /></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Date Paid</label><input type="date" value={statusForm.paidDate} onChange={e=>setStatusForm(p=>({...p,paidDate:e.target.value}))} style={{...inp,marginTop:4}} /></div></>}
+            {statusForm.newStatus==="inactive"&&<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Month they cancelled</label><input type="month" value={statusForm.cancelMonth} onChange={e=>setStatusForm(p=>({...p,cancelMonth:e.target.value}))} style={{...inp,marginTop:4}} /></div>}
+            {statusForm.newStatus==="chargedBack"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Chargeback ($)</label><input type="number" step="0.01" value={statusForm.chargebackAmount} onChange={e=>setStatusForm(p=>({...p,chargebackAmount:e.target.value}))} style={{...inp,marginTop:4}} /></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Date</label><input type="date" value={statusForm.chargebackDate} onChange={e=>setStatusForm(p=>({...p,chargebackDate:e.target.value}))} style={{...inp,marginTop:4}} /></div></>}
+            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Notes</label><input type="text" value={statusForm.statusNote} onChange={e=>setStatusForm(p=>({...p,statusNote:e.target.value}))} placeholder="Reason..." style={{...inp,marginTop:4}} /></div>
           </div>
         </div>
         <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowStatusModal(null)} style={btnO}>Cancel</button><button onClick={confirmStatusChange} style={{...btnP,background:ST[statusForm.newStatus]?.color}}>Confirm</button></div>
       </Modal>}
 
+      {/* Bulk Import */}
       {showBulkModal&&<Modal onClose={()=>setShowBulkModal(false)} width={860} title="📋 Mass Import" subtitle={`Step ${bulkStep} of 3`}>
-        <div style={{padding:"12px 24px",borderBottom:"1px solid var(--border)",display:"flex",gap:6}}>{[{n:1,l:"Paste",i:"📋"},{n:2,l:"Map",i:"🔗"},{n:3,l:"Review",i:"✅"}].map((s,i)=><div key={s.n} style={{display:"flex",alignItems:"center",gap:6}}>{i>0&&<div style={{width:28,height:2,background:bulkStep>=s.n?"#3B8FD9":"var(--border)"}} />}<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,background:bulkStep===s.n?"var(--tab-bg)":"transparent",border:`1px solid ${bulkStep>=s.n?"#3B8FD9":"var(--border)"}`,color:bulkStep>=s.n?"#3B8FD9":"var(--t3)",fontSize:12,fontWeight:600}}><span>{s.i}</span> {s.l}</div></div>)}</div>
-        {bulkStep===1&&<div style={{padding:24}}><div style={{background:"var(--bg-hover)",borderRadius:10,padding:16,marginBottom:16,border:"1px solid var(--border)"}}><div style={{fontSize:12,fontWeight:700,marginBottom:6,color:"#3B8FD9",textTransform:"uppercase",letterSpacing:0.5}}>Instructions</div><div style={{fontSize:12,color:"var(--t2)",lineHeight:1.7}}>Select all in your spreadsheet (Ctrl+A) → Copy (Ctrl+C) → Paste below (Ctrl+V). First row must be headers.</div></div><textarea value={bulkRaw} onChange={e=>setBulkRaw(e.target.value)} placeholder="Paste spreadsheet data here..." style={{...inp,height:200,resize:"vertical",fontFamily:"monospace",fontSize:12,lineHeight:1.5}} /></div>}
-        {bulkStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{background:"var(--bg-hover)",borderRadius:10,padding:12,marginBottom:16,border:"1px solid var(--border)",fontSize:12,color:"var(--t2)"}}>Found <strong style={{color:"#3B8FD9"}}>{bulkHeaders.length}</strong> columns, <strong style={{color:"#3B8FD9"}}>{bulkRows.length}</strong> rows</div>{bulkHeaders.map((h,idx)=>{const samples=bulkRows.slice(0,3).map(r=>r[idx]||"").filter(Boolean).join(", ");return<div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 32px 1fr",gap:10,alignItems:"center",padding:"10px 14px",borderRadius:8,background:"var(--bg-hover)",border:"1px solid var(--border)",marginBottom:6}}><div><div style={{fontWeight:700,fontSize:13}}>{h}</div><div style={{fontSize:11,color:"var(--t3)",fontStyle:"italic"}}>{samples||"(empty)"}</div></div><div style={{textAlign:"center",color:bulkMapping[idx]&&bulkMapping[idx]!=="skip"?"#3B8FD9":"var(--t3)"}}>{bulkMapping[idx]&&bulkMapping[idx]!=="skip"?"→":"·"}</div><select value={bulkMapping[idx]||"skip"} onChange={e=>setBulkMapping(p=>({...p,[idx]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="skip">— Skip —</option>{FIELDS.map(f=>{const used=Object.entries(bulkMapping).find(([k,v])=>v===f.key&&k!==String(idx));return<option key={f.key} value={f.key} disabled={!!used}>{f.label}{bulkMapping[idx]===f.key?" ✓":""}</option>;})}</select></div>;})}</div>}
-        {bulkStep===3&&(()=>{const prev=buildPreview(),valid=prev.filter(c=>c.fullName?.trim()),pcols=["fullName","phone","state","carrier","effectiveDate"].filter(k=>Object.values(bulkMapping).includes(k));return<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{display:"flex",gap:12,marginBottom:16}}><div style={{padding:"8px 14px",borderRadius:8,background:"#F0FDF4",border:"1px solid #BBF7D0",fontSize:13}}><strong style={{color:"#22C55E"}}>{valid.length}</strong> ready</div>{prev.length-valid.length>0&&<div style={{padding:"8px 14px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:13}}><strong style={{color:"#EF4444"}}>{prev.length-valid.length}</strong> skipped</div>}<button onClick={()=>setBulkStep(2)} style={{...btnO,fontSize:12,marginLeft:"auto"}}>Adjust Mapping</button></div><div style={{borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"var(--bg-hover)"}}><th style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)"}}>#</th>{pcols.map(fk=><th key={fk} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap"}}>{FIELDS.find(f=>f.key===fk)?.label||fk}</th>)}<th style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)"}}>Status</th></tr></thead><tbody>{prev.slice(0,50).map((row,i)=>{const ok=row.fullName?.trim();return<tr key={i} style={{background:!ok?"#FEF2F2":i%2?"var(--bg-hover)":"transparent",opacity:ok?1:0.5}}><td style={{padding:"8px 12px",borderBottom:"1px solid var(--border)",color:"var(--t3)"}}>{i+1}</td>{pcols.map(fk=><td key={fk} style={{padding:"8px 12px",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis"}}>{fk.includes("Date")?fmt(row[fk]):(row[fk]||"—")}</td>)}<td style={{padding:"8px 12px",borderBottom:"1px solid var(--border)"}}>{ok?<Badge color="#22C55E">Ready</Badge>:<Badge color="#EF4444">Skip</Badge>}</td></tr>;})}</tbody></table></div></div></div>;})()}
+        {bulkStep===1&&<div style={{padding:24}}><div style={{background:"var(--bg-hover)",borderRadius:10,padding:16,marginBottom:16,border:"1px solid var(--border)"}}><div style={{fontSize:12,fontWeight:700,marginBottom:6,color:"#3B8FD9",textTransform:"uppercase",letterSpacing:0.5}}>Instructions</div><div style={{fontSize:12,color:"var(--t2)",lineHeight:1.7}}>Select all in spreadsheet → Copy → Paste below. First row must be headers.</div></div><textarea value={bulkRaw} onChange={e=>setBulkRaw(e.target.value)} placeholder="Paste spreadsheet data..." style={{...inp,height:200,resize:"vertical",fontFamily:"monospace",fontSize:12}} /></div>}
+        {bulkStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{background:"var(--bg-hover)",borderRadius:10,padding:12,marginBottom:16,border:"1px solid var(--border)",fontSize:12,color:"var(--t2)"}}>Found <strong style={{color:"#3B8FD9"}}>{bulkHeaders.length}</strong> columns, <strong style={{color:"#3B8FD9"}}>{bulkRows.length}</strong> rows</div>{bulkHeaders.map((h,idx)=>{const samples=bulkRows.slice(0,3).map(r=>r[idx]||"").filter(Boolean).join(", ");return<div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 32px 1fr",gap:10,alignItems:"center",padding:"10px 14px",borderRadius:8,background:"var(--bg-hover)",border:"1px solid var(--border)",marginBottom:6}}><div><div style={{fontWeight:700,fontSize:13}}>{h}</div><div style={{fontSize:11,color:"var(--t3)",fontStyle:"italic"}}>{samples||"(empty)"}</div></div><div style={{textAlign:"center",color:bulkMapping[idx]&&bulkMapping[idx]!=="skip"?"#3B8FD9":"var(--t3)"}}>{bulkMapping[idx]&&bulkMapping[idx]!=="skip"?"→":"·"}</div><select value={bulkMapping[idx]||"skip"} onChange={e=>setBulkMapping(p=>({...p,[idx]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="skip">— Skip —</option>{FIELDS.map(f=><option key={f.key} value={f.key}>{f.label}</option>)}</select></div>;})}</div>}
+        {bulkStep===3&&(()=>{const prev=buildPreview(),valid=prev.filter(c=>c.fullName?.trim());return<div style={{padding:24}}><div style={{display:"flex",gap:12,marginBottom:16}}><div style={{padding:"8px 14px",borderRadius:8,background:"#F0FDF4",border:"1px solid #BBF7D0",fontSize:13}}><strong style={{color:"#22C55E"}}>{valid.length}</strong> ready</div></div></div>;})()}
         <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}><button onClick={()=>{if(bulkStep===1)setShowBulkModal(false);else setBulkStep(s=>s-1);}} style={btnO}>{bulkStep===1?"Cancel":"← Back"}</button>{bulkStep===1&&<button onClick={parseBulkData} disabled={!bulkRaw.trim()} style={{...btnP,opacity:bulkRaw.trim()?1:0.4}}>Parse →</button>}{bulkStep===2&&<button onClick={()=>{if(!Object.values(bulkMapping).includes("fullName")){showToast("Map Full Name","error");return;}setBulkStep(3);}} style={btnP}>Preview →</button>}{bulkStep===3&&<button onClick={execImport} style={btnP}>✅ Import {buildPreview().filter(c=>c.fullName?.trim()).length}</button>}</div>
       </Modal>}
 
-      {showMassUpdate&&<Modal onClose={()=>setShowMassUpdate(false)} width={500} title="⚡ Mass Update" subtitle="Change a field for all clients at once">
-        <div style={{padding:24}}>
-          <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Field to update</label>
-              <select value={massField} onChange={e=>{setMassField(e.target.value);setMassValue("");}} style={{...inp,marginTop:4,cursor:"pointer"}}>
-                <option value="">Select field...</option>
-                <option value="hospitalIndemnity">Hospital Indemnity</option>
-                <option value="planType">Plan Type</option>
-                <option value="medicaidLevel">Medicaid Level</option>
-                <option value="carrier">Carrier</option>
-                <option value="electionPeriod">Election Period</option>
-                <option value="state">State</option>
-              </select>
-            </div>
-            {massField&&<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>New value for ALL clients</label>
-              {massField==="hospitalIndemnity"?<select value={massValue} onChange={e=>setMassValue(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
-              :massField==="planType"?<select value={massValue} onChange={e=>setMassValue(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select...</option>{["MAPD","DSNP","CSNP","PDP","Medigap"].map(v=><option key={v} value={v}>{v}</option>)}</select>
-              :massField==="medicaidLevel"?<select value={massValue} onChange={e=>setMassValue(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select...</option>{["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"].map(v=><option key={v} value={v}>{v}</option>)}</select>
-              :massField==="electionPeriod"?<select value={massValue} onChange={e=>setMassValue(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select...</option>{["AEP","OEP","SEP","IEP","ICEP"].map(v=><option key={v} value={v}>{v}</option>)}</select>
-              :<input type="text" value={massValue} onChange={e=>setMassValue(e.target.value)} placeholder="Enter value..." style={{...inp,marginTop:4}} />}
-            </div>}
-            {massField&&massValue&&<div style={{background:"#FEF9ED",border:"1px solid #F59E0B33",borderRadius:10,padding:14}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#92400E"}}>⚠️ This will update {clients.length} clients</div>
-              <div style={{fontSize:12,color:"#A16207",marginTop:4}}>Set <strong>{FIELDS.find(f=>f.key===massField)?.label||massField}</strong> → <strong>{massValue}</strong> for everyone</div>
-            </div>}
+      {/* Create User */}
+      {showCreateUser&&<Modal onClose={()=>setShowCreateUser(false)} width={480} title="Add Team Member">
+        <div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+          {createUserError&&<div style={{padding:"10px 14px",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,color:"#DC2626",fontSize:13}}>{createUserError}</div>}
+          <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Full Name</label><input value={newUser.displayName} onChange={e=>setNewUser(p=>({...p,displayName:e.target.value}))} style={{...inp,marginTop:4}} /></div>
+          <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Email</label><input type="email" value={newUser.email} onChange={e=>setNewUser(p=>({...p,email:e.target.value}))} style={{...inp,marginTop:4}} /></div>
+          <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Temporary Password</label><input type="text" value={newUser.password} onChange={e=>setNewUser(p=>({...p,password:e.target.value}))} placeholder="Min 6 chars" style={{...inp,marginTop:4}} /></div>
+          <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Account Type</label>
+            <select value={newUser.role} onChange={e=>setNewUser(p=>({...p,role:e.target.value}))} style={{...inp,marginTop:4,cursor:"pointer"}}>
+              <option value="broker">Broker (standard commission)</option>
+              <option value="heap">HEAP (custom commission)</option>
+            </select>
           </div>
+          {newUser.role==="heap"&&<>
+            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End Pay ($ per sale)</label><input type="number" value={newUser.heapFrontEnd} onChange={e=>setNewUser(p=>({...p,heapFrontEnd:e.target.value}))} placeholder="0" style={{...inp,marginTop:4}} /></div>
+            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End Pay ($ per sale)</label><input type="number" value={newUser.heapBackEnd} onChange={e=>setNewUser(p=>({...p,heapBackEnd:e.target.value}))} placeholder="0" style={{...inp,marginTop:4}} /></div>
+          </>}
         </div>
-        <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
-          <button onClick={()=>{
-            const dupes=[];const seen={};
-            clients.forEach(c=>{const k=(c.fullName||"").toLowerCase().trim()+"||"+(c.phone||"").replace(/\D/g,"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"").toLowerCase();if(seen[k])dupes.push(c.id);else seen[k]=true;});
-            if(!dupes.length){showToast("No duplicates found");return;}
-            save(clients.filter(c=>!dupes.includes(c.id)));
-            showToast(`Removed ${dupes.length} duplicates!`);
-          }} style={{...btnO,fontSize:12,borderColor:"#F59E0B",color:"#F59E0B"}}>🧹 Remove Duplicates</button>
-          <div style={{display:"flex",gap:10}}>
-            <button onClick={()=>setShowMassUpdate(false)} style={btnO}>Cancel</button>
-            <button disabled={!massField||!massValue} onClick={()=>{
-              save(clients.map(c=>({...c,[massField]:massValue})));
-              showToast(`Updated ${clients.length} clients!`);
-              setShowMassUpdate(false);
-            }} style={{...btnP,opacity:massField&&massValue?1:0.4}}>⚡ Update All</button>
-          </div>
+        <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+          <button onClick={()=>setShowCreateUser(false)} style={btnO}>Cancel</button>
+          <button onClick={handleCreateUser} disabled={!newUser.email||!newUser.password||!newUser.displayName} style={{...btnP,opacity:newUser.email&&newUser.password&&newUser.displayName?1:0.4}}>Create Account</button>
         </div>
       </Modal>}
 
-      {showQuickAdd&&<Modal onClose={()=>setShowQuickAdd(false)} width={600} title="🔀 Reorder Clients" subtitle="Paste your name list to set the order">
-        <div style={{padding:24}}>
-          <div style={{background:"var(--bg-hover)",borderRadius:10,padding:14,marginBottom:16,border:"1px solid var(--border)"}}>
-            <div style={{fontSize:12,fontWeight:700,marginBottom:6,color:"#3B8FD9",textTransform:"uppercase",letterSpacing:0.5}}>How to use</div>
-            <div style={{fontSize:12,color:"var(--t2)",lineHeight:1.7}}>Paste the <strong>Full Name</strong> column from your spreadsheet. Your existing clients will be reordered to match.</div>
+      {/* Edit Agent */}
+      {editingAgent&&<Modal onClose={()=>setEditingAgent(null)} width={420} title={`Edit ${editingAgent.displayName}`}>
+        <div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+          <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Role</label>
+            <select value={editingAgent.role} onChange={e=>setEditingAgent(p=>({...p,role:e.target.value}))} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="broker">Broker</option><option value="heap">HEAP</option></select>
           </div>
-          <textarea value={quickAddRaw} onChange={e=>{setQuickAddRaw(e.target.value);setReorderPreview(null);}} placeholder={"Paste names here, one per line:\n\nElaine Inman\nBertha Gray\nDeborah White\n..."} style={{...inp,height:220,resize:"vertical",fontSize:13,lineHeight:1.7}} />
-          {reorderPreview&&<div style={{marginTop:14,maxHeight:200,overflowY:"auto",borderRadius:8,border:"1px solid var(--border)"}}>
-            {reorderPreview.map((r,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",fontSize:12,background:i%2?"var(--bg-hover)":"transparent",borderBottom:"1px solid var(--border)"}}>
-              <span><strong style={{color:"var(--t3)",marginRight:8}}>{i+1}.</strong> {r.name}</span>
-              <span style={{color:r.matched?"#22C55E":"#F59E0B",fontWeight:600,fontSize:11}}>{r.matched?"✓ Matched":"⚠ Not found"}</span>
-            </div>)}
-            <div style={{padding:"8px 12px",fontSize:12,background:"var(--bg-hover)"}}><strong style={{color:"#22C55E"}}>{reorderPreview.filter(r=>r.matched).length}</strong> matched, <strong style={{color:"#F59E0B"}}>{reorderPreview.filter(r=>!r.matched).length}</strong> not found</div>
-          </div>}
+          {editingAgent.role==="heap"&&<>
+            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End Pay ($)</label><input type="number" value={editingAgent.heapFrontEnd||""} onChange={e=>setEditingAgent(p=>({...p,heapFrontEnd:e.target.value}))} style={{...inp,marginTop:4}} /></div>
+            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End Pay ($)</label><input type="number" value={editingAgent.heapBackEnd||""} onChange={e=>setEditingAgent(p=>({...p,heapBackEnd:e.target.value}))} style={{...inp,marginTop:4}} /></div>
+          </>}
         </div>
         <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
-          <button onClick={()=>setShowQuickAdd(false)} style={btnO}>Cancel</button>
-          {!reorderPreview?<button onClick={()=>{
-            const names=quickAddRaw.split(/\n/).map(n=>n.trim()).filter(n=>n&&n.toLowerCase()!=="full name"&&n.toLowerCase()!=="name"&&n.toLowerCase()!=="client name");
-            if(!names.length){showToast("No names found","error");return;}
-            const preview=names.map(name=>{
-              const match=clients.find(c=>c.fullName&&c.fullName.toLowerCase().trim()===name.toLowerCase().trim());
-              return {name,matched:!!match,id:match?match.id:null};
-            });
-            setReorderPreview(preview);
-          }} style={btnP}>Preview Order →</button>
-          :<button onClick={()=>{
-            const orderedIds=reorderPreview.filter(r=>r.matched).map(r=>r.id);
-            const orderedClients=orderedIds.map(id=>clients.find(c=>c.id===id)).filter(Boolean);
-            const remaining=clients.filter(c=>!orderedIds.includes(c.id));
-            save([...orderedClients,...remaining]);
-            setSortField("custom");
-            showToast(`Reordered ${orderedClients.length} clients!`);
-            setShowQuickAdd(false);
-          }} style={btnP}>✅ Apply Order</button>}
+          <button onClick={()=>setEditingAgent(null)} style={btnO}>Cancel</button>
+          <button onClick={()=>updateAgentComm(editingAgent.uid,{role:editingAgent.role,heapFrontEnd:editingAgent.heapFrontEnd||"0",heapBackEnd:editingAgent.heapBackEnd||"0"})} style={btnP}>Save</button>
         </div>
       </Modal>}
+
     </div>
   );
 }
 
-ReactDOM.render(<MedicareTracker />, document.getElementById('root'));
-  </script>
+// ═══ APP WRAPPER ═══
+function App(){
+  const[user,setUser]=useState(null);const[profile,setProfile]=useState(null);const[loading,setLoading]=useState(true);
+  useEffect(()=>{
+    const unsub=auth.onAuthStateChanged(async u=>{
+      if(u){setUser(u);const doc=await db.collection("users").doc(u.uid).get();if(doc.exists)setProfile(doc.data());else{const unsub2=db.collection("users").doc(u.uid).onSnapshot(snap=>{if(snap.exists){setProfile(snap.data());unsub2();}});}}
+      else{setUser(null);setProfile(null);}
+      setLoading(false);
+    });return()=>unsub();
+  },[]);
+  if(loading)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif"}}><div style={{fontSize:18,fontWeight:700,color:"#64748B"}}>Loading...</div></div>;
+  if(!user)return<LoginScreen />;
+  if(!profile)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif"}}><div style={{fontSize:14,color:"#64748B"}}>Setting up...</div></div>;
+  return<MedicareTracker currentUser={user} userProfile={profile} />;
+}
+
+ReactDOM.render(<App />,document.getElementById('root'));
+</script>
 </body>
 </html>
