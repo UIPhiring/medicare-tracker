@@ -23,6 +23,7 @@ input,select,textarea{font-family:var(--font)}
 </head>
 <body>
 <div id="root"></div>
+<script>window.onerror=function(m,s,l,c,e){document.getElementById("root").innerHTML='<pre style="padding:40px;color:#EF4444;font-size:14px;white-space:pre-wrap;background:#1E293B;min-height:100vh">ERROR: '+m+'\nLine: '+l+' Col: '+c+'\n'+(e&&e.stack||'')+'</pre>';return true};</script>
 <script type="text/babel">
 const{useState,useEffect,useMemo,useCallback,useRef}=React;
 
@@ -104,7 +105,7 @@ return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justify
 <div style={{display:"flex",flexDirection:"column",gap:12}}>
 <input type="email" value={em} onChange={e=>setEm(e.target.value)} placeholder="Email" style={sty} onKeyDown={e=>e.key==="Enter"&&go()}/>
 <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Password" style={sty} onKeyDown={e=>e.key==="Enter"&&go()}/>
-<button onClick={go} disabled={ld||!em||!pw} style={{padding:"12px 20px",borderRadius:10,border:"none",background:ld?"#94A3B8":"#3B8FD9",color:"#fff",fontSize:15,fontWeight:700,cursor:ld?"wait":"pointer",fontFamily:"var(--font)",opacity:!em||!pw?.5:1}}>{ld?"...":(mode==="setup"?"Create Admin Account":"Sign In")}</button>
+<button onClick={go} disabled={ld||!em||!pw} style={{padding:"12px 20px",borderRadius:10,border:"none",background:ld?"#94A3B8":"#3B8FD9",color:"#fff",fontSize:15,fontWeight:700,cursor:ld?"wait":"pointer",fontFamily:"var(--font)",opacity:(!em||!pw)?0.5:1}}>{ld?"...":(mode==="setup"?"Create Admin Account":"Sign In")}</button>
 </div>
 <div style={{textAlign:"center",marginTop:16}}>
 <button onClick={()=>setMode(mode==="login"?"setup":"login")} style={{background:"none",border:"none",color:"#3B8FD9",cursor:"pointer",fontSize:13,fontFamily:"var(--font)"}}>{mode==="login"?"First time? Set up admin account":"Back to sign in"}</button>
@@ -560,19 +561,17 @@ return<>
 <input value={vcNote} onChange={e=>setVcNote(e.target.value)} placeholder="Add a note..." onKeyDown={e=>{if(e.key==="Enter"&&vcNote.trim()){const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:"note",detail:vcNote.trim()};logAct(vc.id,"note",vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("")}}} style={{...inp,flex:1,fontSize:12}}/>
 <button onClick={()=>{if(!vcNote.trim())return;const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:"note",detail:vcNote.trim()};logAct(vc.id,"note",vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("")}} disabled={!vcNote.trim()} style={{...bP,fontSize:12,padding:"8px 14px",opacity:vcNote.trim()?1:.4}}>Add</button>
 </div>
-{(vc.activityLog&&vc.activityLog.length>0)&&<div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:0}}>
-{[...vc.activityLog].sort((a,b)=>b.ts?.localeCompare(a.ts)||0).map((e,i)=>{
-const ic=e.action==="created"?"\uD83C\uDD95":e.action==="status"?"\uD83D\uDD04":e.action==="verified"?"\u2705":e.action==="edited"?"\u270F\uFE0F":e.action==="note"?"\uD83D\uDCDD":e.action==="mass_update"?"\u26A1":"\u2022";
-const col=e.action==="status"?"#3B8FD9":e.action==="verified"?"#22C55E":e.action==="created"?"#8B5CF6":"var(--t2)";
-return<div key={i} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:i<vc.activityLog.length-1?"1px solid var(--border)":"none"}}>
-<div style={{fontSize:14,width:20,textAlign:"center",flexShrink:0,paddingTop:1}}>{ic}</div>
+{!!(vc.activityLog&&vc.activityLog.length)&&<div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:0}}>
+{[].concat(vc.activityLog).reverse().map((al,ai)=>
+<div key={ai} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+<div style={{fontSize:14,width:20,textAlign:"center",flexShrink:0,paddingTop:1}}>{al.action==="created"?"\uD83C\uDD95":al.action==="status"?"\uD83D\uDD04":al.action==="verified"?"\u2705":al.action==="edited"?"\u270F\uFE0F":al.action==="note"?"\uD83D\uDCDD":al.action==="mass_update"?"\u26A1":"\u2022"}</div>
 <div style={{flex:1,minWidth:0}}>
-<div style={{fontSize:12,fontWeight:600,color:col}}>{e.detail||e.action}</div>
-<div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>{fmtTs(e.ts)}{e.user&&(" \u00B7 "+e.user)}</div>
+<div style={{fontSize:12,fontWeight:600,color:al.action==="status"?"#3B8FD9":al.action==="verified"?"#22C55E":al.action==="created"?"#8B5CF6":"var(--t2)"}}>{al.detail||al.action}</div>
+<div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>{fmtTs(al.ts)}{al.user?(" \u00B7 "+al.user):""}</div>
 </div>
-</div>})}
-</div>
+</div>)}
 </div>}
+</div>
 </div>
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
 <button onClick={()=>setConfirm2({title:"Delete",dng:true,lbl:"Delete",msg:"Delete "+vc.fullName+"?",fn:()=>del(vc.id)})} style={{...bO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>{"\uD83D\uDDD1 Delete"}</button>
@@ -720,12 +719,20 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 
 /* ═══════════ APP WRAPPER ═══════════ */
 function App(){
+/* Error boundary */
+class EB extends React.Component{
+constructor(p){super(p);this.state={err:null}}
+static getDerivedStateFromError(e){return{err:e}}
+componentDidCatch(e,info){console.error("React error:",e,info)}
+render(){if(this.state.err)return React.createElement("div",{style:{padding:40,fontFamily:"monospace",fontSize:14,color:"#EF4444",background:"#1E293B",minHeight:"100vh",whiteSpace:"pre-wrap"}},
+"Error: "+this.state.err.toString()+"\n\n"+(this.state.err.stack||""));return this.props.children}
+}
 const[user,setUser]=useState(null);const[prof,setProf]=useState(null);const[ld,setLd]=useState(true);
 useEffect(()=>{const un=auth.onAuthStateChanged(async u=>{if(u){setUser(u);try{const d=await db.collection("users").doc(u.uid).get();if(d.exists)setProf(d.data());else{const un2=db.collection("users").doc(u.uid).onSnapshot(s=>{if(s.exists){setProf(s.data());un2()}})}}catch(e){console.error(e)}}else{setUser(null);setProf(null)}setLd(false)});return()=>un()},[]);
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif"}}><div style={{fontSize:18,fontWeight:700,color:"#64748B"}}>Loading...</div></div>;
 if(!user)return<LoginScreen/>;
 if(!prof)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif"}}><div style={{fontSize:14,color:"#64748B"}}>Setting up...</div></div>;
-return<Tracker cu={user} up={prof}/>;
+return<EB><Tracker cu={user} up={prof}/></EB>;
 }
 ReactDOM.render(<App/>,document.getElementById("root"));
 </script>
