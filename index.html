@@ -135,7 +135,7 @@ const[sf,setSf]=useState("custom");const[sd,setSd]=useState("asc");
 const[stForm,setStForm]=useState({});
 const[showSt,setShowSt]=useState(null);
 const[confirm2,setConfirm2]=useState(null);
-const[showMU,setShowMU]=useState(false);const[mf,setMf]=useState("");const[mv,setMv]=useState("");
+const[showMU,setShowMU]=useState(false);const[mf,setMf]=useState("");const[mv,setMv]=useState("");const[muSel,setMuSel]=useState(new Set());
 const[revMode,setRevMode]=useState(false);const[revIdx,setRevIdx]=useState(0);const[revTally,setRevTally]=useState({active:0,paid:0,inactive:0,skipped:0});
 const[showReorder,setShowReorder]=useState(false);const[reoRaw,setReoRaw]=useState("");const[reoStep,setReoStep]=useState(1);const[reoMatches,setReoMatches]=useState([]);
 const[showCU,setShowCU]=useState(false);
@@ -215,7 +215,7 @@ const startReview=()=>{setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skip
 const revAction=async(action)=>{const c=revClients[revIdx];if(!c)return;const t={...revTally};if(action==="active"){await upd(c.id,{lastVerified:td()});t.active++}else if(action==="paid"){await upd(c.id,{status:"paid",paidDate:td(),lastVerified:td()});t.paid++}else if(action==="inactive"){await upd(c.id,{status:"inactive",inactiveDate:td()});t.inactive++}else{t.skipped++}setRevTally(t);if(revIdx+1>=revClients.length){setRevMode(false);flash("Review complete! "+t.active+" active, "+t.paid+" paid, "+t.inactive+" inactive, "+t.skipped+" skipped")}else setRevIdx(revIdx+1)};
 
 /* Mass Update */
-const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}const targets=disp;const b=db.batch();targets.forEach(c=>b.update(db.collection("clients").doc(c.id),{[mf]:mv}));await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("")};
+const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}if(muSel.size===0){flash("Select at least one client","error");return}const targets=disp.filter(c=>muSel.has(c.id));const b=db.batch();targets.forEach(c=>b.update(db.collection("clients").doc(c.id),{[mf]:mv}));await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("");setMuSel(new Set())};
 
 /* Reorder by pasted names */
 const parseReorder=()=>{const names=reoRaw.split("\n").map(n=>n.trim()).filter(Boolean);const matches=names.map(n=>{const found=disp.find(c=>c.fullName?.toLowerCase()===n.toLowerCase());return{name:n,matched:!!found,id:found?.id}});setReoMatches(matches);setReoStep(2)};
@@ -343,7 +343,7 @@ return(
 <button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:12}}>{"\uD83D\uDCCB Import"}</button>
 {isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:12}}>{"\uD83E\uDDF9 Dedup"}</button>}
 <button onClick={startReview} style={{...bO,fontSize:12,borderColor:revClients.length>0?"#8B5CF6":"var(--border)",color:revClients.length>0?"#8B5CF6":"var(--t3)"}}>{"\uD83D\uDCCB Review ("+revClients.length+")"}</button>
-<button onClick={()=>setShowMU(true)} style={{...bO,fontSize:12}}>{"\u26A1 Mass Update"}</button>
+<button onClick={()=>{setMuSel(new Set(disp.map(c=>c.id)));setMf("");setMv("");setShowMU(true)}} style={{...bO,fontSize:12}}>{"\u26A1 Mass Update"}</button>
 <button onClick={()=>{setReoRaw("");setReoStep(1);setShowReorder(true)}} style={{...bO,fontSize:12}}>{"\uD83D\uDD00 Reorder"}</button>
 <button onClick={()=>{resetF();setShowAdd(true)}} style={bP}>+ Add Client</button>
 <button onClick={()=>auth.signOut()} style={{...bO,fontSize:12,borderColor:"#EF4444",color:"#EF4444"}}>Sign Out</button>
@@ -625,19 +625,33 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 </div></div></div>})()}
 
 {/* MASS UPDATE MODAL */}
-{showMU&&<Mdl onClose={()=>setShowMU(false)} width={480} title={"\u26A1 Mass Update"} subtitle={disp.length+" clients will be updated"}>
-<div style={{padding:24,display:"flex",flexDirection:"column",gap:16}}>
-<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Field to update</label>
+{showMU&&<Mdl onClose={()=>setShowMU(false)} width={640} title={"\u26A1 Mass Update"} subtitle={muSel.size+" of "+disp.length+" clients selected"}>
+<div style={{padding:"16px 24px",display:"flex",gap:14,borderBottom:"1px solid var(--border)"}}>
+<div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Field</label>
 <select value={mf} onChange={e=>{setMf(e.target.value);setMv("")}} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select field...</option>
 <option value="hospitalIndemnity">Hospital Indemnity</option><option value="planType">Plan Type</option><option value="medicaidLevel">Medicaid Level</option><option value="carrier">Carrier</option><option value="electionPeriod">Election Period</option><option value="state">State</option><option value="previousCarrier">Previous Carrier</option>
 </select></div>
-{mf&&<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>New value</label>
+{mf&&<div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>New value</label>
 <select value={mv} onChange={e=>setMv(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select value...</option>
 {(FIELDS.find(f=>f.key===mf)?.options||[]).map(o=><option key={o} value={o}>{o}</option>)}
 </select></div>}
-{mf&&mv&&<div style={{padding:12,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:10,fontSize:13,color:"#92400E"}}>{"This will set "+mf+" to \""+mv+"\" on all "+disp.length+" visible clients."}</div>}
 </div>
-<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowMU(false)} style={bO}>Cancel</button><button onClick={doMU} disabled={!mf||!mv} style={{...bP,opacity:mf&&mv?1:.4}}>Update All</button></div>
+<div style={{padding:"10px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid var(--border)"}}>
+<div style={{display:"flex",gap:10,alignItems:"center"}}>
+<button onClick={()=>setMuSel(new Set(disp.map(c=>c.id)))} style={{...bO,fontSize:11,padding:"4px 10px"}}>Select All</button>
+<button onClick={()=>setMuSel(new Set())} style={{...bO,fontSize:11,padding:"4px 10px"}}>Select None</button>
+</div>
+<span style={{fontSize:12,fontWeight:700,color:muSel.size>0?"#3B8FD9":"var(--t3)"}}>{muSel.size+" selected"}</span>
+</div>
+<div style={{maxHeight:"45vh",overflowY:"auto",padding:"8px 24px"}}>
+{disp.map(c=>{const sel=muSel.has(c.id);const cur=mf?c[mf]||"":"";return<div key={c.id} onClick={()=>{const n=new Set(muSel);if(sel)n.delete(c.id);else n.add(c.id);setMuSel(n)}} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",background:sel?"#EFF6FF":"transparent",border:"1px solid "+(sel?"#3B8FD9":"transparent"),marginBottom:2}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent"}}>
+<div style={{width:20,height:20,borderRadius:6,border:"2px solid "+(sel?"#3B8FD9":"var(--border)"),background:sel?"#3B8FD9":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{sel&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>{"\u2713"}</span>}</div>
+<div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:13}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtCar(c.carrier)}{c.state?" \u00B7 "+c.state:""}{c.planType?" \u00B7 "+c.planType:""}</div></div>
+{mf&&<div style={{fontSize:11,color:"var(--t3)",textAlign:"right",flexShrink:0}}>{cur||"\u2014"}{mv&&cur!==mv&&<span style={{color:"#3B8FD9",fontWeight:700}}>{" \u2192 "+mv}</span>}</div>}
+</div>})}
+</div>
+{mf&&mv&&muSel.size>0&&<div style={{padding:"8px 24px"}}><div style={{padding:10,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:10,fontSize:12,color:"#92400E"}}>{"Will set "+(FIELDS.find(f=>f.key===mf)?.label||mf)+" to \""+mv+"\" on "+muSel.size+" clients."}</div></div>}
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowMU(false)} style={bO}>Cancel</button><button onClick={doMU} disabled={!mf||!mv||muSel.size===0} style={{...bP,opacity:mf&&mv&&muSel.size>0?1:.4}}>{"Update "+muSel.size+" Clients"}</button></div>
 </Mdl>}
 
 {/* REORDER MODAL */}
