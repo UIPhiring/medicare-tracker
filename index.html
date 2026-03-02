@@ -74,8 +74,8 @@ const heapMoPast=eff=>{if(!eff)return 0;const e=new Date(eff+"T00:00:00"),n=new 
 const canArchive=c=>c.effectiveDate&&heapMoPast(c.effectiveDate)>=4;
 
 /* Broker referral: Admin gets $50 if switched carriers, $25 if same carrier new plan */
-const BROKER_REF_SWITCH=50,BROKER_REF_SAME=25;
-const calcBrokerRef=(c)=>{if(!c.previousCarrier||c.previousCarrier==="None/New to Medicare")return 0;const prev=fmtCar(c.previousCarrier).toLowerCase();const cur=fmtCar(c.carrier).toLowerCase();if(prev!==cur)return BROKER_REF_SWITCH;return BROKER_REF_SAME;};
+const BROKER_REF_SWITCH=50,BROKER_REF_SAME=25,BROKER_REF_NEW=100;
+const calcBrokerRef=(c)=>{if(!c.previousCarrier||c.previousCarrier==="None/New to Medicare")return BROKER_REF_NEW;const prev=fmtCar(c.previousCarrier).toLowerCase();const cur=fmtCar(c.carrier).toLowerCase();if(prev!==cur)return BROKER_REF_SWITCH;return BROKER_REF_SAME;};
 
 const normClient=c=>{const n={...c};if(n.carrier){n.carrier=n.carrier.trim();const k=n.carrier.toLowerCase();if(CN[k])n.carrier=CN[k]}if(!n.medicaidNumber?.trim()&&(!n.medicaidLevel||n.medicaidLevel==="None"))n.medicaidLevel="N/A";if(!n.planType){const p=(n.planName||"").toLowerCase();if(p.includes("c-snp")||p.includes("csnp"))n.planType="CSNP";else if(p.includes("d-snp")||p.includes("dsnp"))n.planType="DSNP";else if(p.includes("pdp"))n.planType="PDP";else if(p.length>0)n.planType="MAPD"}if(!n.hospitalIndemnity)n.hospitalIndemnity="";return n};
 
@@ -239,19 +239,44 @@ const sOrd=["Under 1 mo","1 mo","2-3 mo","4-6 mo","7-12 mo","12+ mo"];const sDat
 const nieC=cl.filter(c=>c.status==="neverInEffect");const nieByCar={};nieC.forEach(c=>{nieByCar[c.carrier||"Unknown"]=(nieByCar[c.carrier||"Unknown"]||0)+1});
 const nieLost=nieC.reduce((s,c)=>s+getComm(c),0);
 const needRev=cl.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBtwn(c.lastVerified,td())>=30)).length;
-/* Broker referral profit for admin */
-const brkIds=new Set(team.filter(u=>u.role==="broker").map(u=>u.uid));
+/* Owner broker = admin's own production account */
+const ownerBrokers=team.filter(u=>u.role==="broker"&&u.isOwner);
+const ownerIds=new Set(ownerBrokers.map(u=>u.uid));
+const adminUid=team.find(u=>u.role==="admin")?.uid;
+/* My Production: admin's own clients + owner-broker clients */
+const myClients=cl.filter(c=>(c.agentId===adminUid||ownerIds.has(c.agentId))&&(c.status==="active"||c.status==="paid"||c.status==="heapArchived"));
+const myProdComm=myClients.reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0);
+const myProdRes=myClients.filter(c=>c.status==="active"||c.status==="paid").length*29;
+const myProdCount=cl.filter(c=>(c.agentId===adminUid||ownerIds.has(c.agentId))&&c.status!=="heapArchived").length;
+const myProdInForce=cl.filter(c=>(c.agentId===adminUid||ownerIds.has(c.agentId))&&(c.status==="active"||c.status==="paid")).length;
+/* Broker referral profit: only non-owner brokers */
+const brkIds=new Set(team.filter(u=>u.role==="broker"&&!u.isOwner).map(u=>u.uid));
 const brkCl=cl.filter(c=>brkIds.has(c.agentId)&&(c.status==="active"||c.status==="paid"||c.status==="heapArchived"));
 const admBrkProfit=brkCl.reduce((s,c)=>s+calcBrokerRef(c),0);
 const brkByAg={};brkCl.forEach(c=>{const ag=team.find(u=>u.uid===c.agentId);if(!ag)return;if(!brkByAg[ag.uid])brkByAg[ag.uid]={name:ag.displayName,total:0,switched:0,sameCar:0,newMed:0,refProfit:0};const b=brkByAg[ag.uid];b.total++;const ref=calcBrokerRef(c);if(ref===BROKER_REF_SWITCH)b.switched++;else if(ref===BROKER_REF_SAME)b.sameCar++;else b.newMed++;b.refProfit+=ref});
-const totalProfit=admHP+admBrkProfit;
+const totalProfit=myProdComm+admHP+admBrkProfit;
 /* All-site totals */
 const allClientsCount=cl.filter(c=>c.status!=="heapArchived").length;
-return{t,ac,pd,ina,cb,nie,inF,projInit,totCB,moRes:inF*29,annRes:inF*29*12,carS,stS,coh,cAM,sData,nieByCar,nieLost,needRev,hEarned,hActive,hDrop,admHP,hByAg,hTot:hCl.length,admBrkProfit,brkByAg,totalProfit,allClientsCount}
+return{t,ac,pd,ina,cb,nie,inF,projInit,totCB,moRes:inF*29,annRes:inF*29*12,carS,stS,coh,cAM,sData,nieByCar,nieLost,needRev,hEarned,hActive,hDrop,admHP,hByAg,hTot:hCl.length,admBrkProfit,brkByAg,totalProfit,allClientsCount,myProdComm,myProdRes,myProdCount,myProdInForce,ownerIds}
 },[allForAnalytics,team]);
 
 /* Agent stats */
-const agS=useMemo(()=>{if(!isA)return[];return team.map(u=>{const ac=cls.filter(c=>c.agentId===u.uid);const inf=ac.filter(c=>c.status==="active"||c.status==="paid").length;const dr=ac.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;const arch=ac.filter(c=>c.status==="heapArchived").length;let pc=0,ap=0;if(u.role==="heap"){const ear=ac.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c));pc=ear.length*calcHeap(u);ap=ear.length*adminHeapProfit(u);const pend=ac.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchive(c));ap+=pend.length*(HEAP_BE-(parseFloat(u.heapBackEnd)||0))}else if(u.role==="broker"){pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0);ap=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcBrokerRef(c),0)}else{pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0)}return{...u,tot:ac.length,inf,dr,arch,pc,ap}})},[isA,team,cls]);
+const agS=useMemo(()=>{if(!isA)return[];
+const ownerUids=new Set(team.filter(u=>u.isOwner).map(u=>u.uid));
+const adminUid2=team.find(u=>u.role==="admin")?.uid;
+return team.filter(u=>!u.isOwner).map(u=>{
+  /* For admin row, merge in owner-broker clients */
+  const myIds=u.role==="admin"?[u.uid,...ownerUids]:[u.uid];
+  const ac=cls.filter(c=>myIds.includes(c.agentId));
+  const inf=ac.filter(c=>c.status==="active"||c.status==="paid").length;
+  const dr=ac.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;
+  const arch=ac.filter(c=>c.status==="heapArchived").length;
+  let pc=0,ap=0;
+  if(u.role==="heap"){const ear=ac.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c));pc=ear.length*calcHeap(u);ap=ear.length*adminHeapProfit(u);const pend=ac.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchive(c));ap+=pend.length*(HEAP_BE-(parseFloat(u.heapBackEnd)||0))}
+  else if(u.role==="broker"){pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0);ap=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcBrokerRef(c),0)}
+  else if(u.role==="admin"){pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0)}
+  return{...u,tot:ac.filter(c=>c.status!=="heapArchived").length,inf,dr,arch,pc,ap}
+})},[isA,team,cls]);
 
 const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"}]:[])];
 
@@ -315,11 +340,13 @@ return(
 <h1 style={{fontSize:28,fontWeight:900,marginBottom:24}}>Dashboard</h1>
 <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 {isA?<>
-<Stat icon={"\uD83D\uDCCB"} value={ana.allClientsCount} label="Total Clients (All)" s/>
-<Stat icon={"\uD83D\uDCB5"} value={money(ana.projInit)} label="Total Commission" color="#22C55E" s/>
-<Stat icon={"\uD83D\uDCB0"} value={money(ana.totalProfit)} label="Your Total Profit" color="#F97316" s/>
-<Stat icon={"\uD83D\uDD01"} value={money(ana.moRes)+"/mo"} label="Residual" color="#8B5CF6" s/>
-<Stat icon={"\uD83D\uDCC8"} value={ana.t>0?pct(ana.inF,ana.t):"\u2014"} label="Retention" s/>
+<Stat icon={"\uD83D\uDCCB"} value={ana.allClientsCount} label="Total Clients (Site)" s/>
+<Stat icon={"\uD83D\uDC64"} value={ana.myProdCount} label="My Production" color="#3B8FD9" sub={ana.myProdInForce+" in force"} s/>
+<Stat icon={"\uD83D\uDCB5"} value={money(ana.myProdComm)} label="My Commission" color="#22C55E" s/>
+<Stat icon={"\uD83D\uDD01"} value={money(ana.myProdRes)+"/mo"} label="My Residual" color="#8B5CF6" s/>
+<Stat icon={"\uD83C\uDFE2"} value={money(ana.admHP)} label="HEAP Profit" color="#F97316" s/>
+<Stat icon={"\uD83E\uDD1D"} value={money(ana.admBrkProfit)} label="Broker Referrals" color="#6366F1" s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(ana.totalProfit)} label="Total Income" color="#22C55E" sub={"Prod + HEAP + Refs"} s/>
 {ana.needRev>0&&<Stat icon={"\u26A0\uFE0F"} value={ana.needRev} label="Need Review" color="#F59E0B" s/>}
 </>:<>
 <Stat icon={"\uD83D\uDCCB"} value={ana.t} label="Total Clients" s/>
@@ -381,9 +408,12 @@ return(
 </div>
 {/* Site-wide summary */}
 <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
-<Stat icon={"\uD83D\uDCCB"} value={ana.allClientsCount} label="Total Clients (All)" s/>
-<Stat icon={"\uD83D\uDCB5"} value={money(ana.projInit)} label="Total Commission" color="#22C55E" s/>
-<Stat icon={"\uD83D\uDCB0"} value={money(ana.totalProfit)} label="Your Total Profit" color="#F97316" sub={"HEAP: "+money(ana.admHP)+" | Broker ref: "+money(ana.admBrkProfit)} s/>
+<Stat icon={"\uD83D\uDCCB"} value={ana.allClientsCount} label="Total Clients (Site)" s/>
+<Stat icon={"\uD83D\uDC64"} value={ana.myProdCount} label="My Production" color="#3B8FD9" sub={ana.myProdInForce+" in force"} s/>
+<Stat icon={"\uD83D\uDCB5"} value={money(ana.myProdComm)} label="My Commission" color="#22C55E" s/>
+<Stat icon={"\uD83C\uDFE2"} value={money(ana.admHP)} label="HEAP Profit" color="#F97316" s/>
+<Stat icon={"\uD83E\uDD1D"} value={money(ana.admBrkProfit)} label="Broker Referrals" color="#6366F1" s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(ana.totalProfit)} label="Total Income" color="#22C55E" s/>
 </div>
 {/* HEAP Overview */}
 {ana.hTot>0&&<div style={{marginBottom:20}}>
@@ -404,8 +434,8 @@ return(
 <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:16}}>
 <div style={{textAlign:"center",padding:14,background:"var(--hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#22C55E"}}>{money(ana.admBrkProfit)}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Your Broker Ref Profit</div></div>
 </div>
-<MT headers={["Broker","Clients","Carrier Switch ($50)","Same Carrier ($25)","New to Medicare","Your Profit"]} rows={Object.values(ana.brkByAg).map(a=>[<strong>{a.name}</strong>,<strong>{a.total}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{a.switched}</span>,<span style={{color:"#3B8FD9",fontWeight:700}}>{a.sameCar}</span>,<span style={{color:"var(--t3)"}}>{a.newMed}</span>,<strong style={{color:"#22C55E"}}>{money(a.refProfit)}</strong>])}/>
-<div style={{marginTop:12,padding:10,background:"var(--hover)",borderRadius:8,fontSize:12,color:"var(--t2)"}}>{"You earn $"+BROKER_REF_SWITCH+" per carrier switch and $"+BROKER_REF_SAME+" per same-carrier plan change from broker sales."}</div>
+<MT headers={["Broker","Clients","New to Medicare ($100)","Carrier Switch ($50)","Same Carrier ($25)","Your Profit"]} rows={Object.values(ana.brkByAg).map(a=>[<strong>{a.name}</strong>,<strong>{a.total}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{a.newMed}</span>,<span style={{color:"#3B8FD9",fontWeight:700}}>{a.switched}</span>,<span style={{color:"var(--t3)",fontWeight:700}}>{a.sameCar}</span>,<strong style={{color:"#22C55E"}}>{money(a.refProfit)}</strong>])}/>
+<div style={{marginTop:12,padding:10,background:"var(--hover)",borderRadius:8,fontSize:12,color:"var(--t2)"}}>{"You earn $"+BROKER_REF_NEW+" per new-to-Medicare, $"+BROKER_REF_SWITCH+" per carrier switch, and $"+BROKER_REF_SAME+" per same-carrier plan change from broker sales."}</div>
 </Crd>
 </div>}
 {/* Agent list */}
@@ -418,8 +448,8 @@ return(
 <div style={{fontWeight:700,color:"#22C55E"}}>{u.role==="broker"?u.inf:"\u2014"}</div>
 <div style={{fontWeight:700,color:"#EF4444"}}>{u.role==="broker"?u.dr:"\u2014"}</div>
 <div style={{fontWeight:700,color:"#22C55E"}}>{u.role==="admin"?money(ana.projInit):money(u.pc)}</div>
-<div style={{fontWeight:700,color:(u.role==="heap"||u.role==="broker")?"#3B8FD9":"#F97316"}}>{u.role==="admin"?money(ana.totalProfit):money(u.ap)}</div>
-<div style={{fontSize:12}}>{u.role==="heap"?("FE: "+money(u.heapFrontEnd||0)+" / BE: "+money(u.heapBackEnd||0)):u.role==="broker"?"Broker formula":"Admin"}</div>
+<div style={{fontWeight:700,color:(u.role==="heap"||u.role==="broker")?"#3B8FD9":"#F97316"}}>{u.role==="admin"?money(ana.totalProfit):u.role==="heap"||u.role==="broker"?money(u.ap):"\u2014"}</div>
+<div style={{fontSize:12}}>{u.role==="heap"?("FE: "+money(u.heapFrontEnd||0)+" / BE: "+money(u.heapBackEnd||0)):u.role==="broker"?"Broker formula":u.role==="admin"?"Prod + Overrides":"—"}</div>
 <div style={{display:"flex",gap:6}}>
 <button onClick={()=>{setSelAgent(u.uid);setTab("analytics")}} style={{...bO,fontSize:11,padding:"4px 10px"}}>{"\uD83D\uDCCA"}</button>
 {u.role!=="admin"&&<button onClick={()=>setEditAgent({...u})} style={{...bO,fontSize:11,padding:"4px 10px"}}>{"\u270F\uFE0F"}</button>}
@@ -497,9 +527,13 @@ return(
 <div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
 <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Role</label>
 <select value={editAgent.role} onChange={e=>setEditAgent(p=>({...p,role:e.target.value}))} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="broker">Broker</option><option value="heap">HEAP</option></select></div>
+{editAgent.role==="broker"&&<div style={{display:"flex",alignItems:"center",gap:10,padding:12,background:editAgent.isOwner?"#EFF6FF":"var(--hover)",borderRadius:10,border:"1px solid "+(editAgent.isOwner?"#3B8FD9":"var(--border)"),cursor:"pointer"}} onClick={()=>setEditAgent(p=>({...p,isOwner:!p.isOwner}))}>
+<div style={{width:20,height:20,borderRadius:6,border:"2px solid "+(editAgent.isOwner?"#3B8FD9":"var(--border)"),background:editAgent.isOwner?"#3B8FD9":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{editAgent.isOwner&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>{"\u2713"}</span>}</div>
+<div><div style={{fontSize:13,fontWeight:600}}>This is my production account</div><div style={{fontSize:11,color:"var(--t3)"}}>Merges into admin stats, no $25/$50 override</div></div>
+</div>}
 {editAgent.role==="heap"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End Pay ($)</label><input type="number" value={editAgent.heapFrontEnd||""} onChange={e=>setEditAgent(p=>({...p,heapFrontEnd:e.target.value}))} style={{...inp,marginTop:4}}/></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End Pay ($)</label><input type="number" value={editAgent.heapBackEnd||""} onChange={e=>setEditAgent(p=>({...p,heapBackEnd:e.target.value}))} style={{...inp,marginTop:4}}/></div></>}
 </div>
-<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setEditAgent(null)} style={bO}>Cancel</button><button onClick={()=>updAg(editAgent.uid,{role:editAgent.role,heapFrontEnd:editAgent.heapFrontEnd||"0",heapBackEnd:editAgent.heapBackEnd||"0"})} style={bP}>Save</button></div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setEditAgent(null)} style={bO}>Cancel</button><button onClick={()=>updAg(editAgent.uid,{role:editAgent.role,heapFrontEnd:editAgent.heapFrontEnd||"0",heapBackEnd:editAgent.heapBackEnd||"0",isOwner:!!editAgent.isOwner})} style={bP}>Save</button></div>
 </Mdl>}
 
 </div>);
