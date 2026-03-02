@@ -49,7 +49,7 @@ const TRANS={active:["paid","inactive","neverInEffect"],paid:["inactive","active
 const ROLES=["master","ceo","director","manager","agent"];
 const ROLE_LABELS={master:"Master Admin",ceo:"CEO",director:"Director",manager:"Manager",agent:"Agent"};
 const ROLE_COLORS={master:"#EF4444",ceo:"#8B5CF6",director:"#3B8FD9",manager:"#F97316",agent:"#22C55E"};
-const canCreateRole=r=>r==="master"||r==="admin"||r==="ceo"||r==="director"||r==="manager";
+const canCreateRole=r=>r==="admin";
 const roleIdx=r=>ROLES.indexOf(r);
 const rolesBelow=r=>ROLES.slice(roleIdx(r)+1);
 
@@ -57,12 +57,12 @@ const getUplineChain=(uid,team)=>{const chain=[];let cur=uid;const visited=new S
 const getDownlineSet=(uid,team)=>{const result=new Set();const q=[uid];while(q.length>0){const cur=q.shift();team.forEach(u=>{if(u.recruitedBy===cur&&!result.has(u.uid)){result.add(u.uid);q.push(u.uid)}})}return result};
 const getDirectReports=(uid,team)=>team.filter(u=>u.recruitedBy===uid);
 const canSeeClient=(viewerUid,viewerRole,client,sellingAgent,team)=>{
-  if(viewerRole==="master"||viewerRole==="admin")return true;
+  if(viewerRole==="admin")return true;
   if(client.agentId===viewerUid)return true;
   const upline=getUplineChain(client.agentId,team);
   if(!upline.includes(viewerUid))return false;
-  if(sellingAgent?.agentType==="heap"){if(client.status==="heapArchived")return false;if(client.effectiveDate&&((d)=>{const e=new Date(d+"T00:00:00"),n=new Date();return(n.getFullYear()-e.getFullYear())*12+(n.getMonth()-e.getMonth())})(client.effectiveDate)>=4)return false;return true}
-  if(sellingAgent?.agentType==="broker"){return client.status==="active"||client.status==="paid"}
+  if(sellingAgent?.role==="heap"){if(client.status==="heapArchived")return false;if(client.effectiveDate&&((d)=>{const e=new Date(d+"T00:00:00"),n=new Date();return(n.getFullYear()-e.getFullYear())*12+(n.getMonth()-e.getMonth())})(client.effectiveDate)>=4)return false;return true}
+  if(sellingAgent?.role==="broker"){return client.status==="active"||client.status==="paid"}
   return true};
 const getOverrideAmt=(uplineUser,agentUid,type)=>{const ov=uplineUser?.overrides;if(!ov||!ov[agentUid])return 0;return parseFloat(ov[agentUid][type])||0};
 
@@ -112,7 +112,7 @@ const Mdl=({children,onClose,title,subtitle,width=560})=><div onClick={onClose} 
 /* ═══════════ LOGIN ═══════════ */
 function LoginScreen(){
 const[em,setEm]=useState("");const[pw,setPw]=useState("");const[err,setErr]=useState("");const[ld,setLd]=useState(false);const[mode,setMode]=useState("login");
-const go=async()=>{setErr("");setLd(true);try{if(mode==="setup"){const cr=await auth.createUserWithEmailAndPassword(em,pw);await db.collection("users").doc(cr.user.uid).set({email:em,displayName:"Master Admin",role:"master",agentType:"broker",recruitedBy:null,overrides:{},createdAt:firebase.firestore.FieldValue.serverTimestamp()})}else{await auth.signInWithEmailAndPassword(em,pw)}}catch(e){setErr(e.code==="auth/invalid-credential"?"Invalid email or password":e.message)}setLd(false)};
+const go=async()=>{setErr("");setLd(true);try{if(mode==="setup"){const cr=await auth.createUserWithEmailAndPassword(em,pw);await db.collection("users").doc(cr.user.uid).set({email:em,displayName:"Admin",role:"admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()})}else{await auth.signInWithEmailAndPassword(em,pw)}}catch(e){setErr(e.code==="auth/invalid-credential"?"Invalid email or password":e.message)}setLd(false)};
 const sty={width:"100%",padding:"12px 16px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:14,fontFamily:"var(--font)",background:"#fff",color:"#0F172A",outline:"none"};
 return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#EFF6FF,#F5F7FA,#EFF6FF)",padding:20}}>
 <div style={{background:"#fff",borderRadius:20,padding:40,maxWidth:420,width:"100%",boxShadow:"0 8px 32px rgba(0,0,0,.08)",border:"1px solid #E2E8F0"}}>
@@ -137,10 +137,10 @@ return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justify
 
 /* ═══════════ MAIN APP ═══════════ */
 function Tracker({cu,up}){
-const isMaster=up?.role==="master"||up?.role==="admin";
+const isMaster=up?.role==="admin";
 const isA=isMaster;
 const canManage=canCreateRole(up?.role);
-const myRole=up?.role||"agent";
+
 const[dark,setDark]=useState(false);
 const[sideOpen,setSideOpen]=useState(false);
 const[tab,setTab]=useState("dashboard");
@@ -165,7 +165,7 @@ const[showMU,setShowMU]=useState(false);const[mf,setMf]=useState("");const[mv,se
 const[revMode,setRevMode]=useState(false);const[revIdx,setRevIdx]=useState(0);const[revTally,setRevTally]=useState({active:0,paid:0,inactive:0,skipped:0});
 const[showReorder,setShowReorder]=useState(false);const[reoRaw,setReoRaw]=useState("");const[reoStep,setReoStep]=useState(1);const[reoMatches,setReoMatches]=useState([]);
 const[showCU,setShowCU]=useState(false);
-const[nu,setNu]=useState({email:"",password:"",displayName:"",role:"agent",agentType:"broker",heapFrontEnd:"",heapBackEnd:""});
+const[nu,setNu]=useState({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});
 const[cuErr,setCuErr]=useState("");
 const[selAgent,setSelAgent]=useState("all");
 const[editAgent,setEditAgent]=useState(null);
@@ -194,7 +194,7 @@ useEffect(()=>{const un=db.collection("users").onSnapshot(s=>setTeam(s.docs.map(
 /* Auto-archive HEAP 4+ months */
 useEffect(()=>{
 if(!cls.length||!team.length||archRef.current)return;
-const hIds=new Set(team.filter(u=>u.agentType==="heap").map(u=>u.uid));
+const hIds=new Set(team.filter(u=>u.role==="heap").map(u=>u.uid));
 const arch=cls.filter(c=>hIds.has(c.agentId)&&(c.status==="active"||c.status==="paid")&&canArchive(c));
 if(arch.length>0){archRef.current=true;const b=db.batch();arch.forEach(c=>b.update(db.collection("clients").doc(c.id),{status:"heapArchived",heapArchived:true}));b.commit().then(()=>{archRef.current=false})}
 },[cls,team]);
@@ -213,7 +213,7 @@ const byS=useMemo(()=>{const r={active:[],paid:[],inactive:[],chargedBack:[],nev
 const book=useMemo(()=>disp.filter(c=>c.status==="active"||c.status==="paid"),[disp]);
 const isPend=c=>c.effectiveDate&&new Date(c.effectiveDate+"T00:00:00")>new Date();
 
-const getComm=c=>{const ag=team.find(u=>u.uid===c.agentId);if(ag?.agentType==="heap")return calcHeap(ag);return calcInit(c.effectiveDate,c.electionPeriod)};
+const getComm=c=>{const ag=team.find(u=>u.uid===c.agentId);if(ag?.role==="heap")return calcHeap(ag);return calcInit(c.effectiveDate,c.electionPeriod)};
 
 /* ═══════════ OVERRIDE INCOME ═══════════ */
 const overrideIncome=useMemo(()=>{
@@ -227,14 +227,14 @@ const overrideIncome=useMemo(()=>{
     const isOB=c.status==="active"||c.status==="paid";const isComp=c.status==="heapArchived";const isEarned=isComp||canArchive(c);
     const ag=team.find(u=>u.uid===agId);
     if(!byAgent[agId])byAgent[agId]={name:ag?.displayName||"Unknown",fe:0,be:0,clients:0};
-    if(ag?.agentType==="heap"){if(isOB||isComp){totalFE+=feR;byAgent[agId].fe+=feR;byAgent[agId].clients++;if(isEarned){totalBE+=beR;byAgent[agId].be+=beR}}}
+    if(ag?.role==="heap"){if(isOB||isComp){totalFE+=feR;byAgent[agId].fe+=feR;byAgent[agId].clients++;if(isEarned){totalBE+=beR;byAgent[agId].be+=beR}}}
     else{if(isOB){totalFE+=feR;totalBE+=beR;byAgent[agId].fe+=feR;byAgent[agId].be+=beR;byAgent[agId].clients++}}
   });
   return{totalFE,totalBE,total:totalFE+totalBE,byAgent};
 },[cls,team,cu.uid,myDownline]);
 
 /* CRUD */
-const save=async d=>{const nc=normClient({...d,agentId:d.agentId||cu.uid});if(!nc.commissionAmount&&nc.effectiveDate&&up?.agentType!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));if(nc.id){const id=nc.id;delete nc.id;await db.collection("clients").doc(id).update(nc);return id}else{delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:new Date().toISOString(),user:up?.displayName||"System",action:"created",detail:"Client added"}];const ref=await db.collection("clients").add(nc);return ref.id}};
+const save=async d=>{const nc=normClient({...d,agentId:d.agentId||cu.uid});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));if(nc.id){const id=nc.id;delete nc.id;await db.collection("clients").doc(id).update(nc);return id}else{delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:new Date().toISOString(),user:up?.displayName||"System",action:"created",detail:"Client added"}];const ref=await db.collection("clients").add(nc);return ref.id}};
 const del=async id=>{await db.collection("clients").doc(id).delete();setVc(null);flash("Deleted");setConfirm2(null)};
 const upd=async(id,u)=>db.collection("clients").doc(id).update(u);
 
@@ -246,11 +246,11 @@ const openEd=c=>{setForm({...c});setEditId(c.id);setShowAdd(true)};
 const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);if(editId){logAct(editId,"edited","Client details updated")}flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
 
 /* Status */
-const openSC=(c,ns)=>{const ag=team.find(u=>u.uid===c.agentId);const ca=ag?.agentType==="heap"?String(calcHeap(ag)):(c.commissionAmount||String(calcInit(c.effectiveDate,c.electionPeriod)));setStForm({ns,commAmt:ca,paidDate:c.paidDate||td(),cbDate:c.chargebackDate||td(),cbAmt:c.chargebackAmount||ca||"",cancelMo:"",note:""});setShowSt(c)};
+const openSC=(c,ns)=>{const ag=team.find(u=>u.uid===c.agentId);const ca=ag?.role==="heap"?String(calcHeap(ag)):(c.commissionAmount||String(calcInit(c.effectiveDate,c.electionPeriod)));setStForm({ns,commAmt:ca,paidDate:c.paidDate||td(),cbDate:c.chargebackDate||td(),cbAmt:c.chargebackAmount||ca||"",cancelMo:"",note:""});setShowSt(c)};
 const doSC=async()=>{const c=showSt,ns=stForm.ns;const u={status:ns,statusNote:stForm.note||c.statusNote||""};if(ns==="paid"){u.commissionAmount=stForm.commAmt;u.paidDate=stForm.paidDate||td()}if(ns==="inactive"){u.inactiveDate=td();u.cancelMonth=stForm.cancelMo||""}if(ns==="chargedBack"){u.chargebackDate=stForm.cbDate||td();u.chargebackAmount=stForm.cbAmt}if(ns==="neverInEffect"){u.inactiveDate=td();u.cancelMonth=""}if(ns==="active"&&(c.status==="inactive"||c.status==="chargedBack"))u.lastVerified=td();await upd(c.id,u);logAct(c.id,"status","Status: "+ST[c.status]?.label+" \u2192 "+ST[ns]?.label+(stForm.note?" \u2014 "+stForm.note:""));flash(c.fullName+" \u2192 "+ST[ns].label);setShowSt(null);setVc(null)};
 
 /* Create user */
-const doCU=async()=>{setCuErr("");try{const cr=await secAuth.createUserWithEmailAndPassword(nu.email,nu.password);await secAuth.signOut();const ud={email:nu.email,displayName:nu.displayName,role:nu.role,agentType:nu.agentType,recruitedBy:cu.uid,overrides:{},createdBy:cu.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()};if(nu.agentType==="heap"){ud.heapFrontEnd=nu.heapFrontEnd||"0";ud.heapBackEnd=nu.heapBackEnd||"0"}await db.collection("users").doc(cr.user.uid).set(ud);flash("Created "+nu.displayName+"!");setShowCU(false);setNu({email:"",password:"",displayName:"",role:"agent",agentType:"broker",heapFrontEnd:"",heapBackEnd:""})}catch(e){setCuErr(e.message)}};
+const doCU=async()=>{setCuErr("");try{const cr=await secAuth.createUserWithEmailAndPassword(nu.email,nu.password);await secAuth.signOut();const ud={email:nu.email,displayName:nu.displayName,role:nu.role||"broker",createdBy:cu.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()};if(nu.role==="heap"){ud.heapFrontEnd=nu.heapFrontEnd||"0";ud.heapBackEnd=nu.heapBackEnd||"0"}await db.collection("users").doc(cr.user.uid).set(ud);flash("Created "+nu.displayName+"!");setShowCU(false);setNu({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""})}catch(e){setCuErr(e.message)}};
 const updAg=async(uid,u)=>{await db.collection("users").doc(uid).update(u);flash("Updated");setEditAgent(null)};
 const saveOverrides=async(targetUid,fe,be)=>{const key="overrides."+targetUid;await db.collection("users").doc(cu.uid).update({[key]:{fe:String(fe),be:String(be)}});flash("Override saved!")};
 
