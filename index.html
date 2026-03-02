@@ -136,6 +136,8 @@ const[stForm,setStForm]=useState({});
 const[showSt,setShowSt]=useState(null);
 const[confirm2,setConfirm2]=useState(null);
 const[showMU,setShowMU]=useState(false);const[mf,setMf]=useState("");const[mv,setMv]=useState("");
+const[revMode,setRevMode]=useState(false);const[revIdx,setRevIdx]=useState(0);const[revTally,setRevTally]=useState({active:0,paid:0,inactive:0,skipped:0});
+const[showReorder,setShowReorder]=useState(false);const[reoRaw,setReoRaw]=useState("");const[reoStep,setReoStep]=useState(1);const[reoMatches,setReoMatches]=useState([]);
 const[showCU,setShowCU]=useState(false);
 const[nu,setNu]=useState({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});
 const[cuErr,setCuErr]=useState("");
@@ -207,8 +209,20 @@ const dedup=async()=>{const seen=new Map();const dupes=[];cls.forEach(c=>{const 
 /* Transfer admin clients to another agent */
 const transferClients=async(toUid)=>{const mine=cls.filter(c=>c.agentId===cu.uid);if(mine.length===0){flash("No clients to transfer");return}const b=db.batch();mine.forEach(c=>b.update(db.collection("clients").doc(c.id),{agentId:toUid}));await b.commit();flash("Transferred "+mine.length+" clients!")};
 
+/* Monthly Review Mode */
+const revClients=useMemo(()=>disp.filter(c=>c.status==="active"||c.status==="paid"),[disp]);
+const startReview=()=>{setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skipped:0});setRevMode(true)};
+const revAction=async(action)=>{const c=revClients[revIdx];if(!c)return;const t={...revTally};if(action==="active"){await upd(c.id,{lastVerified:td()});t.active++}else if(action==="paid"){await upd(c.id,{status:"paid",paidDate:td(),lastVerified:td()});t.paid++}else if(action==="inactive"){await upd(c.id,{status:"inactive",inactiveDate:td()});t.inactive++}else{t.skipped++}setRevTally(t);if(revIdx+1>=revClients.length){setRevMode(false);flash("Review complete! "+t.active+" active, "+t.paid+" paid, "+t.inactive+" inactive, "+t.skipped+" skipped")}else setRevIdx(revIdx+1)};
+
+/* Mass Update */
+const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}const targets=disp;const b=db.batch();targets.forEach(c=>b.update(db.collection("clients").doc(c.id),{[mf]:mv}));await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("")};
+
+/* Reorder by pasted names */
+const parseReorder=()=>{const names=reoRaw.split("\n").map(n=>n.trim()).filter(Boolean);const matches=names.map(n=>{const found=disp.find(c=>c.fullName?.toLowerCase()===n.toLowerCase());return{name:n,matched:!!found,id:found?.id}});setReoMatches(matches);setReoStep(2)};
+const applyReorder=async()=>{const matched=reoMatches.filter(m=>m.matched);const matchedIds=new Set(matched.map(m=>m.id));const ordered=[...matched.map(m=>disp.find(c=>c.id===m.id)),...disp.filter(c=>!matchedIds.has(c.id))];const b=db.batch();ordered.forEach((c,i)=>{if(c)b.update(db.collection("clients").doc(c.id),{sortOrder:i})});await b.commit();flash("Reordered "+matched.length+" clients!");setShowReorder(false);setReoRaw("");setReoStep(1)};
+
 /* Filters */
-const applyF=useCallback(list=>{let f=[...list];if(search){const s=search.toLowerCase(),sd2=s.replace(/\D/g,"");f=f.filter(c=>(c.fullName?.toLowerCase().includes(s))||(c.phone&&c.phone.replace(/\D/g,"").includes(sd2))||(c.email?.toLowerCase().includes(s))||(c.mailingAddress?.toLowerCase().includes(s))||(c.city?.toLowerCase().includes(s))||(c.zipCode?.includes(s))||(c.mbiNumber?.toLowerCase().includes(s))||(c.carrier?.toLowerCase().includes(s))||(c.planName?.toLowerCase().includes(s))||(c.statusNote?.toLowerCase().includes(s)))}if(stFilt!=="all")f=f.filter(c=>c.status===stFilt);Object.entries(flt).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v)});if(sf!=="custom")f.sort((a,b)=>{const av=a[sf]||"",bv=b[sf]||"";return sd==="asc"?(av<bv?-1:1):(av>bv?-1:1)});return f},[search,stFilt,flt,sf,sd]);
+const applyF=useCallback(list=>{let f=[...list];if(search){const s=search.toLowerCase(),sd2=s.replace(/\D/g,"");f=f.filter(c=>(c.fullName?.toLowerCase().includes(s))||(c.phone&&c.phone.replace(/\D/g,"").includes(sd2))||(c.email?.toLowerCase().includes(s))||(c.mailingAddress?.toLowerCase().includes(s))||(c.city?.toLowerCase().includes(s))||(c.zipCode?.includes(s))||(c.mbiNumber?.toLowerCase().includes(s))||(c.carrier?.toLowerCase().includes(s))||(c.planName?.toLowerCase().includes(s))||(c.statusNote?.toLowerCase().includes(s)))}if(stFilt!=="all")f=f.filter(c=>c.status===stFilt);Object.entries(flt).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v)});if(sf==="custom"){f.sort((a,b)=>(a.sortOrder!=null&&b.sortOrder!=null)?(a.sortOrder-b.sortOrder):0)}else{f.sort((a,b)=>{const av=a[sf]||"",bv=b[sf]||"";return sd==="asc"?(av<bv?-1:1):(av>bv?-1:1)})}return f},[search,stFilt,flt,sf,sd]);
 const uniV=useCallback((f,l)=>[...new Set(l.map(c=>c[f]).filter(Boolean))].sort(),[]);
 const cntV=useCallback((f,v,l)=>l.filter(c=>c[f]===v).length,[]);
 const qSave=async(id,f2,v)=>{await upd(id,{[f2]:v});setQe(null);flash("Updated")};
@@ -328,6 +342,9 @@ return(
 <button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:20}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
 <button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:12}}>{"\uD83D\uDCCB Import"}</button>
 {isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:12}}>{"\uD83E\uDDF9 Dedup"}</button>}
+<button onClick={startReview} style={{...bO,fontSize:12,borderColor:revClients.length>0?"#8B5CF6":"var(--border)",color:revClients.length>0?"#8B5CF6":"var(--t3)"}}>{"\uD83D\uDCCB Review ("+revClients.length+")"}</button>
+<button onClick={()=>setShowMU(true)} style={{...bO,fontSize:12}}>{"\u26A1 Mass Update"}</button>
+<button onClick={()=>{setReoRaw("");setReoStep(1);setShowReorder(true)}} style={{...bO,fontSize:12}}>{"\uD83D\uDD00 Reorder"}</button>
 <button onClick={()=>{resetF();setShowAdd(true)}} style={bP}>+ Add Client</button>
 <button onClick={()=>auth.signOut()} style={{...bO,fontSize:12,borderColor:"#EF4444",color:"#EF4444"}}>Sign Out</button>
 </div></header>
@@ -444,6 +461,34 @@ return(
 <div style={{marginTop:12,padding:10,background:"var(--hover)",borderRadius:8,fontSize:12,color:"var(--t2)"}}>{"You earn $"+BROKER_REF_NEW+" per new-to-Medicare, $"+BROKER_REF_SWITCH+" per carrier switch, and $"+BROKER_REF_SAME+" per same-carrier plan change from broker sales."}</div>
 </Crd>
 </div>}
+{/* Agent Performance Comparison */}
+{agS.filter(u=>u.role!=="admin").length>0&&<div style={{marginBottom:20}}>
+<Crd title={"\uD83C\uDFC6 Agent Performance Comparison"}>
+<MT headers={["Agent","Role","Clients","In Force","Dropped","Retention","Avg Commission","Total Commission","Your Profit"]} rows={agS.filter(u=>u.role!=="admin").map(a=>{
+const ret=a.tot>0?pct(a.inf,a.tot):"0%";
+const avgC=a.inf>0?money(a.pc/a.inf):"$0";
+return[
+<strong>{a.displayName}</strong>,
+<Badge color={a.role==="heap"?"#F97316":"#22C55E"}>{a.role}</Badge>,
+<strong>{a.tot}</strong>,
+<span style={{color:"#22C55E",fontWeight:700}}>{a.inf}</span>,
+<span style={{color:"#EF4444",fontWeight:700}}>{a.dr}</span>,
+<span style={{fontWeight:800,color:a.tot>0&&a.inf/a.tot>=.85?"#22C55E":a.tot>0&&a.inf/a.tot>=.7?"#F59E0B":"#EF4444"}}>{ret}</span>,
+avgC,
+<strong style={{color:"#22C55E"}}>{money(a.pc)}</strong>,
+<strong style={{color:"#3B8FD9"}}>{money(a.ap)}</strong>
+]})}/>
+{agS.filter(u=>u.role!=="admin").length>=2&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
+{(()=>{const agents=agS.filter(u=>u.role!=="admin"&&u.tot>0);if(agents.length===0)return null;const topProd=agents.sort((a,b)=>b.tot-a.tot)[0];const topRet=agents.filter(a=>a.tot>=3).sort((a,b)=>(b.inf/b.tot)-(a.inf/a.tot))[0];const topComm=agents.sort((a,b)=>b.pc-a.pc)[0];const topProfit=agents.sort((a,b)=>b.ap-a.ap)[0];
+return<>
+{topProd&&<div style={{padding:12,background:"var(--hover)",borderRadius:10,textAlign:"center"}}><div style={{fontSize:20}}>{"\uD83C\uDFC5"}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Most Production</div><div style={{fontSize:14,fontWeight:800,marginTop:2}}>{topProd.displayName}</div><div style={{fontSize:12,color:"var(--t2)"}}>{topProd.tot+" clients"}</div></div>}
+{topRet&&<div style={{padding:12,background:"var(--hover)",borderRadius:10,textAlign:"center"}}><div style={{fontSize:20}}>{"\uD83D\uDEE1\uFE0F"}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Best Retention</div><div style={{fontSize:14,fontWeight:800,marginTop:2}}>{topRet.displayName}</div><div style={{fontSize:12,color:"var(--t2)"}}>{pct(topRet.inf,topRet.tot)}</div></div>}
+{topComm&&<div style={{padding:12,background:"var(--hover)",borderRadius:10,textAlign:"center"}}><div style={{fontSize:20}}>{"\uD83D\uDCB0"}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Top Commission</div><div style={{fontSize:14,fontWeight:800,marginTop:2}}>{topComm.displayName}</div><div style={{fontSize:12,color:"var(--t2)"}}>{money(topComm.pc)}</div></div>}
+{topProfit&&topProfit.ap>0&&<div style={{padding:12,background:"var(--hover)",borderRadius:10,textAlign:"center"}}><div style={{fontSize:20}}>{"\uD83D\uDCB5"}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Top Profit (You)</div><div style={{fontSize:14,fontWeight:800,marginTop:2}}>{topProfit.displayName}</div><div style={{fontSize:12,color:"var(--t2)"}}>{money(topProfit.ap)}</div></div>}
+</>})()}
+</div>}
+</Crd>
+</div>}
 {/* Agent list */}
 <div style={{display:"flex",flexDirection:"column",gap:8}}>
 <div style={{display:"grid",gridTemplateColumns:"1.5fr .7fr .5fr .5fr .5fr .7fr .7fr 1fr .5fr",gap:10,padding:"8px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.8}}><div>Name</div><div>Role</div><div>Clients</div><div>In Force</div><div>Dropped</div><div>Commission</div><div>Your Profit</div><div>Pay</div><div>Actions</div></div>
@@ -540,6 +585,80 @@ return(
 {editAgent.role==="heap"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End Pay ($)</label><input type="number" value={editAgent.heapFrontEnd||""} onChange={e=>setEditAgent(p=>({...p,heapFrontEnd:e.target.value}))} style={{...inp,marginTop:4}}/></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End Pay ($)</label><input type="number" value={editAgent.heapBackEnd||""} onChange={e=>setEditAgent(p=>({...p,heapBackEnd:e.target.value}))} style={{...inp,marginTop:4}}/></div></>}
 </div>
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setEditAgent(null)} style={bO}>Cancel</button><button onClick={()=>updAg(editAgent.uid,{role:editAgent.role,heapFrontEnd:editAgent.heapFrontEnd||"0",heapBackEnd:editAgent.heapBackEnd||"0",isOwner:!!editAgent.isOwner})} style={bP}>Save</button></div>
+</Mdl>}
+
+{/* REVIEW MODE OVERLAY */}
+{revMode&&(()=>{const c=revClients[revIdx];if(!c)return null;const pct2=revClients.length>0?((revIdx)/revClients.length*100).toFixed(0):0;const st=ST[c.status]||ST.active;const ago=c.lastVerified?daysBtwn(c.lastVerified,td()):null;const overdue=ago&&ago>=30;
+return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fadeIn .15s",padding:20}}>
+<div style={{background:"var(--card)",borderRadius:20,width:"100%",maxWidth:600,boxShadow:"0 20px 60px rgba(0,0,0,.3)",border:"1px solid var(--border)",overflow:"hidden"}}>
+{/* Progress bar */}
+<div style={{height:4,background:"var(--border)"}}><div style={{height:"100%",background:"#3B8FD9",width:pct2+"%",transition:"width .3s"}}/></div>
+<div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div><div style={{fontSize:18,fontWeight:800}}>{"\uD83D\uDCCB Monthly Review"}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{(revIdx+1)+" of "+revClients.length}</div></div>
+<div style={{display:"flex",gap:8,alignItems:"center"}}>
+<div style={{display:"flex",gap:6,fontSize:11}}>
+<span style={{color:"#22C55E",fontWeight:700}}>{"\u2705 "+revTally.active}</span>
+<span style={{color:"#3B8FD9",fontWeight:700}}>{"\uD83D\uDCB0 "+revTally.paid}</span>
+<span style={{color:"#F59E0B",fontWeight:700}}>{"\u26A0\uFE0F "+revTally.inactive}</span>
+<span style={{color:"var(--t3)",fontWeight:700}}>{"\u23ED "+revTally.skipped}</span>
+</div>
+<button onClick={()=>setRevMode(false)} style={{...bO,fontSize:12,padding:"6px 12px"}}>{"\u2715 Exit"}</button>
+</div></div>
+<div style={{padding:24}}>
+<div style={{textAlign:"center",marginBottom:20}}>
+<div style={{fontSize:24,fontWeight:800,marginBottom:4}}>{c.fullName}</div>
+<Badge color={st.color}>{st.icon+" "+st.label}</Badge>
+{overdue&&<span style={{marginLeft:8}}><Badge color="#F59E0B">{"\u26A0\uFE0F "+ago+"d since check"}</Badge></span>}
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>MBI Number</div><div style={{fontSize:18,fontWeight:800,marginTop:4,letterSpacing:1}}>{c.mbiNumber||"\u2014"}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Carrier / Plan</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtCar(c.carrier)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{c.planName||"\u2014"}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Effective</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmt(c.effectiveDate)}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Phone</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtPh(c.phone)}</div></div>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
+<button onClick={()=>revAction("active")} style={{padding:14,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u2705"}</div><div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginTop:4}}>Still Active</div></button>
+<button onClick={()=>revAction("paid")} style={{padding:14,borderRadius:12,border:"2px solid #3B8FD9",background:"#3B8FD910",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\uD83D\uDCB0"}</div><div style={{fontSize:11,fontWeight:700,color:"#3B8FD9",marginTop:4}}>Mark Paid</div></button>
+<button onClick={()=>revAction("inactive")} style={{padding:14,borderRadius:12,border:"2px solid #F59E0B",background:"#F59E0B10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u26A0\uFE0F"}</div><div style={{fontSize:11,fontWeight:700,color:"#F59E0B",marginTop:4}}>Gone Inactive</div></button>
+<button onClick={()=>revAction("skip")} style={{padding:14,borderRadius:12,border:"2px solid var(--border)",background:"var(--hover)",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u23ED"}</div><div style={{fontSize:11,fontWeight:700,color:"var(--t3)",marginTop:4}}>Skip</div></button>
+</div>
+</div></div></div>})()}
+
+{/* MASS UPDATE MODAL */}
+{showMU&&<Mdl onClose={()=>setShowMU(false)} width={480} title={"\u26A1 Mass Update"} subtitle={disp.length+" clients will be updated"}>
+<div style={{padding:24,display:"flex",flexDirection:"column",gap:16}}>
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Field to update</label>
+<select value={mf} onChange={e=>{setMf(e.target.value);setMv("")}} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select field...</option>
+<option value="hospitalIndemnity">Hospital Indemnity</option><option value="planType">Plan Type</option><option value="medicaidLevel">Medicaid Level</option><option value="carrier">Carrier</option><option value="electionPeriod">Election Period</option><option value="state">State</option><option value="previousCarrier">Previous Carrier</option>
+</select></div>
+{mf&&<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>New value</label>
+<select value={mv} onChange={e=>setMv(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select value...</option>
+{(FIELDS.find(f=>f.key===mf)?.options||[]).map(o=><option key={o} value={o}>{o}</option>)}
+</select></div>}
+{mf&&mv&&<div style={{padding:12,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:10,fontSize:13,color:"#92400E"}}>{"This will set "+mf+" to \""+mv+"\" on all "+disp.length+" visible clients."}</div>}
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowMU(false)} style={bO}>Cancel</button><button onClick={doMU} disabled={!mf||!mv} style={{...bP,opacity:mf&&mv?1:.4}}>Update All</button></div>
+</Mdl>}
+
+{/* REORDER MODAL */}
+{showReorder&&<Mdl onClose={()=>setShowReorder(false)} width={600} title={"\uD83D\uDD00 Reorder Clients"} subtitle={"Step "+reoStep+" of 2"}>
+{reoStep===1&&<div style={{padding:24}}><div style={{fontSize:13,color:"var(--t2)",marginBottom:12}}>Paste a column of client names from your spreadsheet. Matched clients will be reordered to this sequence.</div><textarea value={reoRaw} onChange={e=>setReoRaw(e.target.value)} placeholder={"John Smith\nJane Doe\nBob Wilson\n..."} style={{...inp,height:200,resize:"vertical",fontFamily:"monospace",fontSize:12}}/></div>}
+{reoStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}>
+<div style={{display:"flex",gap:10,marginBottom:16}}>
+<div style={{padding:"8px 14px",borderRadius:8,background:"#F0FDF4",border:"1px solid #BBF7D0",fontSize:13}}><strong style={{color:"#22C55E"}}>{reoMatches.filter(m=>m.matched).length}</strong>{" matched"}</div>
+<div style={{padding:"8px 14px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:13}}><strong style={{color:"#EF4444"}}>{reoMatches.filter(m=>!m.matched).length}</strong>{" not found"}</div>
+</div>
+{reoMatches.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,background:m.matched?"#F0FDF4":"#FEF2F2",border:"1px solid "+(m.matched?"#BBF7D0":"#FECACA"),marginBottom:4}}>
+<span style={{fontSize:12,fontWeight:700,color:"var(--t3)",width:24}}>{i+1}</span>
+<span style={{fontSize:13,fontWeight:600,flex:1}}>{m.name}</span>
+<span style={{fontSize:11,fontWeight:700,color:m.matched?"#22C55E":"#EF4444"}}>{m.matched?"\u2713 Matched":"\u2717 Not found"}</span>
+</div>)}
+</div>}
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
+<button onClick={()=>{if(reoStep===1)setShowReorder(false);else setReoStep(1)}} style={bO}>{reoStep===1?"Cancel":"\u2190 Back"}</button>
+{reoStep===1&&<button onClick={parseReorder} disabled={!reoRaw.trim()} style={{...bP,opacity:reoRaw.trim()?1:.4}}>{"Preview \u2192"}</button>}
+{reoStep===2&&<button onClick={applyReorder} disabled={reoMatches.filter(m=>m.matched).length===0} style={{...bP,opacity:reoMatches.filter(m=>m.matched).length>0?1:.4}}>{"Apply Order ("+reoMatches.filter(m=>m.matched).length+")"}</button>}
+</div>
 </Mdl>}
 
 </div>);
