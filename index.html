@@ -162,7 +162,7 @@ const[stForm,setStForm]=useState({});
 const[showSt,setShowSt]=useState(null);
 const[confirm2,setConfirm2]=useState(null);
 const[showMU,setShowMU]=useState(false);const[mf,setMf]=useState("");const[mv,setMv]=useState("");const[muSel,setMuSel]=useState(new Set());
-const[revMode,setRevMode]=useState(false);const[revPass,setRevPass]=useState(1);const[revIdx,setRevIdx]=useState(0);const[revTally,setRevTally]=useState({active:0,paid:0,inactive:0,skipped:0});
+const[revMode,setRevMode]=useState(false);const[revPass,setRevPass]=useState(1);const[revIdx,setRevIdx]=useState(0);const[revTally,setRevTally]=useState({active:0,paid:0,inactive:0,skipped:0,noEnroll:0,diffPlan:0});
 const[showReorder,setShowReorder]=useState(false);const[reoRaw,setReoRaw]=useState("");const[reoStep,setReoStep]=useState(1);const[reoMatches,setReoMatches]=useState([]);
 const[showCU,setShowCU]=useState(false);
 const[nu,setNu]=useState({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});
@@ -273,11 +273,13 @@ const revClients=useMemo(()=>{
 if(revPass===1)return disp.filter(c=>c.status==="active"||c.status==="paid");
 return disp.filter(c=>c.status==="active"&&c.lastVerified===td());
 },[disp,revPass]);
-const startReview=(pass)=>{setRevPass(pass||1);setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skipped:0});setRevMode(true)};
+const startReview=(pass)=>{setRevPass(pass||1);setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skipped:0,noEnroll:0,diffPlan:0});setRevMode(true)};
 const revAction=async(action)=>{const c=revClients[revIdx];if(!c)return;const t={...revTally};
 if(revPass===1){
 if(action==="active"){await upd(c.id,{lastVerified:td()});logAct(c.id,"verified","MARX check \u2014 still on book");t.active++}
 else if(action==="inactive"){await upd(c.id,{status:"inactive",inactiveDate:td()});logAct(c.id,"status","MARX check \u2014 left book");t.inactive++}
+else if(action==="noEnroll"){await upd(c.id,{status:"neverInEffect",statusNote:"Plan didn't enroll \u2014 call back"});logAct(c.id,"status","MARX check \u2014 plan didn't enroll");t.noEnroll++}
+else if(action==="diffPlan"){await upd(c.id,{statusNote:"Enrolled in different plan \u2014 needs follow up",lastVerified:td()});logAct(c.id,"verified","MARX check \u2014 enrolled different plan");t.diffPlan++}
 else{t.skipped++}
 }else{
 if(action==="paid"){await upd(c.id,{status:"paid",paidDate:td(),commissionAmount:String(getComm(c))});logAct(c.id,"status","Payment check \u2014 paid");t.paid++}
@@ -286,7 +288,7 @@ else{t.skipped++}
 }
 setRevTally(t);
 if(revIdx+1>=revClients.length){setRevMode(false);
-if(revPass===1){const leftCount=t.inactive;const stillCount=t.active;flash("MARX done! "+stillCount+" on book, "+leftCount+" left. Ready for payment check!");
+if(revPass===1){flash("MARX done! "+t.active+" on book, "+t.inactive+" left, "+t.noEnroll+" didn't enroll, "+t.diffPlan+" diff plan");
 }else{flash("Payment check done! "+t.paid+" paid, "+t.active+" not yet, "+t.skipped+" skipped")}
 }else setRevIdx(revIdx+1)};
 
@@ -726,7 +728,7 @@ return<>
 
 {/* REVIEW MODE OVERLAY */}
 {revMode&&(()=>{const c=revClients[revIdx];if(!c)return null;const pct2=revClients.length>0?((revIdx)/revClients.length*100).toFixed(0):0;const st=ST[c.status]||ST.active;const ago=c.lastVerified?daysBtwn(c.lastVerified,td()):null;const overdue=ago&&ago>=30;
-return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fadeIn .15s",padding:20}} onKeyDown={e=>{if(revPass===1){if(e.key==="1")revAction("active");else if(e.key==="2")revAction("inactive");else if(e.key==="3"||e.key===" ")revAction("skip")}else{if(e.key==="1")revAction("paid");else if(e.key==="2")revAction("active");else if(e.key==="3"||e.key===" ")revAction("skip")}if(e.key==="Escape")setRevMode(false)}} tabIndex={0} ref={el=>{if(el)el.focus()}}>
+return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fadeIn .15s",padding:20}} onKeyDown={e=>{if(revPass===1){if(e.key==="1")revAction("active");else if(e.key==="2")revAction("inactive");else if(e.key==="3")revAction("noEnroll");else if(e.key==="4")revAction("diffPlan");else if(e.key==="5"||e.key===" ")revAction("skip")}else{if(e.key==="1")revAction("paid");else if(e.key==="2")revAction("active");else if(e.key==="3"||e.key===" ")revAction("skip")}if(e.key==="Escape")setRevMode(false)}} tabIndex={0} ref={el=>{if(el)el.focus()}}>
 <div style={{background:"var(--card)",borderRadius:20,width:"100%",maxWidth:600,boxShadow:"0 20px 60px rgba(0,0,0,.3)",border:"1px solid var(--border)",overflow:"hidden"}}>
 {/* Progress bar */}
 <div style={{height:4,background:"var(--border)"}}><div style={{height:"100%",background:revPass===1?"#8B5CF6":"#3B8FD9",width:pct2+"%",transition:"width .3s"}}/></div>
@@ -737,6 +739,8 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 {revPass===1?<>
 <span style={{color:"#22C55E",fontWeight:700}}>{"\u2705 "+revTally.active}</span>
 <span style={{color:"#EF4444",fontWeight:700}}>{"\u274C "+revTally.inactive}</span>
+<span style={{color:"#94A3B8",fontWeight:700}}>{"\u26D4 "+revTally.noEnroll}</span>
+<span style={{color:"#F97316",fontWeight:700}}>{"\uD83D\uDD04 "+revTally.diffPlan}</span>
 <span style={{color:"var(--t3)",fontWeight:700}}>{"\u23ED "+revTally.skipped}</span>
 </>:<>
 <span style={{color:"#3B8FD9",fontWeight:700}}>{"\uD83D\uDCB0 "+revTally.paid}</span>
@@ -760,10 +764,12 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Phone</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtPh(c.phone)}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>State</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{c.state||"\u2014"}</div></div>
 </div>
-{revPass===1?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-<button onClick={()=>revAction("active")} style={{padding:16,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\u2705"}</div><div style={{fontSize:13,fontWeight:700,color:"#22C55E",marginTop:4}}>On Book</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 1</div></button>
-<button onClick={()=>revAction("inactive")} style={{padding:16,borderRadius:12,border:"2px solid #EF4444",background:"#EF444410",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\u274C"}</div><div style={{fontSize:13,fontWeight:700,color:"#EF4444",marginTop:4}}>Left Book</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 2</div></button>
-<button onClick={()=>revAction("skip")} style={{padding:16,borderRadius:12,border:"2px solid var(--border)",background:"var(--hover)",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\u23ED"}</div><div style={{fontSize:13,fontWeight:700,color:"var(--t3)",marginTop:4}}>Skip</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 3</div></button>
+{revPass===1?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8}}>
+<button onClick={()=>revAction("active")} style={{padding:12,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\u2705"}</div><div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginTop:4}}>On Book</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 1</div></button>
+<button onClick={()=>revAction("inactive")} style={{padding:12,borderRadius:12,border:"2px solid #EF4444",background:"#EF444410",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\u274C"}</div><div style={{fontSize:11,fontWeight:700,color:"#EF4444",marginTop:4}}>Left Book</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 2</div></button>
+<button onClick={()=>revAction("noEnroll")} style={{padding:12,borderRadius:12,border:"2px solid #94A3B8",background:"#94A3B810",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\u26D4"}</div><div style={{fontSize:11,fontWeight:700,color:"#94A3B8",marginTop:4}}>Didn't Enroll</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 3</div></button>
+<button onClick={()=>revAction("diffPlan")} style={{padding:12,borderRadius:12,border:"2px solid #F97316",background:"#F9731610",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\uD83D\uDD04"}</div><div style={{fontSize:11,fontWeight:700,color:"#F97316",marginTop:4}}>Diff Plan</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 4</div></button>
+<button onClick={()=>revAction("skip")} style={{padding:12,borderRadius:12,border:"2px solid var(--border)",background:"var(--hover)",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\u23ED"}</div><div style={{fontSize:11,fontWeight:700,color:"var(--t3)",marginTop:4}}>Skip</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 5</div></button>
 </div>
 :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
 <button onClick={()=>revAction("paid")} style={{padding:16,borderRadius:12,border:"2px solid #3B8FD9",background:"#3B8FD910",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\uD83D\uDCB0"}</div><div style={{fontSize:13,fontWeight:700,color:"#3B8FD9",marginTop:4}}>Got Paid</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 1</div></button>
