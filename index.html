@@ -162,7 +162,7 @@ const[stForm,setStForm]=useState({});
 const[showSt,setShowSt]=useState(null);
 const[confirm2,setConfirm2]=useState(null);
 const[showMU,setShowMU]=useState(false);const[mf,setMf]=useState("");const[mv,setMv]=useState("");const[muSel,setMuSel]=useState(new Set());
-const[revMode,setRevMode]=useState(false);const[revIdx,setRevIdx]=useState(0);const[revTally,setRevTally]=useState({active:0,paid:0,inactive:0,skipped:0});
+const[revMode,setRevMode]=useState(false);const[revPass,setRevPass]=useState(1);const[revIdx,setRevIdx]=useState(0);const[revTally,setRevTally]=useState({active:0,paid:0,inactive:0,skipped:0});
 const[showReorder,setShowReorder]=useState(false);const[reoRaw,setReoRaw]=useState("");const[reoStep,setReoStep]=useState(1);const[reoMatches,setReoMatches]=useState([]);
 const[showCU,setShowCU]=useState(false);
 const[nu,setNu]=useState({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});
@@ -269,9 +269,26 @@ const sendPwReset=async(email)=>{try{await auth.sendPasswordResetEmail(email);fl
 const toggleAgent=async(uid,disabled)=>{await db.collection("users").doc(uid).update({disabled:!disabled});flash(disabled?"Account enabled":"Account disabled")};
 
 /* Monthly Review Mode */
-const revClients=useMemo(()=>disp.filter(c=>c.status==="active"||c.status==="paid"),[disp]);
-const startReview=()=>{setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skipped:0});setRevMode(true)};
-const revAction=async(action)=>{const c=revClients[revIdx];if(!c)return;const t={...revTally};if(action==="active"){await upd(c.id,{lastVerified:td()});logAct(c.id,"verified","MARX check \u2014 still active");t.active++}else if(action==="paid"){await upd(c.id,{status:"paid",paidDate:td(),lastVerified:td()});logAct(c.id,"status","Review: Active \u2192 Paid");t.paid++}else if(action==="inactive"){await upd(c.id,{status:"inactive",inactiveDate:td()});logAct(c.id,"status","Review: Active \u2192 Inactive");t.inactive++}else{t.skipped++}setRevTally(t);if(revIdx+1>=revClients.length){setRevMode(false);flash("Review complete! "+t.active+" active, "+t.paid+" paid, "+t.inactive+" inactive, "+t.skipped+" skipped")}else setRevIdx(revIdx+1)};
+const revClients=useMemo(()=>{
+if(revPass===1)return disp.filter(c=>c.status==="active"||c.status==="paid");
+return disp.filter(c=>c.status==="active"&&c.lastVerified===td());
+},[disp,revPass]);
+const startReview=(pass)=>{setRevPass(pass||1);setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skipped:0});setRevMode(true)};
+const revAction=async(action)=>{const c=revClients[revIdx];if(!c)return;const t={...revTally};
+if(revPass===1){
+if(action==="active"){await upd(c.id,{lastVerified:td()});logAct(c.id,"verified","MARX check \u2014 still on book");t.active++}
+else if(action==="inactive"){await upd(c.id,{status:"inactive",inactiveDate:td()});logAct(c.id,"status","MARX check \u2014 left book");t.inactive++}
+else{t.skipped++}
+}else{
+if(action==="paid"){await upd(c.id,{status:"paid",paidDate:td(),commissionAmount:String(getComm(c))});logAct(c.id,"status","Payment check \u2014 paid");t.paid++}
+else if(action==="active"){t.active++}
+else{t.skipped++}
+}
+setRevTally(t);
+if(revIdx+1>=revClients.length){setRevMode(false);
+if(revPass===1){const leftCount=t.inactive;const stillCount=t.active;flash("MARX done! "+stillCount+" on book, "+leftCount+" left. Ready for payment check!");
+}else{flash("Payment check done! "+t.paid+" paid, "+t.active+" not yet, "+t.skipped+" skipped")}
+}else setRevIdx(revIdx+1)};
 
 /* Mass Update */
 const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}if(muSel.size===0){flash("Select at least one client","error");return}const targets=disp.filter(c=>muSel.has(c.id));const fl=FIELDS.find(f=>f.key===mf)?.label||mf;const b=db.batch();targets.forEach(c=>{b.update(db.collection("clients").doc(c.id),{[mf]:mv,activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:"mass_update",detail:fl+": "+(c[mf]||"empty")+" \u2192 "+mv})})});await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("");setMuSel(new Set())};
@@ -405,7 +422,8 @@ return(
 <button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:4}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
 <button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCCB Import"}</button>
 {isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83E\uDDF9 Dedup"}</button>}
-<button onClick={startReview} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:revClients.length>0?"#8B5CF6":"var(--border)",color:revClients.length>0?"#8B5CF6":"var(--t3)"}}>{"\uD83D\uDCCB "+revClients.length}</button>
+<button onClick={()=>startReview(1)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#8B5CF6",color:"#8B5CF6"}}>{"\uD83D\uDD0D MARX"}</button>
+<button onClick={()=>startReview(2)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDCB0 Payments"}</button>
 <button onClick={()=>{setMuSel(new Set(disp.map(c=>c.id)));setMf("");setMv("");setShowMU(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\u26A1"}</button>
 <button onClick={()=>{setReoRaw("");setReoStep(1);setShowReorder(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDD00"}</button>
 <button onClick={()=>{resetF();setShowAdd(true)}} style={{...bP,fontSize:12,padding:"8px 14px"}}>+ Add</button>
@@ -457,7 +475,13 @@ return(
 </div>}
 
 {tab==="book"&&<div style={{animation:"slideUp .3s"}}>
-<div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>{book.length+" active clients"}</p></div>
+<div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+<div><h1 style={{fontSize:24,fontWeight:800}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>{book.length+" active clients"}</p></div>
+<div style={{display:"flex",gap:8}}>
+<button onClick={()=>startReview(1)} style={{padding:"10px 18px",borderRadius:10,border:"2px solid #8B5CF6",background:"#8B5CF610",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:700,color:"#8B5CF6"}}>{"\uD83D\uDD0D Step 1: MARX Check"}</button>
+<button onClick={()=>startReview(2)} style={{padding:"10px 18px",borderRadius:10,border:"2px solid #3B8FD9",background:"#3B8FD910",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:700,color:"#3B8FD9"}}>{"\uD83D\uDCB0 Step 2: Payment Check"}</button>
+</div>
+</div>
 {renderFilt(book)}
 {(()=>{const fl=applyF(book);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}>No clients match</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length+" shown"}</div>{colH}{fl.map(c=>renderRow(c,true))}</div>})()}
 </div>}
@@ -702,18 +726,23 @@ return<>
 
 {/* REVIEW MODE OVERLAY */}
 {revMode&&(()=>{const c=revClients[revIdx];if(!c)return null;const pct2=revClients.length>0?((revIdx)/revClients.length*100).toFixed(0):0;const st=ST[c.status]||ST.active;const ago=c.lastVerified?daysBtwn(c.lastVerified,td()):null;const overdue=ago&&ago>=30;
-return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fadeIn .15s",padding:20}}>
+return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fadeIn .15s",padding:20}} onKeyDown={e=>{if(revPass===1){if(e.key==="1")revAction("active");else if(e.key==="2")revAction("inactive");else if(e.key==="3"||e.key===" ")revAction("skip")}else{if(e.key==="1")revAction("paid");else if(e.key==="2")revAction("active");else if(e.key==="3"||e.key===" ")revAction("skip")}if(e.key==="Escape")setRevMode(false)}} tabIndex={0} ref={el=>{if(el)el.focus()}}>
 <div style={{background:"var(--card)",borderRadius:20,width:"100%",maxWidth:600,boxShadow:"0 20px 60px rgba(0,0,0,.3)",border:"1px solid var(--border)",overflow:"hidden"}}>
 {/* Progress bar */}
-<div style={{height:4,background:"var(--border)"}}><div style={{height:"100%",background:"#3B8FD9",width:pct2+"%",transition:"width .3s"}}/></div>
+<div style={{height:4,background:"var(--border)"}}><div style={{height:"100%",background:revPass===1?"#8B5CF6":"#3B8FD9",width:pct2+"%",transition:"width .3s"}}/></div>
 <div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-<div><div style={{fontSize:18,fontWeight:800}}>{"\uD83D\uDCCB Monthly Review"}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{(revIdx+1)+" of "+revClients.length}</div></div>
+<div><div style={{fontSize:18,fontWeight:800}}>{revPass===1?"\uD83D\uDD0D MARX Check":"\uD83D\uDCB0 Payment Check"}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{(revIdx+1)+" of "+revClients.length}</div></div>
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
 <div style={{display:"flex",gap:6,fontSize:11}}>
+{revPass===1?<>
 <span style={{color:"#22C55E",fontWeight:700}}>{"\u2705 "+revTally.active}</span>
-<span style={{color:"#3B8FD9",fontWeight:700}}>{"\uD83D\uDCB0 "+revTally.paid}</span>
-<span style={{color:"#F59E0B",fontWeight:700}}>{"\u26A0\uFE0F "+revTally.inactive}</span>
+<span style={{color:"#EF4444",fontWeight:700}}>{"\u274C "+revTally.inactive}</span>
 <span style={{color:"var(--t3)",fontWeight:700}}>{"\u23ED "+revTally.skipped}</span>
+</>:<>
+<span style={{color:"#3B8FD9",fontWeight:700}}>{"\uD83D\uDCB0 "+revTally.paid}</span>
+<span style={{color:"#F59E0B",fontWeight:700}}>{"\u23F3 "+revTally.active}</span>
+<span style={{color:"var(--t3)",fontWeight:700}}>{"\u23ED "+revTally.skipped}</span>
+</>}
 </div>
 <button onClick={()=>setRevMode(false)} style={{...bO,fontSize:12,padding:"6px 12px"}}>{"\u2715 Exit"}</button>
 </div></div>
@@ -721,20 +750,26 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 <div style={{textAlign:"center",marginBottom:20}}>
 <div style={{fontSize:24,fontWeight:800,marginBottom:4}}>{c.fullName}</div>
 <Badge color={st.color}>{st.icon+" "+st.label}</Badge>
-{overdue&&<span style={{marginLeft:8}}><Badge color="#F59E0B">{"\u26A0\uFE0F "+ago+"d since check"}</Badge></span>}
+{ago!=null&&<span style={{marginLeft:8}}><Badge color={overdue?"#F59E0B":"#94A3B8"}>{ago!=null?(overdue?"\u26A0\uFE0F "+ago+"d ago":"Last: "+fmt(c.lastVerified)):""}</Badge></span>}
 </div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
-<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>MBI Number</div><div style={{fontSize:18,fontWeight:800,marginTop:4,letterSpacing:1}}>{c.mbiNumber||"\u2014"}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>MBI Number</div><div style={{fontSize:18,fontWeight:800,marginTop:4,letterSpacing:1,userSelect:"all"}}>{c.mbiNumber||"\u2014"}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Carrier / Plan</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtCar(c.carrier)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{c.planName||"\u2014"}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Effective</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmt(c.effectiveDate)}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Commission</div><div style={{fontSize:14,fontWeight:600,marginTop:4,color:"#22C55E"}}>{money(getComm(c))}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Phone</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtPh(c.phone)}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>State</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{c.state||"\u2014"}</div></div>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
-<button onClick={()=>revAction("active")} style={{padding:14,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u2705"}</div><div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginTop:4}}>Still Active</div></button>
-<button onClick={()=>revAction("paid")} style={{padding:14,borderRadius:12,border:"2px solid #3B8FD9",background:"#3B8FD910",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\uD83D\uDCB0"}</div><div style={{fontSize:11,fontWeight:700,color:"#3B8FD9",marginTop:4}}>Mark Paid</div></button>
-<button onClick={()=>revAction("inactive")} style={{padding:14,borderRadius:12,border:"2px solid #F59E0B",background:"#F59E0B10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u26A0\uFE0F"}</div><div style={{fontSize:11,fontWeight:700,color:"#F59E0B",marginTop:4}}>Gone Inactive</div></button>
-<button onClick={()=>revAction("skip")} style={{padding:14,borderRadius:12,border:"2px solid var(--border)",background:"var(--hover)",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u23ED"}</div><div style={{fontSize:11,fontWeight:700,color:"var(--t3)",marginTop:4}}>Skip</div></button>
+{revPass===1?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+<button onClick={()=>revAction("active")} style={{padding:16,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\u2705"}</div><div style={{fontSize:13,fontWeight:700,color:"#22C55E",marginTop:4}}>On Book</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 1</div></button>
+<button onClick={()=>revAction("inactive")} style={{padding:16,borderRadius:12,border:"2px solid #EF4444",background:"#EF444410",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\u274C"}</div><div style={{fontSize:13,fontWeight:700,color:"#EF4444",marginTop:4}}>Left Book</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 2</div></button>
+<button onClick={()=>revAction("skip")} style={{padding:16,borderRadius:12,border:"2px solid var(--border)",background:"var(--hover)",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\u23ED"}</div><div style={{fontSize:13,fontWeight:700,color:"var(--t3)",marginTop:4}}>Skip</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 3</div></button>
 </div>
+:<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+<button onClick={()=>revAction("paid")} style={{padding:16,borderRadius:12,border:"2px solid #3B8FD9",background:"#3B8FD910",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\uD83D\uDCB0"}</div><div style={{fontSize:13,fontWeight:700,color:"#3B8FD9",marginTop:4}}>Got Paid</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 1</div></button>
+<button onClick={()=>revAction("active")} style={{padding:16,borderRadius:12,border:"2px solid #F59E0B",background:"#F59E0B10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\u23F3"}</div><div style={{fontSize:13,fontWeight:700,color:"#F59E0B",marginTop:4}}>Not Yet</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 2</div></button>
+<button onClick={()=>revAction("skip")} style={{padding:16,borderRadius:12,border:"2px solid var(--border)",background:"var(--hover)",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:28}}>{"\u23ED"}</div><div style={{fontSize:13,fontWeight:700,color:"var(--t3)",marginTop:4}}>Skip</div><div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Press 3</div></button>
+</div>}
 </div></div></div>})()}
 
 {/* MASS UPDATE MODAL */}
