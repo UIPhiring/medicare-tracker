@@ -1,618 +1,788 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UIP Medicare Sales Tracker</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚕️</text></svg>">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <style>
-    html, body, #root { margin: 0; padding: 0; height: 100%; }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>UIP Medicare Sales Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--font:'Inter',sans-serif;--bg:#F5F7FA;--card:#fff;--text:#0F172A;--t2:#475569;--t3:#94A3B8;--border:#E2E8F0;--accent:#3B8FD9;--bar:#F1F5F9;--cs:0 1px 3px rgba(0,0,0,.04);--hover:#F8FAFC;--tabBg:#EFF6FF}
+.dark{--bg:#0F172A;--card:#1E293B;--text:#F1F5F9;--t2:#94A3B8;--t3:#64748B;--border:#334155;--bar:#1E293B;--cs:0 1px 3px rgba(0,0,0,.3);--hover:#334155;--tabBg:#1E3A5F}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+input,select,textarea{font-family:var(--font)}
+</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-const { useState, useEffect, useMemo, useCallback } = React;
+<div id="root"></div>
+<script>window.onerror=function(m,s,l,c,e){document.getElementById("root").innerHTML='<pre style="padding:40px;color:#EF4444;font-size:14px;white-space:pre-wrap;background:#1E293B;min-height:100vh">ERROR: '+m+'\nLine: '+l+' Col: '+c+'\n'+(e&&e.stack||'')+'</pre>';return true};</script>
+<script type="text/babel">
+const{useState,useEffect,useMemo,useCallback,useRef}=React;
 
-const FIELDS = [
-  { key: "applicationDate", label: "Application Date", type: "date" },
-  { key: "effectiveDate", label: "Effective Date", type: "date" },
-  { key: "fullName", label: "Full Name", type: "text" },
-  { key: "phone", label: "Phone", type: "tel" },
-  { key: "email", label: "Email", type: "email" },
-  { key: "dob", label: "Date of Birth", type: "date" },
-  { key: "mailingAddress", label: "Mailing Address", type: "text" },
-  { key: "zipCode", label: "Zip Code", type: "text" },
-  { key: "city", label: "City", type: "text" },
-  { key: "state", label: "State", type: "select", options: ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"] },
-  { key: "mbiNumber", label: "MBI Number", type: "text" },
-  { key: "electionPeriod", label: "Election Period", type: "select", options: ["AEP","OEP","SEP","IEP","ICEP"] },
-  { key: "medicaidNumber", label: "Medicaid Number", type: "text" },
-  { key: "medicaidLevel", label: "Medicaid Level", type: "select", options: ["None","QMB","SLMB","QI","QDWI","Full Medicaid"] },
-  { key: "planName", label: "New Plan Name", type: "text" },
-  { key: "carrier", label: "Carrier", type: "select", options: ["Aetna","Anthem","Cigna","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Devoted Health","Clover Health","Alignment Health","Oscar Health","Other"] },
-  { key: "hospitalIndemnity", label: "Hospital Indemnity", type: "select", options: ["Yes","No"] },
-  { key: "sunfireCode", label: "Sunfire Personal Code", type: "text" },
-];
+/* ═══════════ FIREBASE ═══════════ */
+const fbCfg={apiKey:"AIzaSyB2sP2fRpap3fbbyi7g7oNCAFXXFkzGBPo",authDomain:"uip-tracker-77729.firebaseapp.com",projectId:"uip-tracker-77729",storageBucket:"uip-tracker-77729.firebasestorage.app",messagingSenderId:"388506730267",appId:"1:388506730267:web:ed1bb132a506c6cac29dbe"};
+firebase.initializeApp(fbCfg);
+const auth=firebase.auth(),db=firebase.firestore();
+let sec;try{sec=firebase.initializeApp(fbCfg,"Sec")}catch(e){sec=firebase.app("Sec")}
+const secAuth=sec.auth();
 
-const ST = {
-  active:        { label: "Active",          color: "#22C55E", icon: "✅", desc: "Enrolled — awaiting first commission" },
-  paid:          { label: "Paid",            color: "#3B8FD9", icon: "💰", desc: "Commission received — still on your book" },
-  inactive:      { label: "Inactive",        color: "#F59E0B", icon: "⚠️", desc: "Left your plan per MARX — pending chargeback" },
-  chargedBack:   { label: "Charged Back",    color: "#EF4444", icon: "💸", desc: "Chargeback has hit your commission" },
-  neverInEffect: { label: "Never in Effect", color: "#94A3B8", icon: "🚫", desc: "Never went active — pre-effective drop" },
-};
-// What you can change TO from each status
-const TRANSITIONS = {
-  active:        ["paid", "inactive", "neverInEffect"],
-  paid:          ["inactive", "active"],
-  inactive:      ["chargedBack", "active", "paid"],
-  chargedBack:   ["active"],
-  neverInEffect: ["active"],
-};
+/* ═══════════ CONSTANTS ═══════════ */
+const FIELDS=[
+{key:"fullName",label:"Full Name",type:"text"},{key:"phone",label:"Phone",type:"tel"},{key:"email",label:"Email",type:"email"},{key:"dob",label:"Date of Birth",type:"date"},{key:"applicationDate",label:"Application Date",type:"date"},{key:"effectiveDate",label:"Effective Date",type:"date"},{key:"mailingAddress",label:"Mailing Address",type:"text"},{key:"city",label:"City",type:"text"},
+{key:"state",label:"State",type:"select",options:["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"]},
+{key:"zipCode",label:"Zip Code",type:"text"},{key:"mbiNumber",label:"MBI Number",type:"text"},{key:"electionPeriod",label:"Election Period",type:"select",options:["AEP","OEP","SEP","IEP","ICEP"]},{key:"medicaidNumber",label:"Medicaid Number",type:"text"},{key:"medicaidLevel",label:"Medicaid Level",type:"select",options:["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"]},
+{key:"carrier",label:"Carrier",type:"select",options:["Aetna","Anthem","CarePlus","Cigna","Devoted Health","Freedom Health","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Clover Health","Alignment Health","Oscar Health","Other"]},
+{key:"planName",label:"Plan Name",type:"text"},{key:"planType",label:"Plan Type",type:"select",options:["MAPD","DSNP","CSNP","PDP","Medigap"]},{key:"previousCarrier",label:"Previous Carrier",type:"select",options:["None/New to Medicare","Aetna","Anthem","CarePlus","Cigna","Devoted Health","Freedom Health","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Clover Health","Alignment Health","Oscar Health","Other"]},{key:"hospitalIndemnity",label:"Hospital Indemnity",type:"select",options:["Yes","No"]},{key:"sunfireCode",label:"Sunfire Code",type:"text"}];
 
-const STORAGE_KEY = "uip-medicare-clients-v5";
-const fmt = d => { if (!d) return "—"; return new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
-const fmtPhone = p => { if (!p) return "—"; const c=p.replace(/\D/g,""); return c.length===10?`(${c.slice(0,3)}) ${c.slice(3,6)}-${c.slice(6)}`:p; };
-const money = n => "$"+(parseFloat(n)||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
-const pct = (n,d) => d===0?"0%":(n/d*100).toFixed(1)+"%";
-const monthKey = d => d?d.slice(0,7):null;
-const monthLabel = mk => { if(!mk) return "—"; return new Date(mk+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"2-digit"}); };
-const daysBetween = (a,b) => { if(!a||!b) return null; return Math.floor((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/(86400000)); };
-const today = () => new Date().toISOString().split("T")[0];
+const ST={active:{label:"Active",color:"#22C55E",icon:"\u2705",desc:"Enrolled"},paid:{label:"Paid",color:"#3B8FD9",icon:"\uD83D\uDCB0",desc:"Commission received"},inactive:{label:"Inactive",color:"#F59E0B",icon:"\u26A0\uFE0F",desc:"Left your plan"},chargedBack:{label:"Charged Back",color:"#EF4444",icon:"\uD83D\uDCB8",desc:"Chargeback hit"},neverInEffect:{label:"Never in Effect",color:"#94A3B8",icon:"\uD83D\uDEAB",desc:"Pre-effective drop"},heapArchived:{label:"Completed",color:"#6366F1",icon:"\u2714\uFE0F",desc:"4-month period completed"}};
+const TRANS={active:["paid","inactive","neverInEffect"],paid:["inactive","active"],inactive:["chargedBack","active","paid"],chargedBack:["active"],neverInEffect:["active"]};
 
-function Badge({children, color="var(--accent)", bg}) {
-  return <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,letterSpacing:0.6,background:bg||`${color}14`,color,textTransform:"uppercase"}}>{children}</span>;
-}
-function StatCard({label,value,sub,icon,color,small}) {
-  return <div style={{background:"var(--card)",borderRadius:12,padding:small?"14px 16px":"20px 24px",border:"1px solid var(--border)",flex:small?"1 1 140px":"1 1 180px",minWidth:small?130:170,boxShadow:"var(--cs)"}}>
-    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:small?8:12}}><span style={{fontSize:small?14:18}}>{icon}</span><span style={{fontSize:small?9:11,fontWeight:700,letterSpacing:0.8,textTransform:"uppercase",color:"var(--t3)"}}>{label}</span></div>
-    <div style={{fontSize:small?24:36,fontWeight:800,color:color||"var(--text)",lineHeight:1}}>{value}</div>
-    {sub&&<div style={{fontSize:small?10:12,color:"var(--t3)",marginTop:small?3:6}}>{sub}</div>}
-  </div>;
-}
-function BarChart({data, color="#3B8FD9", maxBars=8}) {
-  const s=data.slice(0,maxBars); const mx=Math.max(...s.map(d=>d[1]),1);
-  return <div style={{display:"flex",flexDirection:"column",gap:6}}>{s.map(([l,v])=><div key={l} style={{display:"flex",alignItems:"center",gap:10}}>
-    <div style={{width:95,fontSize:12,textAlign:"right",color:"var(--t2)",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</div>
-    <div style={{flex:1,background:"var(--bar-track)",borderRadius:6,height:26,overflow:"hidden"}}><div style={{height:"100%",borderRadius:6,background:color,width:`${(v/mx)*100}%`,transition:"width 0.5s",display:"flex",alignItems:"center",paddingLeft:8,fontSize:11,fontWeight:700,color:"#fff",minWidth:32}}>{typeof v==="number"&&v>999?money(v):v}</div></div>
-  </div>)}</div>;
-}
-function MiniTable({headers,rows,emptyMsg}) {
-  return <div style={{borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-    <thead><tr style={{background:"var(--bg-hover)"}}>{headers.map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontWeight:700,color:"var(--t3)",fontSize:10,textTransform:"uppercase",letterSpacing:0.6,borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead>
-    <tbody>{rows.length===0?<tr><td colSpan={headers.length} style={{padding:20,textAlign:"center",color:"var(--t3)"}}>{emptyMsg||"No data"}</td></tr>:rows.map((r,i)=><tr key={i} style={{background:i%2?"var(--bg-hover)":"transparent"}}>{r.map((c,j)=><td key={j} style={{padding:"8px 12px",borderBottom:"1px solid var(--border)"}}>{c}</td>)}</tr>)}</tbody>
-  </table></div>;
-}
-function Card({title,icon,children,span}) {
-  return <div style={{background:"var(--card)",borderRadius:12,padding:22,border:"1px solid var(--border)",boxShadow:"var(--cs)",gridColumn:span||"auto"}}>
-    {title&&<div style={{fontSize:14,fontWeight:700,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>{icon&&<span style={{fontSize:16}}>{icon}</span>}{title}</div>}{children}
-  </div>;
-}
-function Modal({children,onClose,width=700,title,subtitle}) {
-  return <div style={{position:"fixed",inset:0,background:"var(--overlay)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:200,padding:"36px 14px",overflowY:"auto",animation:"fadeIn 0.2s"}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:"var(--card)",borderRadius:16,width,maxWidth:"100%",border:"1px solid var(--border)",boxShadow:"var(--shadow)",animation:"slideUp 0.25s"}}>
-      <div style={{padding:"18px 24px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div><div style={{fontSize:18,fontWeight:700}}>{title}</div>{subtitle&&<div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{subtitle}</div>}</div>
-        <button onClick={onClose} style={{width:30,height:30,borderRadius:8,border:"1px solid var(--border)",background:"var(--bg)",cursor:"pointer",fontSize:14,color:"var(--t2)",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-      </div>{children}
-    </div>
-  </div>;
-}
+/* ═══════════ ROLES & HIERARCHY ═══════════ */
+const ROLES=["master","ceo","director","manager","agent"];
+const ROLE_LABELS={master:"Master Admin",ceo:"CEO",director:"Director",manager:"Manager",agent:"Agent"};
+const ROLE_COLORS={master:"#EF4444",ceo:"#8B5CF6",director:"#3B8FD9",manager:"#F97316",agent:"#22C55E"};
+const canCreateRole=r=>r==="master"||r==="admin"||r==="ceo"||r==="director"||r==="manager";
+const roleIdx=r=>ROLES.indexOf(r);
+const rolesBelow=r=>ROLES.slice(roleIdx(r)+1);
 
-// ═══════════════════════════════════════
-function MedicareTracker() {
-  const [dark, setDark] = useState(false);
-  const [tab, setTab] = useState("dashboard");
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({});
-  const [editId, setEditId] = useState(null);
-  const [filters, setFilters] = useState({});
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [viewClient, setViewClient] = useState(null);
-  const [showStatusModal, setShowStatusModal] = useState(null);
-  const [statusForm, setStatusForm] = useState({});
-  const [sortField, setSortField] = useState("applicationDate");
-  const [sortDir, setSortDir] = useState("desc");
-  const [toast, setToast] = useState(null);
-  const [confirmAction, setConfirmAction] = useState(null);
-  const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkStep, setBulkStep] = useState(1);
-  const [bulkRaw, setBulkRaw] = useState("");
-  const [bulkHeaders, setBulkHeaders] = useState([]);
-  const [bulkRows, setBulkRows] = useState([]);
-  const [bulkMapping, setBulkMapping] = useState({});
-  const [statusFilter, setStatusFilter] = useState("all");
-  // Monthly review
-  const [reviewMode, setReviewMode] = useState(false);
-  const [reviewIdx, setReviewIdx] = useState(0);
-  const [reviewList, setReviewList] = useState([]);
-  const [reviewDone, setReviewDone] = useState([]);
-  const [reviewSubAction, setReviewSubAction] = useState(null);
-  const [tempAmount, setTempAmount] = useState("");
-  const [tempNote, setTempNote] = useState("");
+const getUplineChain=(uid,team)=>{const chain=[];let cur=uid;const visited=new Set();while(cur){visited.add(cur);const u=team.find(t=>t.uid===cur);if(!u||!u.recruitedBy||visited.has(u.recruitedBy))break;chain.push(u.recruitedBy);cur=u.recruitedBy}return chain};
+const getDownlineSet=(uid,team)=>{const result=new Set();const q=[uid];while(q.length>0){const cur=q.shift();team.forEach(u=>{if(u.recruitedBy===cur&&!result.has(u.uid)){result.add(u.uid);q.push(u.uid)}})}return result};
+const getDirectReports=(uid,team)=>team.filter(u=>u.recruitedBy===uid);
+const canSeeClient=(viewerUid,viewerRole,client,sellingAgent,team)=>{
+  if(viewerRole==="master"||viewerRole==="admin")return true;
+  if(client.agentId===viewerUid)return true;
+  const upline=getUplineChain(client.agentId,team);
+  if(!upline.includes(viewerUid))return false;
+  if(sellingAgent?.agentType==="heap"){if(client.status==="heapArchived")return false;if(client.effectiveDate&&((d)=>{const e=new Date(d+"T00:00:00"),n=new Date();return(n.getFullYear()-e.getFullYear())*12+(n.getMonth()-e.getMonth())})(client.effectiveDate)>=4)return false;return true}
+  if(sellingAgent?.agentType==="broker"){return client.status==="active"||client.status==="paid"}
+  return true};
+const getOverrideAmt=(uplineUser,agentUid,type)=>{const ov=uplineUser?.overrides;if(!ov||!ov[agentUid])return 0;return parseFloat(ov[agentUid][type])||0};
 
-  // Storage
-  useEffect(() => {
-    let m=true;
-    const load = async () => {
-      try { const r=localStorage.getItem(STORAGE_KEY); if(m&&r) setClients(JSON.parse(r)); } catch(e){}
-      // migrate from v4/v3
-      for (const oldKey of ["uip-medicare-clients-v4","uip-medicare-clients-v3"]) {
-        try {
-          if(true){
-            const cur = { value: localStorage.getItem(STORAGE_KEY) };
-            if(cur&&cur.value) break;
-            const old={ value: localStorage.getItem(oldKey) };
-            if(m&&old&&old.value){
-              const migrated=JSON.parse(old.value).map(c=>({...c, status:c.status==="former"?"neverInEffect":(c.status||"active"), lastVerified:"", commissionAmount:c.commissionAmount||"", paidDate:c.paidDate||"", inactiveDate:"", chargebackDate:c.chargebackDate||"", chargebackAmount:c.chargebackAmount||"", statusNote:c.statusNote||"" }));
-              setClients(migrated); localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated)); break;
-            }
-          }
-        } catch(e){}
-      }
-      if(m) setLoading(false);
-    };
-    const t=setTimeout(()=>{if(m)setLoading(false);},2000); load(); return ()=>{m=false;clearTimeout(t);};
-  }, []);
+/* ═══════════ UTILS ═══════════ */
+const fmt=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"\u2014";
+const fmtPh=p=>{if(!p)return"\u2014";const c=p.replace(/\D/g,"");const d=c.length>=11&&c[0]==="1"?c.slice(1):c;return d.length===10?"("+d.slice(0,3)+") "+d.slice(3,6)+"-"+d.slice(6):p};
+const CN={"uhc":"UnitedHealthcare","united healthcare":"UnitedHealthcare","unitedhealthcare":"UnitedHealthcare","freedom":"Freedom Health","freedom health":"Freedom Health","careplus":"CarePlus","care plus":"CarePlus","devoted":"Devoted Health","devoted health":"Devoted Health","wellcare":"WellCare","humana":"Humana","aetna":"Aetna"};
+const fmtCar=c=>c?(CN[c.toLowerCase()]||c):"\u2014";
+const money=n=>"$"+(parseFloat(n)||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
+const pct=(n,d)=>d===0?"0%":(n/d*100).toFixed(1)+"%";
+const appMK=d=>{if(!d)return null;const dt=new Date(d+"T00:00:00");dt.setMonth(dt.getMonth()-1);return dt.toISOString().slice(0,7)};
+const mLabel=mk=>mk?new Date(mk+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"2-digit"}):"\u2014";
+const daysBtwn=(a,b)=>a&&b?Math.floor((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/864e5):null;
+const td=()=>new Date().toISOString().split("T")[0];
+const MOS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const effMoFromApp=m=>m===11?0:m+1;
+const CC={"humana":"#22C55E","careplus":"#22C55E","unitedhealthcare":"#3B82F6","aetna":"#EC4899","devoted health":"#F97316","freedom health":"#EAB308"};
+const getCC=c=>{if(!c)return"#78716C";const k=c.trim().toLowerCase();return CC[k]||CC[k.replace(/ health$/,"")]||"#78716C"};
 
-  const save = useCallback(async nc => { setClients(nc); try{localStorage.setItem(STORAGE_KEY,JSON.stringify(nc));}catch(e){} }, []);
-  const showToast = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
+/* Commission: Broker */
+const calcInit=(eff,ep)=>{if(!eff)return 0;const m=new Date(eff+"T00:00:00").getMonth();const b=347-(29*m);return ep==="IEP"?b*2:b};
+const calcResMo=(eff,as)=>{if(!eff)return 0;const y=new Date(eff+"T00:00:00").getFullYear();const rs=new Date(y+1,0,1);const n=as?new Date(as+"T00:00:00"):new Date();if(n<rs)return 0;return(n.getFullYear()-rs.getFullYear())*12+(n.getMonth()-rs.getMonth())+1};
+const calcResEarned=(eff,as)=>calcResMo(eff,as)*29;
+const resStart=eff=>eff?"Jan "+(new Date(eff+"T00:00:00").getFullYear()+1):"\u2014";
 
-  const byStatus = useMemo(()=>{
-    const r={active:[],paid:[],inactive:[],chargedBack:[],neverInEffect:[]};
-    clients.forEach(c=>{if(r[c.status])r[c.status].push(c);else r.active.push(c);}); return r;
-  },[clients]);
+/* Commission: HEAP */
+const HEAP_FE=135,HEAP_BE=190,HEAP_TOT=325;
+const calcHeap=ag=>(parseFloat(ag?.heapFrontEnd)||0)+(parseFloat(ag?.heapBackEnd)||0);
+const heapMoPast=eff=>{if(!eff)return 0;const e=new Date(eff+"T00:00:00"),n=new Date();return(n.getFullYear()-e.getFullYear())*12+(n.getMonth()-e.getMonth())};
+const canArchive=c=>c.effectiveDate&&heapMoPast(c.effectiveDate)>=4;
 
-  const applyFilters = useCallback(list=>{
-    let f=[...list];
-    if(searchTerm){const s=searchTerm.toLowerCase();f=f.filter(c=>c.fullName?.toLowerCase().includes(s)||c.phone?.includes(s)||c.email?.toLowerCase().includes(s)||c.mbiNumber?.toLowerCase().includes(s)||c.city?.toLowerCase().includes(s)||c.carrier?.toLowerCase().includes(s));}
-    if(statusFilter&&statusFilter!=="all")f=f.filter(c=>c.status===statusFilter);
-    Object.entries(filters).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v);});
-    f.sort((a,b)=>{const av=a[sortField]||"",bv=b[sortField]||"";const c=av<bv?-1:av>bv?1:0;return sortDir==="asc"?c:-c;});
-    return f;
-  },[searchTerm,statusFilter,filters,sortField,sortDir]);
+/* Broker referral: Admin gets $50 if switched carriers, $25 if same carrier new plan */
+const BROKER_REF_SWITCH=50,BROKER_REF_SAME=25,BROKER_REF_NEW=100;
+const calcBrokerRef=(c)=>{if(!c.previousCarrier||c.previousCarrier==="None/New to Medicare")return BROKER_REF_NEW;const prev=fmtCar(c.previousCarrier).toLowerCase();const cur=fmtCar(c.carrier).toLowerCase();if(prev!==cur)return BROKER_REF_SWITCH;return BROKER_REF_SAME;};
 
-  const resetForm=()=>{setForm({});setEditId(null);};
-  const openAdd=()=>{resetForm();setShowAddModal(true);};
-  const openEdit=c=>{setForm({...c});setEditId(c.id);setShowAddModal(true);};
-  const handleSave=()=>{
-    if(!form.fullName?.trim()){showToast("Full Name required","error");return;}
-    if(editId){save(clients.map(c=>c.id===editId?{...form,id:editId}:c));showToast("Updated");}
-    else{save([...clients,{...form,id:Date.now().toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""}]);showToast("Client added");}
-    setShowAddModal(false);resetForm();
-  };
-  const deleteClient=id=>{save(clients.filter(c=>c.id!==id));setViewClient(null);showToast("Deleted");setConfirmAction(null);};
+const normClient=c=>{const n={...c};if(n.carrier){n.carrier=n.carrier.trim();const k=n.carrier.toLowerCase();if(CN[k])n.carrier=CN[k]}if(!n.medicaidNumber?.trim()&&(!n.medicaidLevel||n.medicaidLevel==="None"))n.medicaidLevel="N/A";if(!n.planType){const p=(n.planName||"").toLowerCase();if(p.includes("c-snp")||p.includes("csnp"))n.planType="CSNP";else if(p.includes("d-snp")||p.includes("dsnp"))n.planType="DSNP";else if(p.includes("pdp"))n.planType="PDP";else if(p.length>0)n.planType="MAPD"}if(!n.hospitalIndemnity)n.hospitalIndemnity="";return n};
 
-  // Status changes
-  const openStatusChange=(client,newStatus)=>{
-    setStatusForm({newStatus,commissionAmount:client.commissionAmount||"",paidDate:client.paidDate||today(),chargebackDate:client.chargebackDate||today(),chargebackAmount:client.chargebackAmount||client.commissionAmount||"",statusNote:""});
-    setShowStatusModal(client);
-  };
-  const confirmStatusChange=()=>{
-    const c=showStatusModal; const ns=statusForm.newStatus;
-    const u={status:ns,statusNote:statusForm.statusNote||c.statusNote||""};
-    if(ns==="paid"){u.commissionAmount=statusForm.commissionAmount;u.paidDate=statusForm.paidDate||today();}
-    if(ns==="inactive"){u.inactiveDate=today();}
-    if(ns==="chargedBack"){u.chargebackDate=statusForm.chargebackDate||today();u.chargebackAmount=statusForm.chargebackAmount;}
-    if(ns==="neverInEffect"){u.inactiveDate=today();}
-    if(ns==="active"&&(c.status==="inactive"||c.status==="chargedBack")){u.lastVerified=today();}
-    save(clients.map(x=>x.id===c.id?{...x,...u}:x));
-    showToast(`${c.fullName} → ${ST[ns].label}`);
-    setShowStatusModal(null);setViewClient(null);
-  };
+/* ═══════════ UI ATOMS ═══════════ */
+const Badge=({children,color="var(--accent)"})=><span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,letterSpacing:.6,background:color+"14",color,textTransform:"uppercase"}}>{children}</span>;
+const Stat=({label,value,sub,icon,color,s})=><div style={{background:"var(--card)",borderRadius:12,padding:s?"14px 16px":"20px 24px",border:"1px solid var(--border)",flex:s?"1 1 140px":"1 1 180px",minWidth:s?130:170,boxShadow:"var(--cs)"}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:s?8:12}}><span style={{fontSize:s?14:18}}>{icon}</span><span style={{fontSize:s?9:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",color:"var(--t3)"}}>{label}</span></div><div style={{fontSize:s?24:36,fontWeight:800,color:color||"var(--text)",lineHeight:1}}>{value}</div>{sub&&<div style={{fontSize:s?10:12,color:"var(--t3)",marginTop:s?3:6}}>{sub}</div>}</div>;
+const Bar=({data,color="#3B8FD9",max=8})=>{const s=data.slice(0,max);const mx=Math.max(...s.map(d=>d[1]),1);return<div style={{display:"flex",flexDirection:"column",gap:6}}>{s.map(([l,v])=><div key={l} style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:95,fontSize:12,textAlign:"right",color:"var(--t2)",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</div><div style={{flex:1,background:"var(--bar)",borderRadius:6,height:26,overflow:"hidden"}}><div style={{height:"100%",borderRadius:6,background:color,width:(v/mx*100)+"%",display:"flex",alignItems:"center",paddingLeft:8,fontSize:11,fontWeight:700,color:"#fff",minWidth:32}}>{typeof v==="number"&&v>999?money(v):v}</div></div></div>)}</div>};
+const MT=({headers,rows,em})=><div style={{borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"var(--hover)"}}>{headers.map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontWeight:700,color:"var(--t3)",fontSize:10,textTransform:"uppercase",letterSpacing:.6,borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={headers.length} style={{padding:20,textAlign:"center",color:"var(--t3)"}}>{em||"No data"}</td></tr>:rows.map((r,i)=><tr key={i} style={{background:i%2?"var(--hover)":"transparent"}}>{r.map((c,j)=><td key={j} style={{padding:"8px 12px",borderBottom:"1px solid var(--border)"}}>{c}</td>)}</tr>)}</tbody></table></div>;
+const Crd=({title,children})=><div style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",overflow:"hidden",boxShadow:"var(--cs)"}}><div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:700,fontSize:15}}>{title}</div><div style={{padding:20}}>{children}</div></div>;
+const Mdl=({children,onClose,title,subtitle,width=560})=><div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fadeIn .15s",padding:20}}><div onClick={e=>e.stopPropagation()} style={{background:"var(--card)",borderRadius:16,width:"100%",maxWidth:width,maxHeight:"90vh",overflow:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.3)",border:"1px solid var(--border)"}}>{title&&<div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)"}}><div style={{fontSize:18,fontWeight:800}}>{title}</div>{subtitle&&<div style={{marginTop:4}}>{subtitle}</div>}</div>}{children}</div></div>;
 
-  // ── Monthly Review Mode ──
-  const startReview=()=>{
-    // Review all active + paid clients
-    const toReview = clients.filter(c=>c.status==="active"||c.status==="paid").sort((a,b)=>(a.carrier||"").localeCompare(b.carrier||"")||(a.fullName||"").localeCompare(b.fullName||""));
-    if(!toReview.length){showToast("No active/paid clients to review","error");return;}
-    setReviewList(toReview); setReviewIdx(0); setReviewDone([]); setReviewMode(true); setReviewSubAction(null); setTempAmount(""); setTempNote("");
-  };
-  const reviewAction=(action,extra={})=>{
-    const c=reviewList[reviewIdx]; const t=today();
-    let updates={};
-    if(action==="verified"){updates={lastVerified:t};}
-    else if(action==="paid"){updates={status:"paid",commissionAmount:extra.amount||"",paidDate:extra.date||t,lastVerified:t};}
-    else if(action==="inactive"){updates={status:"inactive",inactiveDate:t,statusNote:extra.note||""};}
-    else if(action==="neverInEffect"){updates={status:"neverInEffect",inactiveDate:t};}
-    else if(action==="skip"){}
-    if(Object.keys(updates).length>0){
-      const nc=clients.map(x=>x.id===c.id?{...x,...updates}:x);
-      save(nc);
-    }
-    setReviewDone(p=>[...p,{id:c.id,name:c.fullName,action}]);
-    setReviewSubAction(null); setTempAmount(""); setTempNote("");
-    if(reviewIdx<reviewList.length-1) setReviewIdx(reviewIdx+1);
-    else { setReviewMode(false); showToast(`Monthly review complete! Reviewed ${reviewList.length} clients.`); }
-  };
-
-  // ── Bulk Import (same as before) ──
-  const openBulkImport=()=>{setBulkRaw("");setBulkHeaders([]);setBulkRows([]);setBulkMapping({});setBulkStep(1);setShowBulkModal(true);};
-  const normalizeDate=val=>{if(!val)return"";const cl=val.trim();if(/^\d{4}-\d{2}-\d{2}$/.test(cl))return cl;const sm=cl.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);if(sm){let[_,m,d,y]=sm;if(y.length===2)y=(parseInt(y)>50?"19":"20")+y;return`${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;}const tm=cl.match(/^(\d{2})(\d{2})[\/\-](\d{4})$/);if(tm){let[_,m,d,y]=tm;return`${y}-${m}-${d}`;}const pm=cl.match(/^(\d{1,2})[\/\-](\d{4})$/);if(pm){let[_,m,y]=pm;return`${y}-${m.padStart(2,"0")}-01`;}const p=new Date(cl);if(!isNaN(p.getTime()))return p.toISOString().split("T")[0];return cl;};
-  const parseSheet=text=>{const recs=[];let cur=[],fld="",inQ=false,i=0;const fn=text.indexOf("\n"),fl=fn>-1?text.substring(0,fn):text,del=fl.includes("\t")?"\t":",";while(i<text.length){const ch=text[i];if(inQ){if(ch==='"'){if(i+1<text.length&&text[i+1]==='"'){fld+='"';i+=2;}else{inQ=false;i++;}}else{fld+=ch;i++;}}else{if(ch==='"'){inQ=true;i++;}else if(ch===del){cur.push(fld.trim());fld="";i++;}else if(ch==="\n"||ch==="\r"){cur.push(fld.trim());fld="";if(ch==="\r"&&i+1<text.length&&text[i+1]==="\n")i++;i++;if(cur.some(c=>c.length>0))recs.push(cur);cur=[];}else{fld+=ch;i++;}}}cur.push(fld.trim());if(cur.some(c=>c.length>0))recs.push(cur);return recs;};
-  const parseBulkData=()=>{const text=bulkRaw.trim();if(!text){showToast("Paste data","error");return;}const all=parseSheet(text);if(all.length<2){showToast("Need header+data","error");return;}let hd=all[0];while(hd.length&&hd[hd.length-1]==="")hd.pop();const cc=hd.length,rows=all.slice(1).map(r=>r.slice(0,cc)).filter(r=>r.filter(c=>c).length>=2);if(!rows.length){showToast("No data","error");return;}setBulkHeaders(hd);setBulkRows(rows);const mm={applicationdate:"applicationDate",appdate:"applicationDate",effectivedate:"effectiveDate",effdate:"effectiveDate",fullname:"fullName",name:"fullName",clientname:"fullName",phone:"phone",phonenumber:"phone",telephone:"phone",cell:"phone",mobile:"phone",email:"email",emailaddress:"email",dateofbirth:"dob",dob:"dob",birthday:"dob",birthdate:"dob",mailingaddress:"mailingAddress",address:"mailingAddress",streetaddress:"mailingAddress",zipcode:"zipCode",zip:"zipCode",postalcode:"zipCode",city:"city",state:"state",mbinumber:"mbiNumber",mbi:"mbiNumber",medicarenumber:"mbiNumber",electionperiod:"electionPeriod",election:"electionPeriod",medicaidnumber:"medicaidNumber",medicaidno:"medicaidNumber",medicaidlevel:"medicaidLevel",newplanname:"planName",planname:"planName",plan:"planName",carrier:"carrier",company:"carrier",hospitalindemnity:"hospitalIndemnity",indemnity:"hospitalIndemnity",sunfirepersonalcode:"sunfireCode",sunfirecode:"sunfireCode",sunfire:"sunfireCode",personalcode:"sunfireCode"};const am={};hd.forEach((h,idx)=>{const l=h.toLowerCase().replace(/[^a-z0-9]/g,"");if(!l)return;const m=mm[l];if(m&&!Object.values(am).includes(m))am[idx]=m;});setBulkMapping(am);const mf=new Set(Object.values(am));setBulkStep(FIELDS.map(f=>f.key).every(k=>mf.has(k))?3:2);};
-  const buildPreview=()=>bulkRows.map(row=>{const c={};Object.entries(bulkMapping).forEach(([ci,fk])=>{if(fk&&fk!=="skip"){let v=row[parseInt(ci)]||"";const fd=FIELDS.find(f=>f.key===fk);if(fd&&fd.type==="date")v=normalizeDate(v);v=v.replace(/\s+/g," ").trim();if(v)c[fk]=v;}});return c;});
-  const execImport=()=>{const p=buildPreview(),v=p.filter(c=>c.fullName?.trim());if(!v.length){showToast("No valid clients","error");return;}save([...clients,...v.map((c,i)=>({...c,id:(Date.now()+i).toString(),status:"active",createdAt:new Date().toISOString(),lastVerified:"",commissionAmount:"",paidDate:"",inactiveDate:"",chargebackDate:"",chargebackAmount:"",statusNote:""}))]);showToast(`Imported ${v.length} clients!`);setShowBulkModal(false);};
-
-  // Analytics
-  const analytics = useMemo(()=>{
-    const t=clients.length,ac=byStatus.active.length,pd=byStatus.paid.length,ina=byStatus.inactive.length,cb=byStatus.chargedBack.length,nie=byStatus.neverInEffect.length;
-    const inForce=ac+pd;
-    const totalComm=clients.reduce((s,c)=>s+(parseFloat(c.commissionAmount)||0),0);
-    const totalCB=[...byStatus.chargedBack,...byStatus.inactive].reduce((s,c)=>s+(parseFloat(c.chargebackAmount)||parseFloat(c.commissionAmount)||0),0);
-    const net=totalComm-totalCB;
-    const carrierStats={};
-    clients.forEach(c=>{if(!c.carrier)return;if(!carrierStats[c.carrier])carrierStats[c.carrier]={total:0,active:0,paid:0,inactive:0,cb:0,nie:0,comm:0};const cs=carrierStats[c.carrier];cs.total++;cs[c.status==="chargedBack"?"cb":c.status==="neverInEffect"?"nie":c.status]++;cs.comm+=parseFloat(c.commissionAmount)||0;});
-    const stateStats={};clients.forEach(c=>{if(c.state){stateStats[c.state]=(stateStats[c.state]||0)+1;}});
-    const cohorts={};
-    clients.forEach(c=>{if(!c.effectiveDate)return;const mk=monthKey(c.effectiveDate);if(!mk)return;if(!cohorts[mk])cohorts[mk]={enrolled:0,inForce:0,dropped:0};cohorts[mk].enrolled++;if(c.status==="active"||c.status==="paid")cohorts[mk].inForce++;else cohorts[mk].dropped++;});
-    const commByMonth={};clients.forEach(c=>{if(c.commissionAmount&&c.paidDate){const mk=monthKey(c.paidDate);if(mk)commByMonth[mk]=(commByMonth[mk]||0)+(parseFloat(c.commissionAmount)||0);}});
-    // Aging: active clients not verified in 30+ days
-    const td=today();
-    const needsReview=clients.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=30));
-    const overdue60=clients.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBetween(c.lastVerified,td)>=60));
-    return {t,ac,pd,ina,cb,nie,inForce,totalComm,totalCB,net,carrierStats,stateStats,cohorts,commByMonth,needsReview:needsReview.length,overdue60:overdue60.length};
-  },[clients,byStatus]);
-
-  const uniqueVals=useCallback((f,l)=>[...new Set(l.map(c=>c[f]).filter(Boolean))].sort(),[]);
-
-  // Themes
-  const LT={"--bg":"#F7F8FA","--card":"#FFFFFF","--border":"#E2E8F0","--text":"#1A2332","--t2":"#64748B","--t3":"#94A3B8","--accent":"#3B8FD9","--bg-hover":"#F1F5F9","--input-bg":"#FFF","--input-border":"#E2E8F0","--shadow":"0 4px 24px rgba(0,0,0,0.06)","--cs":"0 1px 3px rgba(0,0,0,0.04)","--overlay":"rgba(15,23,42,0.45)","--header-bg":"#FFF","--header-border":"#E2E8F0","--bar-track":"#F1F5F9","--tab-bg":"#EDF4FC"};
-  const DT={"--bg":"#0F172A","--card":"#1E293B","--border":"#334155","--text":"#F1F5F9","--t2":"#94A3B8","--t3":"#64748B","--accent":"#3B8FD9","--bg-hover":"#273548","--input-bg":"#1E293B","--input-border":"#475569","--shadow":"0 4px 24px rgba(0,0,0,0.4)","--cs":"0 1px 3px rgba(0,0,0,0.2)","--overlay":"rgba(0,0,0,0.6)","--header-bg":"#1E293B","--header-border":"#334155","--bar-track":"#273548","--tab-bg":"#1A2840"};
-  const theme=dark?DT:LT;
-  const tabs2=[{id:"dashboard",label:"Dashboard",icon:"📊"},{id:"clients",label:"All Clients",icon:"👥",count:clients.length},{id:"analytics",label:"Analytics",icon:"📈"}];
-
-  if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F7F8FA",fontFamily:"'Inter',system-ui,sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:12}}>⚕️</div><div style={{fontSize:13,fontWeight:600,letterSpacing:0.5}}>LOADING...</div></div></div>;
-
-  const btnP={padding:"8px 18px",borderRadius:8,border:"none",background:"#3B8FD9",color:"#fff",cursor:"pointer",fontWeight:700,fontSize:13,boxShadow:"0 1px 3px rgba(59,143,217,0.3)"};
-  const btnO={padding:"8px 16px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--text)",cursor:"pointer",fontWeight:600,fontSize:13};
-  const inp={width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid var(--input-border)",background:"var(--input-bg)",color:"var(--text)",fontSize:13,outline:"none",fontFamily:"var(--font)"};
-
-  // ═══════════════════════════════════════════
-  // MONTHLY REVIEW MODE
-  // ═══════════════════════════════════════════
-  if(reviewMode) {
-    const rc = reviewList[reviewIdx];
-    const st = ST[rc.status]||ST.active;
-    const progress = reviewIdx / reviewList.length * 100;
-    const daysUnverified = rc.lastVerified ? daysBetween(rc.lastVerified, today()) : null;
-
-    return (
-      <div style={{...theme,"--font":"'Inter',system-ui,sans-serif",fontFamily:"var(--font)",background:"var(--bg)",color:"var(--text)",minHeight:"100vh"}}>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-        <style>{`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}input,select,textarea,button{font-family:var(--font)}@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}`}</style>
-
-        {/* Review Header */}
-        <div style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"14px 24px"}}>
-          <div style={{maxWidth:800,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <span style={{fontSize:22}}>📋</span>
-              <div><div style={{fontSize:16,fontWeight:800}}>Monthly Review</div><div style={{fontSize:12,color:"var(--t3)"}}>MARX Lookup — {new Date().toLocaleDateString("en-US",{month:"long",year:"numeric"})}</div></div>
-            </div>
-            <button onClick={()=>setReviewMode(false)} style={{...btnO,fontSize:12}}>✕ Exit Review</button>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div style={{background:"var(--border)",height:4}}>
-          <div style={{height:"100%",background:"#3B8FD9",width:`${progress}%`,transition:"width 0.3s"}} />
-        </div>
-
-        <div style={{maxWidth:800,margin:"0 auto",padding:24}}>
-          {/* Counter */}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-            <div style={{fontSize:13,color:"var(--t2)"}}>Client <strong style={{color:"var(--text)"}}>{reviewIdx+1}</strong> of <strong style={{color:"var(--text)"}}>{reviewList.length}</strong></div>
-            <div style={{display:"flex",gap:12,fontSize:12}}>
-              <span style={{color:"#22C55E"}}>✅ {reviewDone.filter(d=>d.action==="verified").length} verified</span>
-              <span style={{color:"#3B8FD9"}}>💰 {reviewDone.filter(d=>d.action==="paid").length} paid</span>
-              <span style={{color:"#F59E0B"}}>⚠️ {reviewDone.filter(d=>d.action==="inactive").length} inactive</span>
-            </div>
-          </div>
-
-          {/* Client Card */}
-          <div style={{background:"var(--card)",borderRadius:16,border:"1px solid var(--border)",boxShadow:"var(--shadow)",overflow:"hidden",animation:"slideUp 0.25s"}}>
-            {/* Card header */}
-            <div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--bg-hover)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:14}}>
-                <div style={{width:48,height:48,borderRadius:"50%",background:`${st.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:800,color:st.color}}>{rc.fullName?.charAt(0)?.toUpperCase()}</div>
-                <div>
-                  <div style={{fontSize:20,fontWeight:800}}>{rc.fullName}</div>
-                  <div style={{fontSize:13,color:"var(--t2)"}}>{fmtPhone(rc.phone)} {rc.email ? `· ${rc.email}` : ""}</div>
-                </div>
-              </div>
-              <Badge color={st.color}>{st.icon} {st.label}</Badge>
-            </div>
-
-            {/* Key details */}
-            <div style={{padding:24}}>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:16,marginBottom:20}}>
-                {[
-                  {l:"MBI Number",v:rc.mbiNumber,highlight:true},
-                  {l:"Carrier",v:rc.carrier},
-                  {l:"Plan",v:rc.planName},
-                  {l:"Effective Date",v:fmt(rc.effectiveDate)},
-                  {l:"State",v:rc.state},
-                  {l:"Election Period",v:rc.electionPeriod},
-                  {l:"Last Verified",v:rc.lastVerified?fmt(rc.lastVerified):"Never", warn:!rc.lastVerified||daysUnverified>=30},
-                  {l:"Commission",v:rc.commissionAmount?money(rc.commissionAmount):"—"},
-                ].map(f=>(
-                  <div key={f.l} style={{padding:12,background:f.highlight?"var(--tab-bg)":"var(--bg-hover)",borderRadius:8,border:f.highlight?"1px solid #3B8FD933":"1px solid transparent"}}>
-                    <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:"var(--t3)",marginBottom:4}}>{f.l}</div>
-                    <div style={{fontSize:f.highlight?16:14,fontWeight:f.highlight?800:500,color:f.warn?"#F59E0B":"var(--text)",fontFamily:f.highlight?"'JetBrains Mono',monospace":"var(--font)"}}>{f.v||"—"}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* MARX tip */}
-              <div style={{background:"var(--tab-bg)",borderRadius:10,padding:14,border:"1px solid #3B8FD922",marginBottom:20}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#3B8FD9",marginBottom:4}}>💡 MARX Lookup Tip</div>
-                <div style={{fontSize:12,color:"var(--t2)",lineHeight:1.6}}>
-                  Search MBI <strong style={{color:"var(--text)",fontFamily:"'JetBrains Mono',monospace"}}>{rc.mbiNumber||"N/A"}</strong> in MARX.
-                  Verify they're still enrolled in <strong style={{color:"var(--text)"}}>{rc.planName||"their plan"}</strong> with <strong style={{color:"var(--text)"}}>{rc.carrier||"their carrier"}</strong>.
-                </div>
-              </div>
-
-              {/* Sub-action forms */}
-              {reviewSubAction==="paid" && (
-                <div style={{background:"#3B8FD90A",borderRadius:10,padding:16,border:"1px solid #3B8FD933",marginBottom:16,animation:"slideUp 0.2s"}}>
-                  <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#3B8FD9"}}>💰 Mark as Paid</div>
-                  <div style={{display:"flex",gap:10}}>
-                    <div style={{flex:1}}><label style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Commission ($)</label><input type="number" step="0.01" value={tempAmount} onChange={e=>setTempAmount(e.target.value)} placeholder="e.g. 250" style={{...inp,marginTop:4}} /></div>
-                  </div>
-                  <div style={{display:"flex",gap:8,marginTop:12}}>
-                    <button onClick={()=>setReviewSubAction(null)} style={{...btnO,fontSize:12}}>Cancel</button>
-                    <button onClick={()=>{reviewAction("paid",{amount:tempAmount});setReviewSubAction(null);setTempAmount("");}} style={{...btnP,fontSize:12,background:"#3B8FD9"}}>Confirm Paid</button>
-                  </div>
-                </div>
-              )}
-              {reviewSubAction==="inactive" && (
-                <div style={{background:"#F59E0B0A",borderRadius:10,padding:16,border:"1px solid #F59E0B33",marginBottom:16,animation:"slideUp 0.2s"}}>
-                  <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#F59E0B"}}>⚠️ Mark as Inactive</div>
-                  <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Note (optional)</label>
-                  <input type="text" value={tempNote} onChange={e=>setTempNote(e.target.value)} placeholder="Why did they leave?" style={{...inp,marginTop:4}} />
-                  <div style={{display:"flex",gap:8,marginTop:12}}>
-                    <button onClick={()=>setReviewSubAction(null)} style={{...btnO,fontSize:12}}>Cancel</button>
-                    <button onClick={()=>{reviewAction("inactive",{note:tempNote});setReviewSubAction(null);setTempNote("");}} style={{...btnP,fontSize:12,background:"#F59E0B"}}>Confirm Inactive</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              {!reviewSubAction && (
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                  <button onClick={()=>reviewAction("verified")} style={{padding:16,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E08",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#22C55E15"} onMouseLeave={e=>e.currentTarget.style.background="#22C55E08"}>
-                    <div style={{fontSize:24,marginBottom:4}}>✅</div>
-                    <div style={{fontSize:14,fontWeight:800,color:"#22C55E"}}>Still Active</div>
-                    <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>Verified in MARX — still enrolled</div>
-                  </button>
-                  <button onClick={()=>setReviewSubAction("paid")} style={{padding:16,borderRadius:12,border:"2px solid #3B8FD9",background:"#3B8FD908",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#3B8FD915"} onMouseLeave={e=>e.currentTarget.style.background="#3B8FD908"}>
-                    <div style={{fontSize:24,marginBottom:4}}>💰</div>
-                    <div style={{fontSize:14,fontWeight:800,color:"#3B8FD9"}}>Mark Paid</div>
-                    <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>Commission received for this client</div>
-                  </button>
-                  <button onClick={()=>setReviewSubAction("inactive")} style={{padding:16,borderRadius:12,border:"2px solid #F59E0B",background:"#F59E0B08",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#F59E0B15"} onMouseLeave={e=>e.currentTarget.style.background="#F59E0B08"}>
-                    <div style={{fontSize:24,marginBottom:4}}>⚠️</div>
-                    <div style={{fontSize:14,fontWeight:800,color:"#F59E0B"}}>Gone Inactive</div>
-                    <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>MARX shows they left your plan</div>
-                  </button>
-                  <button onClick={()=>reviewAction("skip")} style={{padding:16,borderRadius:12,border:"2px solid var(--border)",background:"transparent",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="var(--bg-hover)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <div style={{fontSize:24,marginBottom:4}}>⏭️</div>
-                    <div style={{fontSize:14,fontWeight:800,color:"var(--t2)"}}>Skip</div>
-                    <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>Come back to this one later</div>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ═══════════════════════════════════════════
-  // NORMAL UI
-  // ═══════════════════════════════════════════
-  return (
-    <div style={{...theme,"--font":"'Inter',system-ui,sans-serif",fontFamily:"var(--font)",background:"var(--bg)",color:"var(--text)",minHeight:"100vh",transition:"background 0.3s"}}>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-      <style>{`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}input,select,textarea,button{font-family:var(--font)}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes toastSlide{from{opacity:0;transform:translateY(-16px) translateX(-50%)}to{opacity:1;transform:translateY(0) translateX(-50%)}}`}</style>
-
-      {toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",padding:"10px 22px",borderRadius:10,zIndex:9999,background:toast.type==="error"?"#EF4444":"#22C55E",color:"#fff",fontWeight:600,fontSize:13,animation:"toastSlide 0.3s",boxShadow:"0 6px 28px rgba(0,0,0,0.2)"}}>{toast.type==="error"?"⚠️":"✓"} {toast.msg}</div>}
-
-      {confirmAction&&<div style={{position:"fixed",inset:0,background:"var(--overlay)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9998}} onClick={()=>setConfirmAction(null)}><div onClick={e=>e.stopPropagation()} style={{background:"var(--card)",borderRadius:14,padding:28,width:400,maxWidth:"90vw",border:"1px solid var(--border)",boxShadow:"var(--shadow)"}}><div style={{fontSize:17,fontWeight:700,marginBottom:6}}>{confirmAction.title}</div><div style={{color:"var(--t2)",marginBottom:22,fontSize:13,lineHeight:1.5}}>{confirmAction.message}</div><div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button onClick={()=>setConfirmAction(null)} style={btnO}>Cancel</button><button onClick={confirmAction.onConfirm} style={{...btnP,background:confirmAction.danger?"#EF4444":"#3B8FD9"}}>{confirmAction.label||"Confirm"}</button></div></div></div>}
-
-      <header style={{background:"var(--header-bg)",borderBottom:"1px solid var(--header-border)",padding:"0 24px",position:"sticky",top:0,zIndex:100}}>
-        <div style={{maxWidth:1400,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",height:58}}>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#1A2332,#2A3A52)",display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #3B8FD9"}}><span style={{color:"#3B8FD9",fontWeight:900,fontSize:16}}>U</span></div>
-            <div><span style={{fontSize:15,fontWeight:800}}>United Insurance</span><div style={{fontSize:9.5,fontWeight:700,letterSpacing:1.6,textTransform:"uppercase",color:"#3B8FD9",marginTop:-1}}>PROFESSIONALS</div></div>
-            <div style={{width:1,height:28,background:"var(--border)",margin:"0 8px"}} />
-            <span style={{fontSize:14,fontWeight:600}}>📊 Medicare Sales Tracker</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div onClick={()=>setDark(!dark)} style={{width:34,height:34,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"1px solid var(--border)",background:"var(--bg)",fontSize:16}}>{dark?"🌙":"☀️"}</div>
-            <button onClick={startReview} style={{...btnO,fontSize:12,display:"flex",alignItems:"center",gap:5,borderColor:analytics.needsReview>0?"#F59E0B":"var(--border)",color:analytics.needsReview>0?"#F59E0B":"var(--text)"}}>
-              📋 Monthly Review {analytics.needsReview>0&&<span style={{background:"#F59E0B",color:"#fff",padding:"1px 6px",borderRadius:8,fontSize:10,fontWeight:800}}>{analytics.needsReview}</span>}
-            </button>
-            <button onClick={openBulkImport} style={{...btnO,fontSize:12}}>📋 Import</button>
-            <button onClick={openAdd} style={{...btnP,display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:16,lineHeight:1}}>+</span> Add Client</button>
-          </div>
-        </div>
-      </header>
-
-      <div style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 24px"}}>
-        <div style={{maxWidth:1400,margin:"0 auto",display:"flex",gap:4}}>
-          {tabs2.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setFilters({});setSearchTerm("");setStatusFilter("all");}} style={{padding:"12px 18px",border:"none",background:"transparent",color:tab===t.id?"#3B8FD9":"var(--t2)",borderBottom:tab===t.id?"2px solid #3B8FD9":"2px solid transparent",cursor:"pointer",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:7,fontFamily:"var(--font)"}}>
-            <span style={{fontSize:14}}>{t.icon}</span>{t.label}{t.count!==undefined&&<span style={{background:tab===t.id?"#3B8FD9":"var(--bg-hover)",color:tab===t.id?"#fff":"var(--t2)",padding:"1px 7px",borderRadius:8,fontSize:11,fontWeight:700}}>{t.count}</span>}
-          </button>)}
-        </div>
-      </div>
-
-      <main style={{maxWidth:1400,margin:"0 auto",padding:24}}>
-        {/* DASHBOARD */}
-        {tab==="dashboard"&&<div style={{animation:"slideUp 0.3s"}}>
-          <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:2}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>Overview & quick stats</p></div>
-
-          {/* Alert banner if reviews needed */}
-          {analytics.needsReview>0&&<div style={{background:"#FEF9ED",border:"1px solid #F59E0B33",borderRadius:12,padding:"14px 20px",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between",animation:"slideUp 0.3s"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:20}}>📋</span><div><div style={{fontWeight:700,fontSize:14,color:"#92400E"}}>{analytics.needsReview} client{analytics.needsReview!==1?"s":""} need MARX verification</div><div style={{fontSize:12,color:"#A16207"}}>{analytics.overdue60>0?`${analytics.overdue60} overdue 60+ days · `:""}Last check was over 30 days ago</div></div></div>
-            <button onClick={startReview} style={{...btnP,background:"#F59E0B",fontSize:12}}>Start Review →</button>
-          </div>}
-
-          <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
-            <StatCard icon="📋" value={analytics.t} label="Total Clients" sub="All time" />
-            <StatCard icon="✅" value={analytics.ac} label="Active" sub="Enrolled, pre-pay" color="#22C55E" />
-            <StatCard icon="💰" value={analytics.pd} label="Paid" sub="Commission recv'd" color="#3B8FD9" />
-            <StatCard icon="⚠️" value={analytics.ina} label="Inactive" sub="Left plan" color="#F59E0B" />
-            <StatCard icon="💸" value={analytics.cb} label="Charged Back" sub={pct(analytics.cb,analytics.t)} color="#EF4444" />
-          </div>
-          <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:24}}>
-            <StatCard icon="💵" value={money(analytics.totalComm)} label="Gross Commission" color="#22C55E" small />
-            <StatCard icon="📉" value={money(analytics.totalCB)} label="Chargebacks" color="#EF4444" small />
-            <StatCard icon="💎" value={money(analytics.net)} label="Net Commission" color="#3B8FD9" small />
-            <StatCard icon="📈" value={pct(analytics.inForce,analytics.t)} label="Retention" sub={`${analytics.inForce} in force`} small />
-            <StatCard icon="🚫" value={analytics.nie} label="Never in Effect" sub={pct(analytics.nie,analytics.t)} color="#94A3B8" small />
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(340px,1fr))",gap:18}}>
-            <Card title="🏢 Carrier Production">{Object.keys(analytics.carrierStats).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<BarChart data={Object.entries(analytics.carrierStats).sort((a,b)=>b[1].total-a[1].total).map(([c,s])=>[c,s.total])} />}</Card>
-            <Card title="🗺️ States">{Object.keys(analytics.stateStats).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<BarChart data={Object.entries(analytics.stateStats).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA" />}</Card>
-          </div>
-        </div>}
-
-        {/* CLIENTS */}
-        {tab==="clients"&&<div style={{animation:"slideUp 0.3s"}}>
-          <div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-              <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:0.4}}>🔍</span><input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search clients..." style={{...inp,paddingLeft:36}} /></div>
-              {[{k:"carrier",l:"Carrier"},{k:"state",l:"State"},{k:"electionPeriod",l:"Election"}].map(f=><select key={f.k} value={filters[f.k]||"all"} onChange={e=>setFilters(p=>({...p,[f.k]:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">{f.l}: All</option>{uniqueVals(f.k,clients).map(v=><option key={v} value={v}>{v}</option>)}</select>)}
-            </div>
-          </div>
-          <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-            <button onClick={()=>setStatusFilter("all")} style={{...btnO,fontSize:12,background:statusFilter==="all"?"var(--tab-bg)":"var(--card)",borderColor:statusFilter==="all"?"#3B8FD9":"var(--border)",color:statusFilter==="all"?"#3B8FD9":"var(--t2)"}}>All ({clients.length})</button>
-            {Object.entries(ST).map(([k,v])=><button key={k} onClick={()=>setStatusFilter(k)} style={{...btnO,fontSize:12,background:statusFilter===k?`${v.color}10`:"var(--card)",borderColor:statusFilter===k?v.color:"var(--border)",color:statusFilter===k?v.color:"var(--t2)"}}>{v.icon} {v.label} ({byStatus[k]?.length||0})</button>)}
-          </div>
-          {(()=>{
-            const filtered=applyFilters(clients);
-            return filtered.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}><div style={{fontSize:42,marginBottom:10}}>👥</div><div style={{fontSize:15,fontWeight:600}}>No clients found</div></div>:
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 0.9fr 0.7fr 0.9fr 0.8fr",gap:10,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Last Verified</div><div>Status</div></div>
-              {filtered.map(c=>{const st=ST[c.status]||ST.active;const dv=c.lastVerified?daysBetween(c.lastVerified,today()):null;const stale=(c.status==="active"||c.status==="paid")&&(!c.lastVerified||dv>=30);
-              return <div key={c.id} onClick={()=>setViewClient(c)} style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 0.9fr 0.7fr 0.9fr 0.8fr",gap:10,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:`1px solid ${stale?"#F59E0B44":"var(--border)"}`,cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",transition:"border-color 0.15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#3B8FD9"} onMouseLeave={e=>e.currentTarget.style.borderColor=stale?"#F59E0B44":"var(--border)"}>
-                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:dark?"#334155":"#E8ECF1",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13}}>{c.fullName?.charAt(0)?.toUpperCase()||"?"}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPhone(c.phone)}</div></div></div>
-                <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.carrier||"—"}</div>
-                <div style={{fontSize:12}}>{fmt(c.effectiveDate)}</div>
-                <div style={{fontSize:12}}>{c.state||"—"}</div>
-                <div style={{fontSize:12,color:stale?"#F59E0B":"var(--t2)"}}>{c.lastVerified?<>{fmt(c.lastVerified)}{stale&&" ⚠️"}</>:"Never"}</div>
-                <Badge color={st.color}>{st.icon} {st.label}</Badge>
-              </div>;})}
-            </div>;
-          })()}
-        </div>}
-
-        {/* ANALYTICS */}
-        {tab==="analytics"&&<div style={{animation:"slideUp 0.3s"}}>
-          <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:2}}>Analytics & Tracking</h1><p style={{fontSize:13,color:"var(--t3)"}}>Commission, retention, cohort tracking — 1st of each month</p></div>
-          <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
-            <StatCard icon="💵" value={money(analytics.totalComm)} label="Gross Commission" color="#22C55E" small />
-            <StatCard icon="📉" value={money(analytics.totalCB)} label="Chargebacks" color="#EF4444" small />
-            <StatCard icon="💎" value={money(analytics.net)} label="Net Commission" color="#3B8FD9" small />
-            <StatCard icon="📈" value={pct(analytics.inForce,analytics.t)} label="Retention" small />
-            <StatCard icon="🚫" value={pct(analytics.nie,analytics.t)} label="Pre-Eff Drop" color="#94A3B8" small />
-            <StatCard icon="💸" value={pct(analytics.cb,analytics.t)} label="Chargeback Rate" color="#EF4444" small />
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
-            <Card title="📉 Drop-Off & Retention">
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
-                {[{l:"Pre-Effective",v:pct(analytics.nie,analytics.t),c:"#94A3B8"},{l:"Inactive",v:pct(analytics.ina,analytics.t),c:"#F59E0B"},{l:"Charged Back",v:pct(analytics.cb,analytics.t),c:"#EF4444"},{l:"Retention",v:pct(analytics.inForce,analytics.t),c:"#22C55E"}].map(d=>
-                  <div key={d.l} style={{textAlign:"center",padding:12,background:"var(--bg-hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:d.c}}>{d.v}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginTop:4}}>{d.l}</div></div>
-                )}
-              </div>
-            </Card>
-            <Card title="📅 Cohort Retention by Month">
-              {Object.keys(analytics.cohorts).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:
-              <MiniTable headers={["Month","Enrolled","In Force","Dropped","Retention"]} rows={Object.entries(analytics.cohorts).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,d])=>[
-                monthLabel(mk),<strong>{d.enrolled}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{d.inForce}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.dropped}</span>,
-                <span style={{fontWeight:800,color:d.enrolled>0&&d.inForce/d.enrolled>=0.85?"#22C55E":d.inForce/d.enrolled>=0.7?"#F59E0B":"#EF4444"}}>{pct(d.inForce,d.enrolled)}</span>
-              ])} />}
-            </Card>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
-            <Card title="💵 Commission by Month">{Object.keys(analytics.commByMonth).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>Mark clients as Paid to see data</div>:<BarChart data={Object.entries(analytics.commByMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[monthLabel(mk),v])} color="#22C55E" />}</Card>
-            <Card title="🏢 Carrier Production"><MiniTable headers={["Carrier","Total","Active","Paid","Inactive","CB","Commission"]} rows={Object.entries(analytics.carrierStats).sort((a,b)=>b[1].total-a[1].total).map(([cr,s])=>[<strong>{cr}</strong>,<strong>{s.total}</strong>,<span style={{color:"#22C55E"}}>{s.active}</span>,<span style={{color:"#3B8FD9"}}>{s.paid}</span>,<span style={{color:"#F59E0B"}}>{s.inactive}</span>,<span style={{color:"#EF4444"}}>{s.cb}</span>,<strong>{money(s.comm)}</strong>])} emptyMsg="No data" /></Card>
-          </div>
-        </div>}
-      </main>
-
-      {/* MODALS */}
-      {showAddModal&&<Modal onClose={()=>{setShowAddModal(false);resetForm();}} title={editId?"Edit Client":"Add New Client"}>
-        <div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxHeight:"60vh",overflowY:"auto"}}>
-          {FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>{f.label}{f.key==="fullName"&&<span style={{color:"#EF4444"}}> *</span>}</label>
-            {f.type==="select"?<select value={form[f.key]||""} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="">Select...</option>{f.options.map(o=><option key={o} value={o}>{o}</option>)}</select>
-            :<input type={f.type} value={form[f.key]||""} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.label} style={inp} />}
-          </div>)}
-        </div>
-        <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>{setShowAddModal(false);resetForm();}} style={btnO}>Cancel</button><button onClick={handleSave} style={btnP}>{editId?"Save":"Add Client"}</button></div>
-      </Modal>}
-
-      {viewClient&&!showStatusModal&&<Modal onClose={()=>setViewClient(null)} width={700} title={viewClient.fullName} subtitle={<Badge color={(ST[viewClient.status]||ST.active).color}>{(ST[viewClient.status]||ST.active).icon} {(ST[viewClient.status]||ST.active).label}</Badge>}>
-        <div style={{padding:24,maxHeight:"50vh",overflowY:"auto"}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-            {FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><div style={{fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:0.6,marginBottom:3}}>{f.label}</div><div style={{fontSize:14,fontWeight:500}}>{f.type==="date"?fmt(viewClient[f.key]):f.key==="phone"?fmtPhone(viewClient[f.key]):viewClient[f.key]||"—"}</div></div>)}
-          </div>
-          <div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
-            <div style={{fontSize:13,fontWeight:700,marginBottom:12}}>💰 Tracking</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
-              {[{l:"Last Verified",v:viewClient.lastVerified?fmt(viewClient.lastVerified):"Never",c:(!viewClient.lastVerified||(daysBetween(viewClient.lastVerified,today())>=30))?"#F59E0B":"var(--text)"},
-                {l:"Commission",v:viewClient.commissionAmount?money(viewClient.commissionAmount):"—",c:"#22C55E"},
-                {l:"Chargeback",v:viewClient.chargebackAmount?money(viewClient.chargebackAmount):"—",c:"#EF4444"},
-                {l:"Notes",v:viewClient.statusNote||"—"}
-              ].map(f=><div key={f.l} style={{padding:10,background:"var(--bg-hover)",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5,marginBottom:3}}>{f.l}</div><div style={{fontSize:13,fontWeight:600,color:f.c||"var(--text)"}}>{f.v}</div></div>)}
-            </div>
-          </div>
-        </div>
-        <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-          <button onClick={()=>setConfirmAction({title:"Delete",danger:true,label:"Delete",message:`Delete ${viewClient.fullName}?`,onConfirm:()=>deleteClient(viewClient.id)})} style={{...btnO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>🗑 Delete</button>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {(TRANSITIONS[viewClient.status]||[]).map(ns=>{const s=ST[ns];return<button key={ns} onClick={()=>openStatusChange(viewClient,ns)} style={{...btnO,borderColor:s.color,color:s.color,fontSize:12}}>{s.icon} {s.label}</button>;})}
-            <button onClick={()=>{setViewClient(null);openEdit(viewClient);}} style={{...btnP,fontSize:12}}>✏️ Edit</button>
-          </div>
-        </div>
-      </Modal>}
-
-      {showStatusModal&&<Modal onClose={()=>setShowStatusModal(null)} width={480} title={`→ ${ST[statusForm.newStatus]?.label}`} subtitle={showStatusModal.fullName}>
-        <div style={{padding:24}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:14,background:`${ST[statusForm.newStatus]?.color}10`,borderRadius:10,border:`1px solid ${ST[statusForm.newStatus]?.color}30`,marginBottom:18}}><span style={{fontSize:22}}>{ST[statusForm.newStatus]?.icon}</span><div><div style={{fontWeight:700,fontSize:14}}>{ST[statusForm.newStatus]?.label}</div><div style={{fontSize:12,color:"var(--t2)"}}>{ST[statusForm.newStatus]?.desc}</div></div></div>
-          <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            {statusForm.newStatus==="paid"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Commission ($)</label><input type="number" step="0.01" value={statusForm.commissionAmount} onChange={e=>setStatusForm(p=>({...p,commissionAmount:e.target.value}))} placeholder="250" style={{...inp,marginTop:4}} /></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Date Paid</label><input type="date" value={statusForm.paidDate} onChange={e=>setStatusForm(p=>({...p,paidDate:e.target.value}))} style={{...inp,marginTop:4}} /></div></>}
-            {statusForm.newStatus==="chargedBack"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Chargeback Amount ($)</label><input type="number" step="0.01" value={statusForm.chargebackAmount} onChange={e=>setStatusForm(p=>({...p,chargebackAmount:e.target.value}))} placeholder="Amount" style={{...inp,marginTop:4}} /></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Chargeback Date</label><input type="date" value={statusForm.chargebackDate} onChange={e=>setStatusForm(p=>({...p,chargebackDate:e.target.value}))} style={{...inp,marginTop:4}} /></div></>}
-            <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:0.5}}>Notes</label><input type="text" value={statusForm.statusNote} onChange={e=>setStatusForm(p=>({...p,statusNote:e.target.value}))} placeholder="Reason..." style={{...inp,marginTop:4}} /></div>
-          </div>
-        </div>
-        <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowStatusModal(null)} style={btnO}>Cancel</button><button onClick={confirmStatusChange} style={{...btnP,background:ST[statusForm.newStatus]?.color}}>Confirm</button></div>
-      </Modal>}
-
-      {showBulkModal&&<Modal onClose={()=>setShowBulkModal(false)} width={860} title="📋 Mass Import" subtitle={`Step ${bulkStep} of 3`}>
-        <div style={{padding:"12px 24px",borderBottom:"1px solid var(--border)",display:"flex",gap:6}}>{[{n:1,l:"Paste",i:"📋"},{n:2,l:"Map",i:"🔗"},{n:3,l:"Review",i:"✅"}].map((s,i)=><div key={s.n} style={{display:"flex",alignItems:"center",gap:6}}>{i>0&&<div style={{width:28,height:2,background:bulkStep>=s.n?"#3B8FD9":"var(--border)"}} />}<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,background:bulkStep===s.n?"var(--tab-bg)":"transparent",border:`1px solid ${bulkStep>=s.n?"#3B8FD9":"var(--border)"}`,color:bulkStep>=s.n?"#3B8FD9":"var(--t3)",fontSize:12,fontWeight:600}}><span>{s.i}</span> {s.l}</div></div>)}</div>
-        {bulkStep===1&&<div style={{padding:24}}><div style={{background:"var(--bg-hover)",borderRadius:10,padding:16,marginBottom:16,border:"1px solid var(--border)"}}><div style={{fontSize:12,fontWeight:700,marginBottom:6,color:"#3B8FD9",textTransform:"uppercase",letterSpacing:0.5}}>Instructions</div><div style={{fontSize:12,color:"var(--t2)",lineHeight:1.7}}>Select all in your spreadsheet (Ctrl+A) → Copy (Ctrl+C) → Paste below (Ctrl+V). First row must be headers.</div></div><textarea value={bulkRaw} onChange={e=>setBulkRaw(e.target.value)} placeholder="Paste spreadsheet data here..." style={{...inp,height:200,resize:"vertical",fontFamily:"monospace",fontSize:12,lineHeight:1.5}} /></div>}
-        {bulkStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{background:"var(--bg-hover)",borderRadius:10,padding:12,marginBottom:16,border:"1px solid var(--border)",fontSize:12,color:"var(--t2)"}}>Found <strong style={{color:"#3B8FD9"}}>{bulkHeaders.length}</strong> columns, <strong style={{color:"#3B8FD9"}}>{bulkRows.length}</strong> rows</div>{bulkHeaders.map((h,idx)=>{const samples=bulkRows.slice(0,3).map(r=>r[idx]||"").filter(Boolean).join(", ");return<div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 32px 1fr",gap:10,alignItems:"center",padding:"10px 14px",borderRadius:8,background:"var(--bg-hover)",border:"1px solid var(--border)",marginBottom:6}}><div><div style={{fontWeight:700,fontSize:13}}>{h}</div><div style={{fontSize:11,color:"var(--t3)",fontStyle:"italic"}}>{samples||"(empty)"}</div></div><div style={{textAlign:"center",color:bulkMapping[idx]&&bulkMapping[idx]!=="skip"?"#3B8FD9":"var(--t3)"}}>{bulkMapping[idx]&&bulkMapping[idx]!=="skip"?"→":"·"}</div><select value={bulkMapping[idx]||"skip"} onChange={e=>setBulkMapping(p=>({...p,[idx]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="skip">— Skip —</option>{FIELDS.map(f=>{const used=Object.entries(bulkMapping).find(([k,v])=>v===f.key&&k!==String(idx));return<option key={f.key} value={f.key} disabled={!!used}>{f.label}{bulkMapping[idx]===f.key?" ✓":""}</option>;})}</select></div>;})}</div>}
-        {bulkStep===3&&(()=>{const prev=buildPreview(),valid=prev.filter(c=>c.fullName?.trim()),pcols=["fullName","phone","state","carrier","effectiveDate"].filter(k=>Object.values(bulkMapping).includes(k));return<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{display:"flex",gap:12,marginBottom:16}}><div style={{padding:"8px 14px",borderRadius:8,background:"#F0FDF4",border:"1px solid #BBF7D0",fontSize:13}}><strong style={{color:"#22C55E"}}>{valid.length}</strong> ready</div>{prev.length-valid.length>0&&<div style={{padding:"8px 14px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:13}}><strong style={{color:"#EF4444"}}>{prev.length-valid.length}</strong> skipped</div>}<button onClick={()=>setBulkStep(2)} style={{...btnO,fontSize:12,marginLeft:"auto"}}>Adjust Mapping</button></div><div style={{borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"var(--bg-hover)"}}><th style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)"}}>#</th>{pcols.map(fk=><th key={fk} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap"}}>{FIELDS.find(f=>f.key===fk)?.label||fk}</th>)}<th style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",borderBottom:"1px solid var(--border)"}}>Status</th></tr></thead><tbody>{prev.slice(0,50).map((row,i)=>{const ok=row.fullName?.trim();return<tr key={i} style={{background:!ok?"#FEF2F2":i%2?"var(--bg-hover)":"transparent",opacity:ok?1:0.5}}><td style={{padding:"8px 12px",borderBottom:"1px solid var(--border)",color:"var(--t3)"}}>{i+1}</td>{pcols.map(fk=><td key={fk} style={{padding:"8px 12px",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis"}}>{fk.includes("Date")?fmt(row[fk]):(row[fk]||"—")}</td>)}<td style={{padding:"8px 12px",borderBottom:"1px solid var(--border)"}}>{ok?<Badge color="#22C55E">Ready</Badge>:<Badge color="#EF4444">Skip</Badge>}</td></tr>;})}</tbody></table></div></div></div>;})()}
-        <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}><button onClick={()=>{if(bulkStep===1)setShowBulkModal(false);else setBulkStep(s=>s-1);}} style={btnO}>{bulkStep===1?"Cancel":"← Back"}</button>{bulkStep===1&&<button onClick={parseBulkData} disabled={!bulkRaw.trim()} style={{...btnP,opacity:bulkRaw.trim()?1:0.4}}>Parse →</button>}{bulkStep===2&&<button onClick={()=>{if(!Object.values(bulkMapping).includes("fullName")){showToast("Map Full Name","error");return;}setBulkStep(3);}} style={btnP}>Preview →</button>}{bulkStep===3&&<button onClick={execImport} style={btnP}>✅ Import {buildPreview().filter(c=>c.fullName?.trim()).length}</button>}</div>
-      </Modal>}
-    </div>
-  );
+/* ═══════════ LOGIN ═══════════ */
+function LoginScreen(){
+const[em,setEm]=useState("");const[pw,setPw]=useState("");const[err,setErr]=useState("");const[ld,setLd]=useState(false);const[mode,setMode]=useState("login");
+const go=async()=>{setErr("");setLd(true);try{if(mode==="setup"){const cr=await auth.createUserWithEmailAndPassword(em,pw);await db.collection("users").doc(cr.user.uid).set({email:em,displayName:"Master Admin",role:"master",agentType:"broker",recruitedBy:null,overrides:{},createdAt:firebase.firestore.FieldValue.serverTimestamp()})}else{await auth.signInWithEmailAndPassword(em,pw)}}catch(e){setErr(e.code==="auth/invalid-credential"?"Invalid email or password":e.message)}setLd(false)};
+const sty={width:"100%",padding:"12px 16px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:14,fontFamily:"var(--font)",background:"#fff",color:"#0F172A",outline:"none"};
+return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#EFF6FF,#F5F7FA,#EFF6FF)",padding:20}}>
+<div style={{background:"#fff",borderRadius:20,padding:40,maxWidth:420,width:"100%",boxShadow:"0 8px 32px rgba(0,0,0,.08)",border:"1px solid #E2E8F0"}}>
+<div style={{textAlign:"center",marginBottom:32}}>
+<div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:56,height:56,borderRadius:16,background:"#3B8FD9",marginBottom:16}}><span style={{fontSize:24,color:"#fff",fontWeight:900}}>U</span></div>
+<div style={{fontSize:22,fontWeight:900}}>United Insurance</div>
+<div style={{fontSize:11,fontWeight:800,letterSpacing:2,color:"#3B8FD9",textTransform:"uppercase"}}>PROFESSIONALS</div>
+<div style={{fontSize:14,color:"#64748B",marginTop:8}}>{mode==="setup"?"Create Master Admin Account":"Sign in to your tracker"}</div>
+</div>
+{err&&<div style={{padding:"10px 14px",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,color:"#DC2626",fontSize:13,marginBottom:16}}>{err}</div>}
+<div style={{display:"flex",flexDirection:"column",gap:12}}>
+<input type="email" value={em} onChange={e=>setEm(e.target.value)} placeholder="Email" style={sty} onKeyDown={e=>e.key==="Enter"&&go()}/>
+<input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Password" style={sty} onKeyDown={e=>e.key==="Enter"&&go()}/>
+<button onClick={go} disabled={ld||!em||!pw} style={{padding:"12px 20px",borderRadius:10,border:"none",background:ld?"#94A3B8":"#3B8FD9",color:"#fff",fontSize:15,fontWeight:700,cursor:ld?"wait":"pointer",fontFamily:"var(--font)",opacity:(!em||!pw)?0.5:1}}>{ld?"...":(mode==="setup"?"Create Admin Account":"Sign In")}</button>
+</div>
+<div style={{textAlign:"center",marginTop:16}}>
+<button onClick={()=>setMode(mode==="login"?"setup":"login")} style={{background:"none",border:"none",color:"#3B8FD9",cursor:"pointer",fontSize:13,fontFamily:"var(--font)"}}>{mode==="login"?"First time? Set up admin account":"Back to sign in"}</button>
+</div>
+</div>
+</div>);
 }
 
-ReactDOM.render(<MedicareTracker />, document.getElementById('root'));
-  </script>
+/* ═══════════ MAIN APP ═══════════ */
+function Tracker({cu,up}){
+const isMaster=up?.role==="master"||up?.role==="admin";
+const isA=isMaster;
+const canManage=canCreateRole(up?.role);
+const myRole=up?.role||"agent";
+const[dark,setDark]=useState(false);
+const[sideOpen,setSideOpen]=useState(false);
+const[tab,setTab]=useState("dashboard");
+const[cls,setCls]=useState([]);
+const[team,setTeam]=useState([]);
+const[ld,setLd]=useState(true);
+const[toast,setToast]=useState(null);
+const[form,setForm]=useState({});
+const[showAdd,setShowAdd]=useState(false);
+const[editId,setEditId]=useState(null);
+const[vc,setVc]=useState(null);const[vcNote,setVcNote]=useState("");
+const[search,setSearch]=useState("");
+const[stFilt,setStFilt]=useState("all");
+const[cc,setCc]=useState(false);
+const[qe,setQe]=useState(null);
+const[flt,setFlt]=useState({});
+const[sf,setSf]=useState("custom");const[sd,setSd]=useState("asc");
+const[stForm,setStForm]=useState({});
+const[showSt,setShowSt]=useState(null);
+const[confirm2,setConfirm2]=useState(null);
+const[showMU,setShowMU]=useState(false);const[mf,setMf]=useState("");const[mv,setMv]=useState("");const[muSel,setMuSel]=useState(new Set());
+const[revMode,setRevMode]=useState(false);const[revIdx,setRevIdx]=useState(0);const[revTally,setRevTally]=useState({active:0,paid:0,inactive:0,skipped:0});
+const[showReorder,setShowReorder]=useState(false);const[reoRaw,setReoRaw]=useState("");const[reoStep,setReoStep]=useState(1);const[reoMatches,setReoMatches]=useState([]);
+const[showCU,setShowCU]=useState(false);
+const[nu,setNu]=useState({email:"",password:"",displayName:"",role:"agent",agentType:"broker",heapFrontEnd:"",heapBackEnd:""});
+const[cuErr,setCuErr]=useState("");
+const[selAgent,setSelAgent]=useState("all");
+const[editAgent,setEditAgent]=useState(null);
+const[showBulk,setShowBulk]=useState(false);const[bRaw,setBRaw]=useState("");const[bStep,setBStep]=useState(1);const[bHdr,setBHdr]=useState([]);const[bRows,setBRows]=useState([]);const[bMap,setBMap]=useState({});
+const archRef=useRef(false);
+const[showOverrides,setShowOverrides]=useState(null);
+const[showTree,setShowTree]=useState(false);
+
+const flash=(m,t="success")=>{setToast({m,t});setTimeout(()=>setToast(null),3e3)};
+const inp={width:"100%",padding:"10px 14px",borderRadius:10,border:"1px solid var(--border)",fontSize:13,background:"var(--card)",color:"var(--text)",fontFamily:"var(--font)",outline:"none"};
+const bP={padding:"10px 20px",borderRadius:10,border:"none",background:"#3B8FD9",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"var(--font)"};
+const bO={padding:"8px 16px",borderRadius:10,border:"1px solid var(--border)",background:"var(--card)",color:"var(--text)",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"var(--font)"};
+
+/* ═══════════ HIERARCHY COMPUTED ═══════════ */
+const myDownline=useMemo(()=>getDownlineSet(cu.uid,team),[cu.uid,team]);
+
+/* Load clients */
+useEffect(()=>{
+const un=db.collection("clients").onSnapshot(s=>{setCls(s.docs.map(d=>({id:d.id,...d.data()})));setLd(false)},e=>{console.error(e);setLd(false)});
+return()=>un();
+},[]);
+
+/* Load team */
+useEffect(()=>{const un=db.collection("users").onSnapshot(s=>setTeam(s.docs.map(d=>({uid:d.id,...d.data()}))));return()=>un()},[]);
+
+/* Auto-archive HEAP 4+ months */
+useEffect(()=>{
+if(!cls.length||!team.length||archRef.current)return;
+const hIds=new Set(team.filter(u=>u.agentType==="heap").map(u=>u.uid));
+const arch=cls.filter(c=>hIds.has(c.agentId)&&(c.status==="active"||c.status==="paid")&&canArchive(c));
+if(arch.length>0){archRef.current=true;const b=db.batch();arch.forEach(c=>b.update(db.collection("clients").doc(c.id),{status:"heapArchived",heapArchived:true}));b.commit().then(()=>{archRef.current=false})}
+},[cls,team]);
+
+/* Visible clients based on hierarchy */
+const visibleCls=useMemo(()=>{
+  if(isMaster)return cls;
+  return cls.filter(c=>{const ag=team.find(u=>u.uid===c.agentId);return canSeeClient(cu.uid,up?.role,c,ag,team)});
+},[cls,cu.uid,up?.role,team,isMaster]);
+
+/* Filtered views */
+const agFilt=useMemo(()=>(selAgent==="all")?visibleCls:visibleCls.filter(c=>c.agentId===selAgent),[visibleCls,selAgent]);
+const disp=useMemo(()=>agFilt.filter(c=>c.status!=="heapArchived"),[agFilt]);
+const allForAnalytics=agFilt;
+const byS=useMemo(()=>{const r={active:[],paid:[],inactive:[],chargedBack:[],neverInEffect:[],heapArchived:[]};disp.forEach(c=>{(r[c.status]||r.active).push(c)});return r},[disp]);
+const book=useMemo(()=>disp.filter(c=>c.status==="active"||c.status==="paid"),[disp]);
+const isPend=c=>c.effectiveDate&&new Date(c.effectiveDate+"T00:00:00")>new Date();
+
+const getComm=c=>{const ag=team.find(u=>u.uid===c.agentId);if(ag?.agentType==="heap")return calcHeap(ag);return calcInit(c.effectiveDate,c.electionPeriod)};
+
+/* ═══════════ OVERRIDE INCOME ═══════════ */
+const overrideIncome=useMemo(()=>{
+  let totalFE=0,totalBE=0,byAgent={};
+  const me=team.find(u=>u.uid===cu.uid);
+  if(!me?.overrides)return{totalFE:0,totalBE:0,total:0,byAgent:{}};
+  const dlCls=cls.filter(c=>myDownline.has(c.agentId));
+  dlCls.forEach(c=>{
+    const agId=c.agentId;const feR=getOverrideAmt(me,agId,"fe"),beR=getOverrideAmt(me,agId,"be");
+    if(feR===0&&beR===0)return;
+    const isOB=c.status==="active"||c.status==="paid";const isComp=c.status==="heapArchived";const isEarned=isComp||canArchive(c);
+    const ag=team.find(u=>u.uid===agId);
+    if(!byAgent[agId])byAgent[agId]={name:ag?.displayName||"Unknown",fe:0,be:0,clients:0};
+    if(ag?.agentType==="heap"){if(isOB||isComp){totalFE+=feR;byAgent[agId].fe+=feR;byAgent[agId].clients++;if(isEarned){totalBE+=beR;byAgent[agId].be+=beR}}}
+    else{if(isOB){totalFE+=feR;totalBE+=beR;byAgent[agId].fe+=feR;byAgent[agId].be+=beR;byAgent[agId].clients++}}
+  });
+  return{totalFE,totalBE,total:totalFE+totalBE,byAgent};
+},[cls,team,cu.uid,myDownline]);
+
+/* CRUD */
+const save=async d=>{const nc=normClient({...d,agentId:d.agentId||cu.uid});if(!nc.commissionAmount&&nc.effectiveDate&&up?.agentType!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));if(nc.id){const id=nc.id;delete nc.id;await db.collection("clients").doc(id).update(nc);return id}else{delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:new Date().toISOString(),user:up?.displayName||"System",action:"created",detail:"Client added"}];const ref=await db.collection("clients").add(nc);return ref.id}};
+const del=async id=>{await db.collection("clients").doc(id).delete();setVc(null);flash("Deleted");setConfirm2(null)};
+const upd=async(id,u)=>db.collection("clients").doc(id).update(u);
+
+/* Activity Log: append timestamped entry to client's log array */
+const logAct=async(id,action,detail)=>{await db.collection("clients").doc(id).update({activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action,detail:detail||""})})};
+const fmtTs=ts=>{if(!ts)return"";const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})};
+const resetF=()=>{setForm({});setEditId(null)};
+const openEd=c=>{setForm({...c});setEditId(c.id);setShowAdd(true)};
+const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);if(editId){logAct(editId,"edited","Client details updated")}flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
+
+/* Status */
+const openSC=(c,ns)=>{const ag=team.find(u=>u.uid===c.agentId);const ca=ag?.agentType==="heap"?String(calcHeap(ag)):(c.commissionAmount||String(calcInit(c.effectiveDate,c.electionPeriod)));setStForm({ns,commAmt:ca,paidDate:c.paidDate||td(),cbDate:c.chargebackDate||td(),cbAmt:c.chargebackAmount||ca||"",cancelMo:"",note:""});setShowSt(c)};
+const doSC=async()=>{const c=showSt,ns=stForm.ns;const u={status:ns,statusNote:stForm.note||c.statusNote||""};if(ns==="paid"){u.commissionAmount=stForm.commAmt;u.paidDate=stForm.paidDate||td()}if(ns==="inactive"){u.inactiveDate=td();u.cancelMonth=stForm.cancelMo||""}if(ns==="chargedBack"){u.chargebackDate=stForm.cbDate||td();u.chargebackAmount=stForm.cbAmt}if(ns==="neverInEffect"){u.inactiveDate=td();u.cancelMonth=""}if(ns==="active"&&(c.status==="inactive"||c.status==="chargedBack"))u.lastVerified=td();await upd(c.id,u);logAct(c.id,"status","Status: "+ST[c.status]?.label+" \u2192 "+ST[ns]?.label+(stForm.note?" \u2014 "+stForm.note:""));flash(c.fullName+" \u2192 "+ST[ns].label);setShowSt(null);setVc(null)};
+
+/* Create user */
+const doCU=async()=>{setCuErr("");try{const cr=await secAuth.createUserWithEmailAndPassword(nu.email,nu.password);await secAuth.signOut();const ud={email:nu.email,displayName:nu.displayName,role:nu.role,agentType:nu.agentType,recruitedBy:cu.uid,overrides:{},createdBy:cu.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()};if(nu.agentType==="heap"){ud.heapFrontEnd=nu.heapFrontEnd||"0";ud.heapBackEnd=nu.heapBackEnd||"0"}await db.collection("users").doc(cr.user.uid).set(ud);flash("Created "+nu.displayName+"!");setShowCU(false);setNu({email:"",password:"",displayName:"",role:"agent",agentType:"broker",heapFrontEnd:"",heapBackEnd:""})}catch(e){setCuErr(e.message)}};
+const updAg=async(uid,u)=>{await db.collection("users").doc(uid).update(u);flash("Updated");setEditAgent(null)};
+const saveOverrides=async(targetUid,fe,be)=>{const key="overrides."+targetUid;await db.collection("users").doc(cu.uid).update({[key]:{fe:String(fe),be:String(be)}});flash("Override saved!")};
+
+/* Bulk import */
+const parseBulk=()=>{const lines=[];let inQ=false,cur="",row=[];for(let i=0;i<bRaw.length;i++){const ch=bRaw[i];if(ch==='"'){if(inQ&&bRaw[i+1]==='"'){cur+='"';i++}else inQ=!inQ}else if(!inQ&&ch==="\t"){row.push(cur.trim());cur=""}else if(!inQ&&(ch==="\n"||(ch==="\r"&&bRaw[i+1]==="\n"))){if(ch==="\r")i++;row.push(cur.trim());if(row.some(c=>c))lines.push(row);cur="";row=[]}else cur+=ch}row.push(cur.trim());if(row.some(c=>c))lines.push(row);if(lines.length<2){flash("Need headers+data","error");return}setBHdr(lines[0]);setBRows(lines.slice(1));const am={};const fm={};FIELDS.forEach(f=>{fm[f.label.toLowerCase()]=f.key;fm[f.key.toLowerCase()]=f.key});lines[0].forEach((h,i)=>{const k=h.toLowerCase().trim();if(fm[k])am[i]=fm[k]});setBMap(am);setBStep(2)};
+const buildPrev=()=>bRows.map(r=>{const o={};Object.entries(bMap).forEach(([i,fk])=>{if(fk&&fk!=="skip")o[fk]=r[parseInt(i)]||""});return o});
+const doBulk=async()=>{const pr=buildPrev().filter(c=>c.fullName?.trim());const b=db.batch();pr.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:cu.uid,status:"active"});nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();b.set(ref,nc)});await b.commit();flash("Imported "+pr.length+"!");setShowBulk(false);setBRaw("");setBStep(1)};
+
+/* Deduplicate */
+const dedup=async()=>{const seen=new Map();const dupes=[];cls.forEach(c=>{const key=(c.fullName||"").toLowerCase()+"||"+(c.phone||"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"");if(seen.has(key))dupes.push(c.id);else seen.set(key,c.id)});if(dupes.length===0){flash("No duplicates found");return}const b=db.batch();dupes.forEach(id=>b.delete(db.collection("clients").doc(id)));await b.commit();flash("Removed "+dupes.length+" duplicates!")};
+
+/* Removed transferClients - hierarchy handles routing */
+
+/* Monthly Review Mode */
+const revClients=useMemo(()=>disp.filter(c=>c.status==="active"||c.status==="paid"),[disp]);
+const startReview=()=>{setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skipped:0});setRevMode(true)};
+const revAction=async(action)=>{const c=revClients[revIdx];if(!c)return;const t={...revTally};if(action==="active"){await upd(c.id,{lastVerified:td()});logAct(c.id,"verified","MARX check \u2014 still active");t.active++}else if(action==="paid"){await upd(c.id,{status:"paid",paidDate:td(),lastVerified:td()});logAct(c.id,"status","Review: Active \u2192 Paid");t.paid++}else if(action==="inactive"){await upd(c.id,{status:"inactive",inactiveDate:td()});logAct(c.id,"status","Review: Active \u2192 Inactive");t.inactive++}else{t.skipped++}setRevTally(t);if(revIdx+1>=revClients.length){setRevMode(false);flash("Review complete! "+t.active+" active, "+t.paid+" paid, "+t.inactive+" inactive, "+t.skipped+" skipped")}else setRevIdx(revIdx+1)};
+
+/* Mass Update */
+const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}if(muSel.size===0){flash("Select at least one client","error");return}const targets=disp.filter(c=>muSel.has(c.id));const fl=FIELDS.find(f=>f.key===mf)?.label||mf;const b=db.batch();targets.forEach(c=>{b.update(db.collection("clients").doc(c.id),{[mf]:mv,activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:"mass_update",detail:fl+": "+(c[mf]||"empty")+" \u2192 "+mv})})});await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("");setMuSel(new Set())};
+
+/* Reorder by pasted names */
+const parseReorder=()=>{const names=reoRaw.split("\n").map(n=>n.trim()).filter(Boolean);const matches=names.map(n=>{const found=disp.find(c=>c.fullName?.toLowerCase()===n.toLowerCase());return{name:n,matched:!!found,id:found?.id}});setReoMatches(matches);setReoStep(2)};
+const applyReorder=async()=>{const matched=reoMatches.filter(m=>m.matched);const matchedIds=new Set(matched.map(m=>m.id));const ordered=[...matched.map(m=>disp.find(c=>c.id===m.id)),...disp.filter(c=>!matchedIds.has(c.id))];const b=db.batch();ordered.forEach((c,i)=>{if(c)b.update(db.collection("clients").doc(c.id),{sortOrder:i})});await b.commit();flash("Reordered "+matched.length+" clients!");setShowReorder(false);setReoRaw("");setReoStep(1)};
+
+/* Filters */
+const applyF=useCallback(list=>{let f=[...list];if(search){const s=search.toLowerCase(),sd2=s.replace(/\D/g,"");f=f.filter(c=>(c.fullName?.toLowerCase().includes(s))||(c.phone&&c.phone.replace(/\D/g,"").includes(sd2))||(c.email?.toLowerCase().includes(s))||(c.mailingAddress?.toLowerCase().includes(s))||(c.city?.toLowerCase().includes(s))||(c.zipCode?.includes(s))||(c.mbiNumber?.toLowerCase().includes(s))||(c.carrier?.toLowerCase().includes(s))||(c.planName?.toLowerCase().includes(s))||(c.statusNote?.toLowerCase().includes(s)))}if(stFilt!=="all")f=f.filter(c=>c.status===stFilt);Object.entries(flt).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v)});if(sf==="custom"){f.sort((a,b)=>(a.sortOrder!=null&&b.sortOrder!=null)?(a.sortOrder-b.sortOrder):0)}else{f.sort((a,b)=>{const av=a[sf]||"",bv=b[sf]||"";return sd==="asc"?(av<bv?-1:1):(av>bv?-1:1)})}return f},[search,stFilt,flt,sf,sd]);
+const uniV=useCallback((f,l)=>[...new Set(l.map(c=>c[f]).filter(Boolean))].sort(),[]);
+const cntV=useCallback((f,v,l)=>l.filter(c=>c[f]===v).length,[]);
+const qSave=async(id,f2,v)=>{await upd(id,{[f2]:v});if(f2==="statusNote"&&v)logAct(id,"note","Note: "+v);setQe(null);flash("Updated")};
+const csv=()=>{const af=[...FIELDS,{key:"status",label:"Status"},{key:"commissionAmount",label:"Commission"},{key:"statusNote",label:"Notes"}];const h=af.map(f=>f.label).join(",");const r=disp.map(c=>af.map(f=>{let v=c[f.key]||"";if(typeof v==="string"&&(v.includes(",")||v.includes('"')))v='"'+v.replace(/"/g,'""')+'"';return v}).join(","));const bl=new Blob([h+"\n"+r.join("\n")],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download="medicare-"+td()+".csv";a.click();flash("Exported!")};
+
+/* Analytics */
+const ana=useMemo(()=>{
+const cl=allForAnalytics;const t=cl.filter(c=>c.status!=="heapArchived").length;
+const ac=cl.filter(c=>c.status==="active").length,pd=cl.filter(c=>c.status==="paid").length;
+const ina=cl.filter(c=>c.status==="inactive").length,cb=cl.filter(c=>c.status==="chargedBack").length;
+const nie=cl.filter(c=>c.status==="neverInEffect").length;
+const inF=ac+pd;
+const projInit=cl.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+getComm(c),0);
+const totCB=cl.filter(c=>c.status==="chargedBack"||c.status==="inactive").reduce((s,c)=>s+(parseFloat(c.chargebackAmount)||0),0);
+/* HEAP */
+const hIds=new Set(team.filter(u=>u.role==="heap").map(u=>u.uid));
+const hCl=cl.filter(c=>hIds.has(c.agentId));
+const hEarned=hCl.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c)).length;
+const hActive=hCl.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchive(c)).length;
+const hDrop=hCl.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;
+let admHP=0;
+hCl.forEach(c=>{const ag=team.find(u=>u.uid===c.agentId);if(!ag)return;const am=adminHeapProfit(ag);if(c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c)){admHP+=am}else if(c.status==="active"||c.status==="paid"){admHP+=(HEAP_BE-(parseFloat(ag.heapBackEnd)||0))}});
+const hByAg={};hCl.forEach(c=>{const ag=team.find(u=>u.uid===c.agentId);if(!ag)return;if(!hByAg[ag.uid])hByAg[ag.uid]={name:ag.displayName,total:0,earned:0,dropped:0,nie:0,agPay:0,admProf:0,fe:parseFloat(ag.heapFrontEnd)||0,be:parseFloat(ag.heapBackEnd)||0};const h=hByAg[ag.uid];h.total++;if(c.status==="heapArchived"||(c.status==="active"||c.status==="paid")){if(c.status==="heapArchived"||canArchive(c)){h.earned++;h.agPay+=calcHeap(ag);h.admProf+=adminHeapProfit(ag)}else{h.earned++;h.agPay+=parseFloat(ag.heapFrontEnd)||0;h.admProf+=(HEAP_BE-(parseFloat(ag.heapBackEnd)||0))}}else if(c.status==="inactive"||c.status==="chargedBack")h.dropped++;else if(c.status==="neverInEffect")h.nie++});
+/* Carrier */
+const carS={};cl.filter(c=>c.status!=="heapArchived").forEach(c=>{if(!c.carrier)return;if(!carS[c.carrier])carS[c.carrier]={total:0,active:0,paid:0,inactive:0,cb:0,nie:0,proj:0};const cs=carS[c.carrier];cs.total++;cs[c.status==="chargedBack"?"cb":c.status==="neverInEffect"?"nie":c.status]++;if(c.status==="active"||c.status==="paid")cs.proj+=getComm(c)});
+const stS={};cl.filter(c=>c.status!=="heapArchived").forEach(c=>{if(c.state)stS[c.state]=(stS[c.state]||0)+1});
+const coh={};cl.forEach(c=>{if(!c.effectiveDate)return;const mk=appMK(c.effectiveDate);if(!mk)return;if(!coh[mk])coh[mk]={enr:0,inf:0,dr:0,pc:0};coh[mk].enr++;if(c.status==="active"||c.status==="paid"||c.status==="heapArchived"){coh[mk].inf++;coh[mk].pc+=getComm(c)}else coh[mk].dr++});
+const cAM={};cl.forEach(c=>{if(!c.effectiveDate||!(c.status==="active"||c.status==="paid"||c.status==="heapArchived"))return;const mk=appMK(c.effectiveDate);if(mk)cAM[mk]=(cAM[mk]||0)+getComm(c)});
+const surv={};cl.filter(c=>c.status==="inactive"||c.status==="chargedBack").forEach(c=>{if(!c.effectiveDate)return;let mob=0;if(c.cancelMonth){const ef=new Date(c.effectiveDate+"T00:00:00"),cn=new Date(c.cancelMonth+"-01T00:00:00");mob=Math.max(0,(cn.getFullYear()-ef.getFullYear())*12+(cn.getMonth()-ef.getMonth()))}const bk=mob<=0?"Under 1 mo":mob===1?"1 mo":mob<=3?"2-3 mo":mob<=6?"4-6 mo":mob<=12?"7-12 mo":"12+ mo";surv[bk]=(surv[bk]||0)+1});
+const sOrd=["Under 1 mo","1 mo","2-3 mo","4-6 mo","7-12 mo","12+ mo"];const sData=sOrd.filter(k=>surv[k]).map(k=>[k,surv[k]]);
+const nieC=cl.filter(c=>c.status==="neverInEffect");const nieByCar={};nieC.forEach(c=>{nieByCar[c.carrier||"Unknown"]=(nieByCar[c.carrier||"Unknown"]||0)+1});
+const nieLost=nieC.reduce((s,c)=>s+getComm(c),0);
+const needRev=cl.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBtwn(c.lastVerified,td())>=30)).length;
+/* Owner broker = admin's own production account */
+const ownerBrokers=team.filter(u=>u.role==="broker"&&u.isOwner);
+const ownerIds=new Set(ownerBrokers.map(u=>u.uid));
+const adminUid=team.find(u=>u.role==="admin")?.uid;
+/* My Production: admin's own clients + owner-broker clients */
+const myClients=cl.filter(c=>(c.agentId===adminUid||ownerIds.has(c.agentId))&&(c.status==="active"||c.status==="paid"||c.status==="heapArchived"));
+const myProdComm=myClients.reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0);
+const myProdRes=myClients.filter(c=>c.status==="active"||c.status==="paid").length*29;
+const myProdCount=cl.filter(c=>(c.agentId===adminUid||ownerIds.has(c.agentId))&&c.status!=="heapArchived").length;
+const myProdInForce=cl.filter(c=>(c.agentId===adminUid||ownerIds.has(c.agentId))&&(c.status==="active"||c.status==="paid")).length;
+/* Broker referral profit: only non-owner brokers */
+const brkIds=new Set(team.filter(u=>u.role==="broker"&&!u.isOwner).map(u=>u.uid));
+const brkCl=cl.filter(c=>brkIds.has(c.agentId)&&(c.status==="active"||c.status==="paid"||c.status==="heapArchived"));
+const admBrkProfit=brkCl.reduce((s,c)=>s+calcBrokerRef(c),0);
+const brkByAg={};brkCl.forEach(c=>{const ag=team.find(u=>u.uid===c.agentId);if(!ag)return;if(!brkByAg[ag.uid])brkByAg[ag.uid]={name:ag.displayName,total:0,switched:0,sameCar:0,newMed:0,refProfit:0};const b=brkByAg[ag.uid];b.total++;const ref=calcBrokerRef(c);if(ref===BROKER_REF_SWITCH)b.switched++;else if(ref===BROKER_REF_SAME)b.sameCar++;else b.newMed++;b.refProfit+=ref});
+const totalProfit=myProdComm+admHP+admBrkProfit;
+/* All-site totals */
+const allClientsCount=cl.filter(c=>c.status!=="heapArchived").length;
+return{t,ac,pd,ina,cb,nie,inF,projInit,totCB,moRes:inF*29,annRes:inF*29*12,carS,stS,coh,cAM,sData,nieByCar,nieLost,needRev,hEarned,hActive,hDrop,admHP,hByAg,hTot:hCl.length,admBrkProfit,brkByAg,totalProfit,allClientsCount,myProdComm,myProdRes,myProdCount,myProdInForce,ownerIds}
+},[allForAnalytics,team]);
+
+/* Agent stats */
+const agS=useMemo(()=>{if(!isA)return[];
+const ownerUids=new Set(team.filter(u=>u.isOwner).map(u=>u.uid));
+const adminUid2=team.find(u=>u.role==="admin")?.uid;
+return team.filter(u=>!u.isOwner).map(u=>{
+  /* For admin row, merge in owner-broker clients */
+  const myIds=u.role==="admin"?[u.uid,...ownerUids]:[u.uid];
+  const ac=cls.filter(c=>myIds.includes(c.agentId));
+  const inf=ac.filter(c=>c.status==="active"||c.status==="paid").length;
+  const dr=ac.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;
+  const arch=ac.filter(c=>c.status==="heapArchived").length;
+  let pc=0,ap=0;
+  if(u.role==="heap"){const ear=ac.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c));pc=ear.length*calcHeap(u);ap=ear.length*adminHeapProfit(u);const pend=ac.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchive(c));ap+=pend.length*(HEAP_BE-(parseFloat(u.heapBackEnd)||0))}
+  else if(u.role==="broker"){pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0);ap=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcBrokerRef(c),0)}
+  else if(u.role==="admin"){pc=ac.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0)}
+  return{...u,tot:ac.filter(c=>c.status!=="heapArchived").length,inf,dr,arch,pc,ap}
+})},[isA,team,cls]);
+
+const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"}]:[])];
+
+if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
+
+/* Row - plain function, NOT a component */
+const renderRow=(c,sp)=>{const st=ST[c.status]||ST.active;const co=cc?getCC(c.carrier):null;const pe=isPend(c);
+return<div key={c.id} onClick={()=>{setVc(c);setVcNote("")}} style={{display:"grid",gridTemplateColumns:"2fr 1fr .7fr .6fr .6fr .8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",borderLeft:co?"4px solid "+co:"none"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--cs)"}}>
+<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:co?co+"18":"var(--hover)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:co||"var(--text)"}}>{(c.fullName||"?")[0].toUpperCase()}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPh(c.phone)}</div></div></div>
+<div style={{fontSize:12,fontWeight:600,color:co||"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtCar(c.carrier)}</div>
+<div style={{fontSize:12}}>{fmt(c.effectiveDate)}{pe&&" \u23F3"}</div>
+<div style={{fontSize:12}}>{c.state||"\u2014"}</div>
+<div>{c.planType?<Badge color={c.planType==="DSNP"?"#8B5CF6":c.planType==="CSNP"?"#EC4899":"var(--accent)"}>{c.planType}</Badge>:<span style={{fontSize:11,color:"var(--t3)"}}>{"\u2014"}</span>}</div>
+<div>{sp&&pe?<Badge color="#6366F1">{"\u23F3 Pending"}</Badge>:<Badge color={st.color}>{st.icon+" "+st.label}</Badge>}</div>
+<div style={{fontSize:11,color:"var(--t3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} onClick={e=>{e.stopPropagation();setQe({id:c.id,f:"statusNote",v:c.statusNote||""})}}>{qe?.id===c.id?<input autoFocus value={qe.v} onChange={e=>setQe({...qe,v:e.target.value})} onBlur={()=>qSave(c.id,"statusNote",qe.v)} onKeyDown={e=>{if(e.key==="Enter")qSave(c.id,"statusNote",qe.v);if(e.key==="Escape")setQe(null)}} onClick={e=>e.stopPropagation()} style={{...inp,padding:"4px 8px",fontSize:11,width:"100%"}}/>:(c.statusNote||<span style={{fontStyle:"italic",opacity:.5}}>{"+ note"}</span>)}</div>
+</div>};
+
+/* Filter bar - plain function, NOT a component */
+const renderFilt=(src)=><div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
+<div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+<div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.4}}>{"\uD83D\uDD0D"}</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." style={{...inp,paddingLeft:36}}/></div>
+<select value={flt.carrier||"all"} onChange={e=>setFlt(p=>({...p,carrier:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Carrier: All</option>{uniV("carrier",src).map(v=><option key={v} value={v}>{fmtCar(v)} ({cntV("carrier",v,src)})</option>)}</select>
+<select value={flt.state||"all"} onChange={e=>setFlt(p=>({...p,state:e.target.value}))} style={{...inp,width:"auto",minWidth:80,cursor:"pointer"}}><option value="all">State: All</option>{uniV("state",src).map(v=><option key={v} value={v}>{v} ({cntV("state",v,src)})</option>)}</select>
+<select value={flt.planType||"all"} onChange={e=>setFlt(p=>({...p,planType:e.target.value}))} style={{...inp,width:"auto",minWidth:90,cursor:"pointer"}}><option value="all">Plan: All</option>{["MAPD","DSNP","CSNP","PDP","Medigap"].map(v=><option key={v} value={v}>{v} ({cntV("planType",v,src)})</option>)}</select>
+{isA&&<select value={selAgent} onChange={e=>setSelAgent(e.target.value)} style={{...inp,width:"auto",minWidth:110,cursor:"pointer"}}><option value="all">Agent: All</option>{team.map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select>}
+</div>
+<div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginTop:10}}>
+<button onClick={()=>setCc(!cc)} style={{...bO,fontSize:11,padding:"6px 12px",borderColor:cc?"#3B8FD9":"var(--border)",color:cc?"#3B8FD9":"var(--t2)"}}>{cc?"\uD83C\uDFA8 On":"\uD83C\uDFA8 Off"}</button>
+<button onClick={csv} style={{...bO,fontSize:11,padding:"6px 12px"}}>{"\uD83D\uDCE5 CSV"}</button>
+{(search||stFilt!=="all"||Object.values(flt).some(v=>v&&v!=="all"))&&<button onClick={()=>{setSearch("");setStFilt("all");setFlt({})}} style={{...bO,fontSize:11,padding:"6px 12px"}}>{"\u2715 Clear"}</button>}
+</div>
+</div>;
+
+const colH=<div style={{display:"grid",gridTemplateColumns:"2fr 1fr .7fr .6fr .6fr .8fr 1fr",gap:8,padding:"6px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.8}}><div>Client</div><div>Carrier</div><div>Effective</div><div>State</div><div>Type</div><div>Status</div><div>Notes</div></div>;
+
+return(
+<div className={dark?"dark":""} style={{minHeight:"100vh",background:"var(--bg)"}}>
+{toast&&<div style={{position:"fixed",top:20,right:20,padding:"12px 20px",borderRadius:12,background:toast.t==="error"?"#EF4444":"#22C55E",color:"#fff",fontWeight:700,fontSize:13,zIndex:9999,animation:"slideUp .3s"}}>{toast.m}</div>}
+{confirm2&&<Mdl onClose={()=>setConfirm2(null)} width={380} title={confirm2.title}><div style={{padding:24,fontSize:14,color:"var(--t2)"}}>{confirm2.msg}</div><div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setConfirm2(null)} style={bO}>Cancel</button><button onClick={confirm2.fn} style={{...bP,background:confirm2.dng?"#EF4444":"#3B8FD9"}}>{confirm2.lbl||"Confirm"}</button></div></Mdl>}
+
+{/* HEADER */}
+<header style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 16px 0 12px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56,boxShadow:"var(--cs)",position:"sticky",top:0,zIndex:100}}>
+<div style={{display:"flex",alignItems:"center",gap:10}}>
+<button onClick={()=>setSideOpen(true)} style={{background:"none",border:"none",cursor:"pointer",padding:8,display:"flex",flexDirection:"column",gap:4,borderRadius:8}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>
+<div style={{width:20,height:2,background:"var(--text)",borderRadius:2}}/><div style={{width:20,height:2,background:"var(--text)",borderRadius:2}}/><div style={{width:20,height:2,background:"var(--text)",borderRadius:2}}/>
+</button>
+<span style={{fontSize:15,fontWeight:700,color:"var(--text)"}}>{tabs.find(t2=>t2.id===tab)?.ic+" "+tabs.find(t2=>t2.id===tab)?.label}</span>
+</div>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:4}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
+<button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCCB Import"}</button>
+{isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83E\uDDF9 Dedup"}</button>}
+<button onClick={startReview} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:revClients.length>0?"#8B5CF6":"var(--border)",color:revClients.length>0?"#8B5CF6":"var(--t3)"}}>{"\uD83D\uDCCB "+revClients.length}</button>
+<button onClick={()=>{setMuSel(new Set(disp.map(c=>c.id)));setMf("");setMv("");setShowMU(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\u26A1"}</button>
+<button onClick={()=>{setReoRaw("");setReoStep(1);setShowReorder(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDD00"}</button>
+<button onClick={()=>{resetF();setShowAdd(true)}} style={{...bP,fontSize:12,padding:"8px 14px"}}>+ Add</button>
+</div></header>
+
+{/* SIDEBAR */}
+{sideOpen&&<div onClick={()=>setSideOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:200,animation:"fadeIn .15s"}}/>}
+<div style={{position:"fixed",top:0,left:0,bottom:0,width:260,background:"var(--card)",borderRight:"1px solid var(--border)",zIndex:201,transform:sideOpen?"translateX(0)":"translateX(-100%)",transition:"transform .25s ease",boxShadow:sideOpen?"4px 0 24px rgba(0,0,0,.12)":"none",display:"flex",flexDirection:"column"}}>
+<div style={{padding:"20px 20px 16px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+<div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:36,height:36,borderRadius:10,background:"#3B8FD9",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontWeight:900,fontSize:16}}>U</span></div><div><div style={{fontWeight:800,fontSize:14,lineHeight:1.1}}>United Insurance</div><div style={{fontSize:8,fontWeight:800,letterSpacing:2,color:"#3B8FD9",textTransform:"uppercase"}}>PROFESSIONALS</div></div></div>
+<button onClick={()=>setSideOpen(false)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"var(--t3)",padding:4}}>{"\u2715"}</button>
+</div>
+<div style={{flex:1,padding:"12px 10px",display:"flex",flexDirection:"column",gap:2}}>
+{tabs.map(t2=><button key={t2.id} onClick={()=>{setTab(t2.id);setFlt({});setSearch("");setStFilt("all");setSideOpen(false)}} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:10,border:"none",background:tab===t2.id?"var(--tabBg)":"transparent",color:tab===t2.id?"#3B8FD9":"var(--t2)",cursor:"pointer",fontSize:14,fontWeight:tab===t2.id?700:500,fontFamily:"var(--font)",textAlign:"left",width:"100%",transition:"background .15s"}}>
+<span style={{fontSize:18,width:24,textAlign:"center"}}>{t2.ic}</span>
+<span style={{flex:1}}>{t2.label}</span>
+{t2.ct!=null&&<span style={{background:tab===t2.id?"#3B8FD9":"var(--border)",color:tab===t2.id?"#fff":"var(--t2)",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700}}>{t2.ct}</span>}
+</button>)}
+</div>
+<div style={{padding:"12px 14px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:11,color:"var(--t3)"}}>{up?.displayName+" ("+up?.role+")"}</span><button onClick={()=>auth.signOut()} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"var(--font)"}}>Sign Out</button></div>
+</div>
+
+<main style={{maxWidth:1400,margin:"0 auto",padding:24}}>
+
+{tab==="dashboard"&&<div style={{animation:"slideUp .3s"}}>
+<h1 style={{fontSize:28,fontWeight:900,marginBottom:24}}>Dashboard</h1>
+<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+{isA?<>
+<Stat icon={"\uD83D\uDCCB"} value={ana.allClientsCount} label="Total Clients (Site)" s/>
+<Stat icon={"\uD83D\uDC64"} value={ana.myProdCount} label="My Production" color="#3B8FD9" sub={ana.myProdInForce+" in force"} s/>
+<Stat icon={"\uD83D\uDCB5"} value={money(ana.myProdComm)} label="My Commission" color="#22C55E" s/>
+<Stat icon={"\uD83D\uDD01"} value={money(ana.myProdRes)+"/mo"} label="My Residual" color="#8B5CF6" s/>
+<Stat icon={"\uD83C\uDFE2"} value={money(ana.admHP)} label="HEAP Profit" color="#F97316" s/>
+<Stat icon={"\uD83E\uDD1D"} value={money(ana.admBrkProfit)} label="Broker Referrals" color="#6366F1" s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(ana.totalProfit)} label="Total Income" color="#22C55E" sub={"Prod + HEAP + Refs"} s/>
+{ana.needRev>0&&<Stat icon={"\u26A0\uFE0F"} value={ana.needRev} label="Need Review" color="#F59E0B" s/>}
+</>:<>
+<Stat icon={"\uD83D\uDCCB"} value={ana.t} label="Total Clients" s/>
+{up?.role==="broker"&&<Stat icon={"\u2705"} value={ana.inF} label="In Force" color="#22C55E" s/>}
+<Stat icon={"\uD83D\uDCB5"} value={money(ana.projInit)} label="Projected Initial" color="#22C55E" s/>
+{up?.role==="broker"&&<Stat icon={"\uD83D\uDD01"} value={money(ana.moRes)+"/mo"} label="Residual" color="#8B5CF6" s/>}
+{up?.role==="broker"&&<Stat icon={"\uD83D\uDCC8"} value={ana.t>0?pct(ana.inF,ana.t):"\u2014"} label="Retention" s/>}
+</>}
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(340px,1fr))",gap:18}}>
+<Crd title={"\uD83C\uDFE2 Carrier Production"}>{Object.keys(ana.carS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.carS).sort((a,b)=>b[1].total-a[1].total).map(([c2,s])=>[c2,s.total])}/>}</Crd>
+<Crd title={"\uD83D\uDDFA\uFE0F States"}>{Object.keys(ana.stS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.stS).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA"/>}</Crd>
+</div>
+</div>}
+
+{tab==="book"&&<div style={{animation:"slideUp .3s"}}>
+<div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>{book.length+" active clients"}</p></div>
+{renderFilt(book)}
+{(()=>{const fl=applyF(book);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}>No clients match</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length+" shown"}</div>{colH}{fl.map(c=>renderRow(c,true))}</div>})()}
+</div>}
+
+{tab==="clients"&&<div style={{animation:"slideUp .3s"}}>
+<div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800}}>All Clients</h1></div>
+{renderFilt(disp)}
+<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+<button onClick={()=>setStFilt("all")} style={{...bO,fontSize:12,background:stFilt==="all"?"var(--tabBg)":"var(--card)",borderColor:stFilt==="all"?"#3B8FD9":"var(--border)",color:stFilt==="all"?"#3B8FD9":"var(--t2)"}}>{"All ("+disp.length+")"}</button>
+{Object.entries(ST).filter(([k])=>k!=="heapArchived").map(([k,v])=><button key={k} onClick={()=>setStFilt(k)} style={{...bO,fontSize:12,background:stFilt===k?v.color+"10":"var(--card)",borderColor:stFilt===k?v.color:"var(--border)",color:stFilt===k?v.color:"var(--t2)"}}>{v.icon+" "+v.label+" ("+(byS[k]?.length||0)+")"}</button>)}
+</div>
+{(()=>{const fl=applyF(disp);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}>No clients</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length+" shown"}</div>{colH}{fl.map(c=>renderRow(c,true))}</div>})()}
+</div>}
+
+{tab==="analytics"&&<div style={{animation:"slideUp .3s"}}>
+<div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800}}>Analytics</h1>{isA&&<select value={selAgent} onChange={e=>setSelAgent(e.target.value)} style={{...inp,width:"auto",minWidth:150,marginTop:8,cursor:"pointer"}}><option value="all">All Agents</option>{team.map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select>}</div>
+<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<Stat icon={"\uD83D\uDCB5"} value={money(ana.projInit)} label="Projected Initial" color="#22C55E" sub={ana.inF+" in-force"} s/>
+<Stat icon={"\uD83D\uDD01"} value={money(ana.moRes)+"/mo"} label="Monthly Residual" color="#8B5CF6" sub={"$29 \u00D7 "+ana.inF} s/>
+<Stat icon={"\uD83D\uDCC8"} value={money(ana.annRes)} label="Annual Residual" color="#3B8FD9" s/>
+<Stat icon={"\uD83D\uDCC9"} value={money(ana.totCB)} label="Chargebacks" color="#EF4444" s/>
+<Stat icon={"\uD83D\uDCC8"} value={ana.t>0?pct(ana.inF,ana.t):"0%"} label="Retention" s/>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83D\uDCB5 Commission by App Month"}>{Object.keys(ana.cAM).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.cAM).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#22C55E"/>}</Crd>
+<Crd title={"\uD83D\uDCC5 Cohort Retention"}>{Object.keys(ana.coh).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["App Mo","Enrolled","In Force","Dropped","Comm","Retention"]} rows={Object.entries(ana.coh).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,d])=>[mLabel(mk),<strong>{d.enr}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{d.inf}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.dr}</span>,<strong style={{color:"#22C55E"}}>{money(d.pc)}</strong>,<span style={{fontWeight:800,color:d.enr>0&&d.inf/d.enr>=.85?"#22C55E":"#EF4444"}}>{pct(d.inf,d.enr)}</span>])}/>}</Crd>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83C\uDFE2 Carrier Production"}><MT headers={["Carrier","Total","Active","Paid","Inactive","CB","Comm"]} rows={Object.entries(ana.carS).sort((a,b)=>b[1].total-a[1].total).map(([cr,s])=>[<strong>{cr}</strong>,<strong>{s.total}</strong>,<span style={{color:"#22C55E"}}>{s.active}</span>,<span style={{color:"#3B8FD9"}}>{s.paid}</span>,<span style={{color:"#F59E0B"}}>{s.inactive}</span>,<span style={{color:"#EF4444"}}>{s.cb}</span>,<strong style={{color:"#22C55E"}}>{money(s.proj)}</strong>])}/></Crd>
+<Crd title={"\uD83D\uDCC9 Client Fall-Off"}>{ana.sData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients</div>:<Bar data={ana.sData} color="#EF4444"/>}</Crd>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18}}>
+<Crd title={"\uD83D\uDDFA\uFE0F States"}><Bar data={Object.entries(ana.stS).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA"/></Crd>
+<Crd title={"\uD83D\uDEAB Never in Effect"}>{ana.nie===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>None</div>:<div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{ana.nie}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Count</div></div><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#EF4444"}}>{money(ana.nieLost)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Lost</div></div><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{pct(ana.nie,ana.t)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Rate</div></div></div><Bar data={Object.entries(ana.nieByCar).sort((a,b)=>b[1]-a[1]).map(([c2,n])=>[c2,n])} color="#94A3B8"/></div>}</Crd>
+</div>
+</div>}
+
+{tab==="team"&&isA&&<div style={{animation:"slideUp .3s"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+<div><h1 style={{fontSize:24,fontWeight:800}}>Team Management</h1><p style={{fontSize:13,color:"var(--t3)"}}>{team.length+" members"}</p></div>
+<div style={{display:"flex",gap:10}}>
+{(()=>{const ow=team.find(u=>u.isOwner);const adminCount=cls.filter(c=>c.agentId===cu.uid).length;return ow&&adminCount>0?<button onClick={()=>setConfirm2({title:"Transfer Clients",msg:"Move all "+adminCount+" clients from your Admin account to "+ow.displayName+"? Commission still shows on your admin dashboard.",fn:()=>transferClients(ow.uid),lbl:"Transfer "+adminCount+" Clients"})} style={{...bO,fontSize:12,borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDD00 Transfer "+adminCount+" to "+ow.displayName}</button>:null})()}
+<button onClick={()=>{setNu({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});setCuErr("");setShowCU(true)}} style={bP}>+ Add Agent</button>
+</div>
+</div>
+{/* Site-wide summary */}
+<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<Stat icon={"\uD83D\uDCCB"} value={ana.allClientsCount} label="Total Clients (Site)" s/>
+<Stat icon={"\uD83D\uDC64"} value={ana.myProdCount} label="My Production" color="#3B8FD9" sub={ana.myProdInForce+" in force"} s/>
+<Stat icon={"\uD83D\uDCB5"} value={money(ana.myProdComm)} label="My Commission" color="#22C55E" s/>
+<Stat icon={"\uD83C\uDFE2"} value={money(ana.admHP)} label="HEAP Profit" color="#F97316" s/>
+<Stat icon={"\uD83E\uDD1D"} value={money(ana.admBrkProfit)} label="Broker Referrals" color="#6366F1" s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(ana.totalProfit)} label="Total Income" color="#22C55E" s/>
+</div>
+{/* HEAP Overview */}
+{ana.hTot>0&&<div style={{marginBottom:20}}>
+<Crd title={"\uD83D\uDCCA HEAP Overview"}>
+<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:16}}>
+<div style={{textAlign:"center",padding:14,background:"var(--hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#22C55E"}}>{money(ana.admHP)}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Your HEAP Profit</div></div>
+<div style={{textAlign:"center",padding:14,background:"var(--hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800}}>{ana.hTot}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Total Sales</div></div>
+<div style={{textAlign:"center",padding:14,background:"var(--hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#6366F1"}}>{ana.hEarned}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Earned (4+ mo)</div></div>
+<div style={{textAlign:"center",padding:14,background:"var(--hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#EF4444"}}>{ana.hDrop}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Early Drops</div></div>
+</div>
+{Object.keys(ana.hByAg).length>0&&<MT headers={["Agent","Total","Earned","Dropped","NIE","Agent Pay","Your Profit","FE/BE"]} rows={Object.values(ana.hByAg).map(a=>[<strong>{a.name}</strong>,<strong>{a.total}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{a.earned}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{a.dropped}</span>,<span style={{color:"#94A3B8",fontWeight:700}}>{a.nie}</span>,<strong>{money(a.agPay)}</strong>,<strong style={{color:"#22C55E"}}>{money(a.admProf)}</strong>,<span style={{fontSize:11}}>{"$"+a.fe+"/$"+a.be}</span>])}/>}
+<div style={{marginTop:12,padding:10,background:"var(--hover)",borderRadius:8,fontSize:12,color:"var(--t2)"}}>{"HEAP total per sale: $"+HEAP_FE+" FE + $"+HEAP_BE+" BE = $"+HEAP_TOT+". Your margin = total minus agent pay. Early drops: FE charges back, BE removed."}</div>
+</Crd>
+</div>}
+{/* Broker Referral Overview */}
+{Object.keys(ana.brkByAg).length>0&&<div style={{marginBottom:20}}>
+<Crd title={"\uD83E\uDD1D Broker Referral Overview"}>
+<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:16}}>
+<div style={{textAlign:"center",padding:14,background:"var(--hover)",borderRadius:10,flex:"1 1 100px"}}><div style={{fontSize:22,fontWeight:800,color:"#22C55E"}}>{money(ana.admBrkProfit)}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Your Broker Ref Profit</div></div>
+</div>
+<MT headers={["Broker","Clients","New to Medicare ($100)","Carrier Switch ($50)","Same Carrier ($25)","Your Profit"]} rows={Object.values(ana.brkByAg).map(a=>[<strong>{a.name}</strong>,<strong>{a.total}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{a.newMed}</span>,<span style={{color:"#3B8FD9",fontWeight:700}}>{a.switched}</span>,<span style={{color:"var(--t3)",fontWeight:700}}>{a.sameCar}</span>,<strong style={{color:"#22C55E"}}>{money(a.refProfit)}</strong>])}/>
+<div style={{marginTop:12,padding:10,background:"var(--hover)",borderRadius:8,fontSize:12,color:"var(--t2)"}}>{"You earn $"+BROKER_REF_NEW+" per new-to-Medicare, $"+BROKER_REF_SWITCH+" per carrier switch, and $"+BROKER_REF_SAME+" per same-carrier plan change from broker sales."}</div>
+</Crd>
+</div>}
+{/* Agent Performance Comparison */}
+{agS.filter(u=>u.role!=="admin").length>0&&<div style={{marginBottom:20}}>
+<Crd title={"\uD83C\uDFC6 Agent Performance Comparison"}>
+<MT headers={["Agent","Role","Clients","In Force","Dropped","Retention","Avg Commission","Total Commission","Your Profit"]} rows={agS.filter(u=>u.role!=="admin").map(a=>{
+const ret=a.tot>0?pct(a.inf,a.tot):"0%";
+const avgC=a.inf>0?money(a.pc/a.inf):"$0";
+return[
+<strong>{a.displayName}</strong>,
+<Badge color={a.role==="heap"?"#F97316":"#22C55E"}>{a.role}</Badge>,
+<strong>{a.tot}</strong>,
+<span style={{color:"#22C55E",fontWeight:700}}>{a.inf}</span>,
+<span style={{color:"#EF4444",fontWeight:700}}>{a.dr}</span>,
+<span style={{fontWeight:800,color:a.tot>0&&a.inf/a.tot>=.85?"#22C55E":a.tot>0&&a.inf/a.tot>=.7?"#F59E0B":"#EF4444"}}>{ret}</span>,
+avgC,
+<strong style={{color:"#22C55E"}}>{money(a.pc)}</strong>,
+<strong style={{color:"#3B8FD9"}}>{money(a.ap)}</strong>
+]})}/>
+{agS.filter(u=>u.role!=="admin").length>=2&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
+{(()=>{const agents=agS.filter(u=>u.role!=="admin"&&u.tot>0);if(agents.length===0)return null;const topProd=agents.sort((a,b)=>b.tot-a.tot)[0];const topRet=agents.filter(a=>a.tot>=3).sort((a,b)=>(b.inf/b.tot)-(a.inf/a.tot))[0];const topComm=agents.sort((a,b)=>b.pc-a.pc)[0];const topProfit=agents.sort((a,b)=>b.ap-a.ap)[0];
+return<>
+{topProd&&<div style={{padding:12,background:"var(--hover)",borderRadius:10,textAlign:"center"}}><div style={{fontSize:20}}>{"\uD83C\uDFC5"}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Most Production</div><div style={{fontSize:14,fontWeight:800,marginTop:2}}>{topProd.displayName}</div><div style={{fontSize:12,color:"var(--t2)"}}>{topProd.tot+" clients"}</div></div>}
+{topRet&&<div style={{padding:12,background:"var(--hover)",borderRadius:10,textAlign:"center"}}><div style={{fontSize:20}}>{"\uD83D\uDEE1\uFE0F"}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Best Retention</div><div style={{fontSize:14,fontWeight:800,marginTop:2}}>{topRet.displayName}</div><div style={{fontSize:12,color:"var(--t2)"}}>{pct(topRet.inf,topRet.tot)}</div></div>}
+{topComm&&<div style={{padding:12,background:"var(--hover)",borderRadius:10,textAlign:"center"}}><div style={{fontSize:20}}>{"\uD83D\uDCB0"}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Top Commission</div><div style={{fontSize:14,fontWeight:800,marginTop:2}}>{topComm.displayName}</div><div style={{fontSize:12,color:"var(--t2)"}}>{money(topComm.pc)}</div></div>}
+{topProfit&&topProfit.ap>0&&<div style={{padding:12,background:"var(--hover)",borderRadius:10,textAlign:"center"}}><div style={{fontSize:20}}>{"\uD83D\uDCB5"}</div><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Top Profit (You)</div><div style={{fontSize:14,fontWeight:800,marginTop:2}}>{topProfit.displayName}</div><div style={{fontSize:12,color:"var(--t2)"}}>{money(topProfit.ap)}</div></div>}
+</>})()}
+</div>}
+</Crd>
+</div>}
+{/* Agent list */}
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+<div style={{display:"grid",gridTemplateColumns:"1.5fr .7fr .5fr .5fr .5fr .7fr .7fr 1fr .5fr",gap:10,padding:"8px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.8}}><div>Name</div><div>Role</div><div>Clients</div><div>In Force</div><div>Dropped</div><div>Commission</div><div>Your Profit</div><div>Pay</div><div>Actions</div></div>
+{agS.map(u=><div key={u.uid} style={{display:"grid",gridTemplateColumns:"1.5fr .7fr .5fr .5fr .5fr .7fr .7fr 1fr .5fr",gap:10,padding:"14px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",alignItems:"center",boxShadow:"var(--cs)"}}>
+<div><div style={{fontWeight:700,fontSize:14}}>{u.displayName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{u.email}</div></div>
+<Badge color={u.role==="admin"?"#3B8FD9":u.role==="heap"?"#F97316":"#22C55E"}>{u.role}</Badge>
+<div style={{fontWeight:700}}>{u.role==="admin"?ana.allClientsCount:u.tot}{u.arch>0&&<span style={{fontSize:10,color:"var(--t3)"}}>{" +"+u.arch}</span>}</div>
+<div style={{fontWeight:700,color:"#22C55E"}}>{u.role==="broker"?u.inf:"\u2014"}</div>
+<div style={{fontWeight:700,color:"#EF4444"}}>{u.role==="broker"?u.dr:"\u2014"}</div>
+<div style={{fontWeight:700,color:"#22C55E"}}>{u.role==="admin"?money(ana.projInit):money(u.pc)}</div>
+<div style={{fontWeight:700,color:(u.role==="heap"||u.role==="broker")?"#3B8FD9":"#F97316"}}>{u.role==="admin"?money(ana.totalProfit):u.role==="heap"||u.role==="broker"?money(u.ap):"\u2014"}</div>
+<div style={{fontSize:12}}>{u.role==="heap"?("FE: "+money(u.heapFrontEnd||0)+" / BE: "+money(u.heapBackEnd||0)):u.role==="broker"?"Broker formula":u.role==="admin"?"Prod + Overrides":"—"}</div>
+<div style={{display:"flex",gap:6}}>
+<button onClick={()=>{setSelAgent(u.uid);setTab("analytics")}} style={{...bO,fontSize:11,padding:"4px 10px"}}>{"\uD83D\uDCCA"}</button>
+{u.role!=="admin"&&<button onClick={()=>setEditAgent({...u})} style={{...bO,fontSize:11,padding:"4px 10px"}}>{"\u270F\uFE0F"}</button>}
+</div>
+</div>)}
+</div>
+</div>}
+</main>
+
+{/* MODALS */}
+{showAdd&&<Mdl onClose={()=>{setShowAdd(false);resetF()}} title={editId?"Edit Client":"Add New Client"}>
+<div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxHeight:"60vh",overflowY:"auto"}}>
+{FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{f.label}{f.key==="fullName"&&<span style={{color:"#EF4444"}}>{" *"}</span>}</label>
+{f.type==="select"?<select value={form[f.key]||""} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="">Select...</option>{f.options.map(o=><option key={o} value={o}>{o}</option>)}</select>
+:<input type={f.type} value={form[f.key]||""} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.label} style={inp}/>}
+</div>)}
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>{setShowAdd(false);resetF()}} style={bO}>Cancel</button><button onClick={doSave} style={bP}>{editId?"Save":"Add Client"}</button></div>
+</Mdl>}
+
+{vc&&!showSt&&<Mdl onClose={()=>setVc(null)} width={700} title={vc.fullName} subtitle={<Badge color={(ST[vc.status]||ST.active).color}>{(ST[vc.status]||ST.active).icon+" "+(ST[vc.status]||ST.active).label}</Badge>}>
+<div style={{padding:24,maxHeight:"50vh",overflowY:"auto"}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+{FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><div style={{fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.6,marginBottom:3}}>{f.label}</div><div style={{fontSize:14,fontWeight:500}}>{f.type==="date"?fmt(vc[f.key]):f.key==="phone"?fmtPh(vc[f.key]):f.key==="carrier"?fmtCar(vc[f.key]):vc[f.key]||"\u2014"}</div></div>)}
+</div>
+<div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
+<div style={{fontSize:13,fontWeight:700,marginBottom:12}}>{"\uD83D\uDCB0 Tracking"}</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
+{[{l:"Initial Commission",v:money(getComm(vc)),c:"#22C55E"},{l:"Residuals Started",v:resStart(vc.effectiveDate),c:"#3B8FD9"},{l:"Residual Earned",v:money(calcResEarned(vc.effectiveDate,td())),c:"#8B5CF6"},{l:"Total Earned",v:money(getComm(vc)+calcResEarned(vc.effectiveDate,td())),c:"#22C55E"},{l:"Chargeback",v:vc.chargebackAmount?money(vc.chargebackAmount):"\u2014",c:"#EF4444"},{l:"Cancelled",v:vc.cancelMonth?new Date(vc.cancelMonth+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"numeric"}):"\u2014"},{l:"Notes",v:vc.statusNote||"\u2014"}
+].map(f=><div key={f.l} style={{padding:10,background:"var(--hover)",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5,marginBottom:3}}>{f.l}</div><div style={{fontSize:13,fontWeight:600,color:f.c||"var(--text)"}}>{f.v}</div></div>)}
+</div></div>
+{isA&&<div style={{fontSize:11,color:"var(--t3)",marginTop:12}}>{"Agent: "+(team.find(u=>u.uid===vc.agentId)?.displayName||"\u2014")}</div>}
+{/* Activity Log */}
+<div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
+<div style={{fontSize:13,fontWeight:700,marginBottom:12}}>{"\uD83D\uDCDD Activity Log"}</div>
+<div style={{display:"flex",gap:8,marginBottom:12}}>
+<input value={vcNote} onChange={e=>setVcNote(e.target.value)} placeholder="Add a note..." onKeyDown={e=>{if(e.key==="Enter"&&vcNote.trim()){const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:"note",detail:vcNote.trim()};logAct(vc.id,"note",vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("")}}} style={{...inp,flex:1,fontSize:12}}/>
+<button onClick={()=>{if(!vcNote.trim())return;const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:"note",detail:vcNote.trim()};logAct(vc.id,"note",vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("")}} disabled={!vcNote.trim()} style={{...bP,fontSize:12,padding:"8px 14px",opacity:vcNote.trim()?1:.4}}>Add</button>
+</div>
+{!!(vc.activityLog&&vc.activityLog.length)&&<div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:0}}>
+{[].concat(vc.activityLog).reverse().map((al,ai)=>
+<div key={ai} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+<div style={{fontSize:14,width:20,textAlign:"center",flexShrink:0,paddingTop:1}}>{al.action==="created"?"\uD83C\uDD95":al.action==="status"?"\uD83D\uDD04":al.action==="verified"?"\u2705":al.action==="edited"?"\u270F\uFE0F":al.action==="note"?"\uD83D\uDCDD":al.action==="mass_update"?"\u26A1":"\u2022"}</div>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontSize:12,fontWeight:600,color:al.action==="status"?"#3B8FD9":al.action==="verified"?"#22C55E":al.action==="created"?"#8B5CF6":"var(--t2)"}}>{al.detail||al.action}</div>
+<div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>{fmtTs(al.ts)}{al.user?(" \u00B7 "+al.user):""}</div>
+</div>
+</div>)}
+</div>}
+</div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+<button onClick={()=>setConfirm2({title:"Delete",dng:true,lbl:"Delete",msg:"Delete "+vc.fullName+"?",fn:()=>del(vc.id)})} style={{...bO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>{"\uD83D\uDDD1 Delete"}</button>
+<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+{(TRANS[vc.status]||[]).map(ns=><button key={ns} onClick={()=>openSC(vc,ns)} style={{...bO,borderColor:ST[ns].color,color:ST[ns].color,fontSize:12}}>{ST[ns].icon+" "+ST[ns].label}</button>)}
+<button onClick={()=>{setVc(null);openEd(vc)}} style={{...bP,fontSize:12}}>{"\u270F\uFE0F Edit"}</button>
+</div></div>
+</Mdl>}
+
+{showSt&&<Mdl onClose={()=>setShowSt(null)} width={480} title={"\u2192 "+ST[stForm.ns]?.label} subtitle={showSt.fullName}>
+<div style={{padding:24}}>
+<div style={{display:"flex",alignItems:"center",gap:10,padding:14,background:ST[stForm.ns]?.color+"10",borderRadius:10,border:"1px solid "+ST[stForm.ns]?.color+"30",marginBottom:18}}><span style={{fontSize:22}}>{ST[stForm.ns]?.icon}</span><div><div style={{fontWeight:700,fontSize:14}}>{ST[stForm.ns]?.label}</div><div style={{fontSize:12,color:"var(--t2)"}}>{ST[stForm.ns]?.desc}</div></div></div>
+<div style={{display:"flex",flexDirection:"column",gap:14}}>
+{stForm.ns==="paid"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Commission ($)</label><input type="number" value={stForm.commAmt} onChange={e=>setStForm(p=>({...p,commAmt:e.target.value}))} style={{...inp,marginTop:4}}/></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Date Paid</label><input type="date" value={stForm.paidDate} onChange={e=>setStForm(p=>({...p,paidDate:e.target.value}))} style={{...inp,marginTop:4}}/></div></>}
+{stForm.ns==="inactive"&&<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Month they cancelled</label><input type="month" value={stForm.cancelMo} onChange={e=>setStForm(p=>({...p,cancelMo:e.target.value}))} style={{...inp,marginTop:4}}/></div>}
+{stForm.ns==="chargedBack"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Chargeback ($)</label><input type="number" value={stForm.cbAmt} onChange={e=>setStForm(p=>({...p,cbAmt:e.target.value}))} style={{...inp,marginTop:4}}/></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Date</label><input type="date" value={stForm.cbDate} onChange={e=>setStForm(p=>({...p,cbDate:e.target.value}))} style={{...inp,marginTop:4}}/></div></>}
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Notes</label><input value={stForm.note} onChange={e=>setStForm(p=>({...p,note:e.target.value}))} placeholder="Reason..." style={{...inp,marginTop:4}}/></div>
+</div></div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowSt(null)} style={bO}>Cancel</button><button onClick={doSC} style={{...bP,background:ST[stForm.ns]?.color}}>Confirm</button></div>
+</Mdl>}
+
+{showBulk&&<Mdl onClose={()=>setShowBulk(false)} width={860} title={"\uD83D\uDCCB Mass Import"} subtitle={"Step "+bStep+" of 3"}>
+{bStep===1&&<div style={{padding:24}}><textarea value={bRaw} onChange={e=>setBRaw(e.target.value)} placeholder="Paste spreadsheet data (with headers)..." style={{...inp,height:200,resize:"vertical",fontFamily:"monospace",fontSize:12}}/></div>}
+{bStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{background:"var(--hover)",borderRadius:10,padding:12,marginBottom:16,border:"1px solid var(--border)",fontSize:12,color:"var(--t2)"}}>{bHdr.length+" columns, "+bRows.length+" rows"}</div>{bHdr.map((h,idx)=><div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 32px 1fr",gap:10,alignItems:"center",padding:"10px 14px",borderRadius:8,background:"var(--hover)",border:"1px solid var(--border)",marginBottom:6}}><div><div style={{fontWeight:700,fontSize:13}}>{h}</div><div style={{fontSize:11,color:"var(--t3)",fontStyle:"italic"}}>{bRows.slice(0,3).map(r=>r[idx]||"").filter(Boolean).join(", ")||"(empty)"}</div></div><div style={{textAlign:"center",color:bMap[idx]&&bMap[idx]!=="skip"?"#3B8FD9":"var(--t3)"}}>{bMap[idx]&&bMap[idx]!=="skip"?"\u2192":"\u00B7"}</div><select value={bMap[idx]||"skip"} onChange={e=>setBMap(p=>({...p,[idx]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="skip">{"\u2014 Skip \u2014"}</option>{FIELDS.map(f=><option key={f.key} value={f.key}>{f.label}</option>)}</select></div>)}</div>}
+{bStep===3&&<div style={{padding:24}}><div style={{padding:"8px 14px",borderRadius:8,background:"#F0FDF4",border:"1px solid #BBF7D0",fontSize:13}}><strong style={{color:"#22C55E"}}>{buildPrev().filter(c=>c.fullName?.trim()).length}</strong>{" ready to import"}</div></div>}
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}><button onClick={()=>{if(bStep===1)setShowBulk(false);else setBStep(s=>s-1)}} style={bO}>{bStep===1?"Cancel":"\u2190 Back"}</button>{bStep===1&&<button onClick={parseBulk} disabled={!bRaw.trim()} style={{...bP,opacity:bRaw.trim()?1:.4}}>{"Parse \u2192"}</button>}{bStep===2&&<button onClick={()=>{if(!Object.values(bMap).includes("fullName")){flash("Map Full Name","error");return}setBStep(3)}} style={bP}>{"Preview \u2192"}</button>}{bStep===3&&<button onClick={doBulk} style={bP}>{"Import "+buildPrev().filter(c=>c.fullName?.trim()).length}</button>}</div>
+</Mdl>}
+
+{showCU&&<Mdl onClose={()=>setShowCU(false)} width={480} title="Add Team Member">
+<div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+{cuErr&&<div style={{padding:"10px 14px",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,color:"#DC2626",fontSize:13}}>{cuErr}</div>}
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Full Name</label><input value={nu.displayName} onChange={e=>setNu(p=>({...p,displayName:e.target.value}))} style={{...inp,marginTop:4}}/></div>
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Email</label><input type="email" value={nu.email} onChange={e=>setNu(p=>({...p,email:e.target.value}))} style={{...inp,marginTop:4}}/></div>
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Temporary Password</label><input type="text" value={nu.password} onChange={e=>setNu(p=>({...p,password:e.target.value}))} placeholder="Min 6 chars" style={{...inp,marginTop:4}}/></div>
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Account Type</label>
+<select value={nu.role} onChange={e=>setNu(p=>({...p,role:e.target.value}))} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="broker">Broker (standard commission)</option><option value="heap">HEAP (custom commission)</option></select></div>
+{nu.role==="heap"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End Pay ($ per sale)</label><input type="number" value={nu.heapFrontEnd} onChange={e=>setNu(p=>({...p,heapFrontEnd:e.target.value}))} placeholder="0" style={{...inp,marginTop:4}}/></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End Pay ($ per sale)</label><input type="number" value={nu.heapBackEnd} onChange={e=>setNu(p=>({...p,heapBackEnd:e.target.value}))} placeholder="0" style={{...inp,marginTop:4}}/></div></>}
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowCU(false)} style={bO}>Cancel</button><button onClick={doCU} disabled={!nu.email||!nu.password||!nu.displayName} style={{...bP,opacity:nu.email&&nu.password&&nu.displayName?1:.4}}>Create Account</button></div>
+</Mdl>}
+
+{editAgent&&<Mdl onClose={()=>setEditAgent(null)} width={420} title={"Edit "+editAgent.displayName}>
+<div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Role</label>
+<select value={editAgent.role} onChange={e=>setEditAgent(p=>({...p,role:e.target.value}))} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="broker">Broker</option><option value="heap">HEAP</option></select></div>
+{editAgent.role==="broker"&&<div style={{display:"flex",alignItems:"center",gap:10,padding:12,background:editAgent.isOwner?"#EFF6FF":"var(--hover)",borderRadius:10,border:"1px solid "+(editAgent.isOwner?"#3B8FD9":"var(--border)"),cursor:"pointer"}} onClick={()=>setEditAgent(p=>({...p,isOwner:!p.isOwner}))}>
+<div style={{width:20,height:20,borderRadius:6,border:"2px solid "+(editAgent.isOwner?"#3B8FD9":"var(--border)"),background:editAgent.isOwner?"#3B8FD9":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{editAgent.isOwner&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>{"\u2713"}</span>}</div>
+<div><div style={{fontSize:13,fontWeight:600}}>This is my production account</div><div style={{fontSize:11,color:"var(--t3)"}}>Merges into admin stats, no $25/$50 override</div></div>
+</div>}
+{editAgent.role==="heap"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End Pay ($)</label><input type="number" value={editAgent.heapFrontEnd||""} onChange={e=>setEditAgent(p=>({...p,heapFrontEnd:e.target.value}))} style={{...inp,marginTop:4}}/></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End Pay ($)</label><input type="number" value={editAgent.heapBackEnd||""} onChange={e=>setEditAgent(p=>({...p,heapBackEnd:e.target.value}))} style={{...inp,marginTop:4}}/></div></>}
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setEditAgent(null)} style={bO}>Cancel</button><button onClick={()=>updAg(editAgent.uid,{role:editAgent.role,heapFrontEnd:editAgent.heapFrontEnd||"0",heapBackEnd:editAgent.heapBackEnd||"0",isOwner:!!editAgent.isOwner})} style={bP}>Save</button></div>
+</Mdl>}
+
+{/* REVIEW MODE OVERLAY */}
+{revMode&&(()=>{const c=revClients[revIdx];if(!c)return null;const pct2=revClients.length>0?((revIdx)/revClients.length*100).toFixed(0):0;const st=ST[c.status]||ST.active;const ago=c.lastVerified?daysBtwn(c.lastVerified,td()):null;const overdue=ago&&ago>=30;
+return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fadeIn .15s",padding:20}}>
+<div style={{background:"var(--card)",borderRadius:20,width:"100%",maxWidth:600,boxShadow:"0 20px 60px rgba(0,0,0,.3)",border:"1px solid var(--border)",overflow:"hidden"}}>
+{/* Progress bar */}
+<div style={{height:4,background:"var(--border)"}}><div style={{height:"100%",background:"#3B8FD9",width:pct2+"%",transition:"width .3s"}}/></div>
+<div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div><div style={{fontSize:18,fontWeight:800}}>{"\uD83D\uDCCB Monthly Review"}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{(revIdx+1)+" of "+revClients.length}</div></div>
+<div style={{display:"flex",gap:8,alignItems:"center"}}>
+<div style={{display:"flex",gap:6,fontSize:11}}>
+<span style={{color:"#22C55E",fontWeight:700}}>{"\u2705 "+revTally.active}</span>
+<span style={{color:"#3B8FD9",fontWeight:700}}>{"\uD83D\uDCB0 "+revTally.paid}</span>
+<span style={{color:"#F59E0B",fontWeight:700}}>{"\u26A0\uFE0F "+revTally.inactive}</span>
+<span style={{color:"var(--t3)",fontWeight:700}}>{"\u23ED "+revTally.skipped}</span>
+</div>
+<button onClick={()=>setRevMode(false)} style={{...bO,fontSize:12,padding:"6px 12px"}}>{"\u2715 Exit"}</button>
+</div></div>
+<div style={{padding:24}}>
+<div style={{textAlign:"center",marginBottom:20}}>
+<div style={{fontSize:24,fontWeight:800,marginBottom:4}}>{c.fullName}</div>
+<Badge color={st.color}>{st.icon+" "+st.label}</Badge>
+{overdue&&<span style={{marginLeft:8}}><Badge color="#F59E0B">{"\u26A0\uFE0F "+ago+"d since check"}</Badge></span>}
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>MBI Number</div><div style={{fontSize:18,fontWeight:800,marginTop:4,letterSpacing:1}}>{c.mbiNumber||"\u2014"}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Carrier / Plan</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtCar(c.carrier)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{c.planName||"\u2014"}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Effective</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmt(c.effectiveDate)}</div></div>
+<div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Phone</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{fmtPh(c.phone)}</div></div>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
+<button onClick={()=>revAction("active")} style={{padding:14,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u2705"}</div><div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginTop:4}}>Still Active</div></button>
+<button onClick={()=>revAction("paid")} style={{padding:14,borderRadius:12,border:"2px solid #3B8FD9",background:"#3B8FD910",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\uD83D\uDCB0"}</div><div style={{fontSize:11,fontWeight:700,color:"#3B8FD9",marginTop:4}}>Mark Paid</div></button>
+<button onClick={()=>revAction("inactive")} style={{padding:14,borderRadius:12,border:"2px solid #F59E0B",background:"#F59E0B10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u26A0\uFE0F"}</div><div style={{fontSize:11,fontWeight:700,color:"#F59E0B",marginTop:4}}>Gone Inactive</div></button>
+<button onClick={()=>revAction("skip")} style={{padding:14,borderRadius:12,border:"2px solid var(--border)",background:"var(--hover)",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:22}}>{"\u23ED"}</div><div style={{fontSize:11,fontWeight:700,color:"var(--t3)",marginTop:4}}>Skip</div></button>
+</div>
+</div></div></div>})()}
+
+{/* MASS UPDATE MODAL */}
+{showMU&&<Mdl onClose={()=>setShowMU(false)} width={640} title={"\u26A1 Mass Update"} subtitle={muSel.size+" of "+disp.length+" clients selected"}>
+<div style={{padding:"16px 24px",display:"flex",gap:14,borderBottom:"1px solid var(--border)"}}>
+<div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Field</label>
+<select value={mf} onChange={e=>{setMf(e.target.value);setMv("")}} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select field...</option>
+<option value="hospitalIndemnity">Hospital Indemnity</option><option value="planType">Plan Type</option><option value="medicaidLevel">Medicaid Level</option><option value="carrier">Carrier</option><option value="electionPeriod">Election Period</option><option value="state">State</option><option value="previousCarrier">Previous Carrier</option>
+</select></div>
+{mf&&<div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>New value</label>
+<select value={mv} onChange={e=>setMv(e.target.value)} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="">Select value...</option>
+{(FIELDS.find(f=>f.key===mf)?.options||[]).map(o=><option key={o} value={o}>{o}</option>)}
+</select></div>}
+</div>
+<div style={{padding:"10px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid var(--border)"}}>
+<div style={{display:"flex",gap:10,alignItems:"center"}}>
+<button onClick={()=>setMuSel(new Set(disp.map(c=>c.id)))} style={{...bO,fontSize:11,padding:"4px 10px"}}>Select All</button>
+<button onClick={()=>setMuSel(new Set())} style={{...bO,fontSize:11,padding:"4px 10px"}}>Select None</button>
+</div>
+<span style={{fontSize:12,fontWeight:700,color:muSel.size>0?"#3B8FD9":"var(--t3)"}}>{muSel.size+" selected"}</span>
+</div>
+<div style={{maxHeight:"45vh",overflowY:"auto",padding:"8px 24px"}}>
+{disp.map(c=>{const sel=muSel.has(c.id);const cur=mf?c[mf]||"":"";return<div key={c.id} onClick={()=>{const n=new Set(muSel);if(sel)n.delete(c.id);else n.add(c.id);setMuSel(n)}} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",background:sel?"#EFF6FF":"transparent",border:"1px solid "+(sel?"#3B8FD9":"transparent"),marginBottom:2}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent"}}>
+<div style={{width:20,height:20,borderRadius:6,border:"2px solid "+(sel?"#3B8FD9":"var(--border)"),background:sel?"#3B8FD9":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{sel&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>{"\u2713"}</span>}</div>
+<div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:13}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtCar(c.carrier)}{c.state?" \u00B7 "+c.state:""}{c.planType?" \u00B7 "+c.planType:""}</div></div>
+{mf&&<div style={{fontSize:11,color:"var(--t3)",textAlign:"right",flexShrink:0}}>{cur||"\u2014"}{mv&&cur!==mv&&<span style={{color:"#3B8FD9",fontWeight:700}}>{" \u2192 "+mv}</span>}</div>}
+</div>})}
+</div>
+{mf&&mv&&muSel.size>0&&<div style={{padding:"8px 24px"}}><div style={{padding:10,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:10,fontSize:12,color:"#92400E"}}>{"Will set "+(FIELDS.find(f=>f.key===mf)?.label||mf)+" to \""+mv+"\" on "+muSel.size+" clients."}</div></div>}
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowMU(false)} style={bO}>Cancel</button><button onClick={doMU} disabled={!mf||!mv||muSel.size===0} style={{...bP,opacity:mf&&mv&&muSel.size>0?1:.4}}>{"Update "+muSel.size+" Clients"}</button></div>
+</Mdl>}
+
+{/* REORDER MODAL */}
+{showReorder&&<Mdl onClose={()=>setShowReorder(false)} width={600} title={"\uD83D\uDD00 Reorder Clients"} subtitle={"Step "+reoStep+" of 2"}>
+{reoStep===1&&<div style={{padding:24}}><div style={{fontSize:13,color:"var(--t2)",marginBottom:12}}>Paste a column of client names from your spreadsheet. Matched clients will be reordered to this sequence.</div><textarea value={reoRaw} onChange={e=>setReoRaw(e.target.value)} placeholder={"John Smith\nJane Doe\nBob Wilson\n..."} style={{...inp,height:200,resize:"vertical",fontFamily:"monospace",fontSize:12}}/></div>}
+{reoStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}>
+<div style={{display:"flex",gap:10,marginBottom:16}}>
+<div style={{padding:"8px 14px",borderRadius:8,background:"#F0FDF4",border:"1px solid #BBF7D0",fontSize:13}}><strong style={{color:"#22C55E"}}>{reoMatches.filter(m=>m.matched).length}</strong>{" matched"}</div>
+<div style={{padding:"8px 14px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:13}}><strong style={{color:"#EF4444"}}>{reoMatches.filter(m=>!m.matched).length}</strong>{" not found"}</div>
+</div>
+{reoMatches.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,background:m.matched?"#F0FDF4":"#FEF2F2",border:"1px solid "+(m.matched?"#BBF7D0":"#FECACA"),marginBottom:4}}>
+<span style={{fontSize:12,fontWeight:700,color:"var(--t3)",width:24}}>{i+1}</span>
+<span style={{fontSize:13,fontWeight:600,flex:1}}>{m.name}</span>
+<span style={{fontSize:11,fontWeight:700,color:m.matched?"#22C55E":"#EF4444"}}>{m.matched?"\u2713 Matched":"\u2717 Not found"}</span>
+</div>)}
+</div>}
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
+<button onClick={()=>{if(reoStep===1)setShowReorder(false);else setReoStep(1)}} style={bO}>{reoStep===1?"Cancel":"\u2190 Back"}</button>
+{reoStep===1&&<button onClick={parseReorder} disabled={!reoRaw.trim()} style={{...bP,opacity:reoRaw.trim()?1:.4}}>{"Preview \u2192"}</button>}
+{reoStep===2&&<button onClick={applyReorder} disabled={reoMatches.filter(m=>m.matched).length===0} style={{...bP,opacity:reoMatches.filter(m=>m.matched).length>0?1:.4}}>{"Apply Order ("+reoMatches.filter(m=>m.matched).length+")"}</button>}
+</div>
+</Mdl>}
+
+</div>);
+}
+
+/* ═══════════ APP WRAPPER ═══════════ */
+function App(){
+/* Error boundary */
+class EB extends React.Component{
+constructor(p){super(p);this.state={err:null}}
+static getDerivedStateFromError(e){return{err:e}}
+componentDidCatch(e,info){console.error("React error:",e,info)}
+render(){if(this.state.err)return React.createElement("div",{style:{padding:40,fontFamily:"monospace",fontSize:14,color:"#EF4444",background:"#1E293B",minHeight:"100vh",whiteSpace:"pre-wrap"}},
+"Error: "+this.state.err.toString()+"\n\n"+(this.state.err.stack||""));return this.props.children}
+}
+const[user,setUser]=useState(null);const[prof,setProf]=useState(null);const[ld,setLd]=useState(true);
+useEffect(()=>{const un=auth.onAuthStateChanged(async u=>{if(u){setUser(u);try{const d=await db.collection("users").doc(u.uid).get();if(d.exists)setProf(d.data());else{const un2=db.collection("users").doc(u.uid).onSnapshot(s=>{if(s.exists){setProf(s.data());un2()}})}}catch(e){console.error(e)}}else{setUser(null);setProf(null)}setLd(false)});return()=>un()},[]);
+if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif"}}><div style={{fontSize:18,fontWeight:700,color:"#64748B"}}>Loading...</div></div>;
+if(!user)return<LoginScreen/>;
+if(!prof)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif"}}><div style={{fontSize:14,color:"#64748B"}}>Setting up...</div></div>;
+return<EB><Tracker cu={user} up={prof}/></EB>;
+}
+ReactDOM.render(<App/>,document.getElementById("root"));
+</script>
 </body>
 </html>
