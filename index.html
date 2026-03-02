@@ -117,6 +117,7 @@ return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justify
 function Tracker({cu,up}){
 const isA=up?.role==="admin";
 const[dark,setDark]=useState(false);
+const[sideOpen,setSideOpen]=useState(false);
 const[tab,setTab]=useState("dashboard");
 const[cls,setCls]=useState([]);
 const[team,setTeam]=useState([]);
@@ -125,7 +126,7 @@ const[toast,setToast]=useState(null);
 const[form,setForm]=useState({});
 const[showAdd,setShowAdd]=useState(false);
 const[editId,setEditId]=useState(null);
-const[vc,setVc]=useState(null);
+const[vc,setVc]=useState(null);const[vcNote,setVcNote]=useState("");
 const[search,setSearch]=useState("");
 const[stFilt,setStFilt]=useState("all");
 const[cc,setCc]=useState(false);
@@ -183,16 +184,20 @@ const isPend=c=>c.effectiveDate&&new Date(c.effectiveDate+"T00:00:00")>new Date(
 const getComm=c=>{const ag=team.find(u=>u.uid===c.agentId);if(ag?.role==="heap")return calcHeap(ag);return calcInit(c.effectiveDate,c.electionPeriod)};
 
 /* CRUD */
-const save=async d=>{const nc=normClient({...d,agentId:d.agentId||cu.uid});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));if(nc.id){const id=nc.id;delete nc.id;await db.collection("clients").doc(id).update(nc)}else{delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection("clients").add(nc)}};
+const save=async d=>{const nc=normClient({...d,agentId:d.agentId||cu.uid});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));if(nc.id){const id=nc.id;delete nc.id;await db.collection("clients").doc(id).update(nc);return id}else{delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:new Date().toISOString(),user:up?.displayName||"System",action:"created",detail:"Client added"}];const ref=await db.collection("clients").add(nc);return ref.id}};
 const del=async id=>{await db.collection("clients").doc(id).delete();setVc(null);flash("Deleted");setConfirm2(null)};
 const upd=async(id,u)=>db.collection("clients").doc(id).update(u);
+
+/* Activity Log: append timestamped entry to client's log array */
+const logAct=async(id,action,detail)=>{await db.collection("clients").doc(id).update({activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action,detail:detail||""})})};
+const fmtTs=ts=>{if(!ts)return"";const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})};
 const resetF=()=>{setForm({});setEditId(null)};
 const openEd=c=>{setForm({...c});setEditId(c.id);setShowAdd(true)};
-const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
+const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);if(editId){logAct(editId,"edited","Client details updated")}flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
 
 /* Status */
 const openSC=(c,ns)=>{const ag=team.find(u=>u.uid===c.agentId);const ca=ag?.role==="heap"?String(calcHeap(ag)):(c.commissionAmount||String(calcInit(c.effectiveDate,c.electionPeriod)));setStForm({ns,commAmt:ca,paidDate:c.paidDate||td(),cbDate:c.chargebackDate||td(),cbAmt:c.chargebackAmount||ca||"",cancelMo:"",note:""});setShowSt(c)};
-const doSC=async()=>{const c=showSt,ns=stForm.ns;const u={status:ns,statusNote:stForm.note||c.statusNote||""};if(ns==="paid"){u.commissionAmount=stForm.commAmt;u.paidDate=stForm.paidDate||td()}if(ns==="inactive"){u.inactiveDate=td();u.cancelMonth=stForm.cancelMo||""}if(ns==="chargedBack"){u.chargebackDate=stForm.cbDate||td();u.chargebackAmount=stForm.cbAmt}if(ns==="neverInEffect"){u.inactiveDate=td();u.cancelMonth=""}if(ns==="active"&&(c.status==="inactive"||c.status==="chargedBack"))u.lastVerified=td();await upd(c.id,u);flash(c.fullName+" \u2192 "+ST[ns].label);setShowSt(null);setVc(null)};
+const doSC=async()=>{const c=showSt,ns=stForm.ns;const u={status:ns,statusNote:stForm.note||c.statusNote||""};if(ns==="paid"){u.commissionAmount=stForm.commAmt;u.paidDate=stForm.paidDate||td()}if(ns==="inactive"){u.inactiveDate=td();u.cancelMonth=stForm.cancelMo||""}if(ns==="chargedBack"){u.chargebackDate=stForm.cbDate||td();u.chargebackAmount=stForm.cbAmt}if(ns==="neverInEffect"){u.inactiveDate=td();u.cancelMonth=""}if(ns==="active"&&(c.status==="inactive"||c.status==="chargedBack"))u.lastVerified=td();await upd(c.id,u);logAct(c.id,"status","Status: "+ST[c.status]?.label+" \u2192 "+ST[ns]?.label+(stForm.note?" \u2014 "+stForm.note:""));flash(c.fullName+" \u2192 "+ST[ns].label);setShowSt(null);setVc(null)};
 
 /* Create user */
 const doCU=async()=>{setCuErr("");try{const cr=await secAuth.createUserWithEmailAndPassword(nu.email,nu.password);await secAuth.signOut();const ud={email:nu.email,displayName:nu.displayName,role:nu.role,createdBy:cu.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()};if(nu.role==="heap"){ud.heapFrontEnd=nu.heapFrontEnd||"0";ud.heapBackEnd=nu.heapBackEnd||"0"}await db.collection("users").doc(cr.user.uid).set(ud);flash("Created "+nu.displayName+"!");setShowCU(false);setNu({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""})}catch(e){setCuErr(e.message)}};
@@ -212,10 +217,10 @@ const transferClients=async(toUid)=>{const mine=cls.filter(c=>c.agentId===cu.uid
 /* Monthly Review Mode */
 const revClients=useMemo(()=>disp.filter(c=>c.status==="active"||c.status==="paid"),[disp]);
 const startReview=()=>{setRevIdx(0);setRevTally({active:0,paid:0,inactive:0,skipped:0});setRevMode(true)};
-const revAction=async(action)=>{const c=revClients[revIdx];if(!c)return;const t={...revTally};if(action==="active"){await upd(c.id,{lastVerified:td()});t.active++}else if(action==="paid"){await upd(c.id,{status:"paid",paidDate:td(),lastVerified:td()});t.paid++}else if(action==="inactive"){await upd(c.id,{status:"inactive",inactiveDate:td()});t.inactive++}else{t.skipped++}setRevTally(t);if(revIdx+1>=revClients.length){setRevMode(false);flash("Review complete! "+t.active+" active, "+t.paid+" paid, "+t.inactive+" inactive, "+t.skipped+" skipped")}else setRevIdx(revIdx+1)};
+const revAction=async(action)=>{const c=revClients[revIdx];if(!c)return;const t={...revTally};if(action==="active"){await upd(c.id,{lastVerified:td()});logAct(c.id,"verified","MARX check \u2014 still active");t.active++}else if(action==="paid"){await upd(c.id,{status:"paid",paidDate:td(),lastVerified:td()});logAct(c.id,"status","Review: Active \u2192 Paid");t.paid++}else if(action==="inactive"){await upd(c.id,{status:"inactive",inactiveDate:td()});logAct(c.id,"status","Review: Active \u2192 Inactive");t.inactive++}else{t.skipped++}setRevTally(t);if(revIdx+1>=revClients.length){setRevMode(false);flash("Review complete! "+t.active+" active, "+t.paid+" paid, "+t.inactive+" inactive, "+t.skipped+" skipped")}else setRevIdx(revIdx+1)};
 
 /* Mass Update */
-const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}if(muSel.size===0){flash("Select at least one client","error");return}const targets=disp.filter(c=>muSel.has(c.id));const b=db.batch();targets.forEach(c=>b.update(db.collection("clients").doc(c.id),{[mf]:mv}));await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("");setMuSel(new Set())};
+const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}if(muSel.size===0){flash("Select at least one client","error");return}const targets=disp.filter(c=>muSel.has(c.id));const fl=FIELDS.find(f=>f.key===mf)?.label||mf;const b=db.batch();targets.forEach(c=>{b.update(db.collection("clients").doc(c.id),{[mf]:mv,activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:"mass_update",detail:fl+": "+(c[mf]||"empty")+" \u2192 "+mv})})});await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("");setMuSel(new Set())};
 
 /* Reorder by pasted names */
 const parseReorder=()=>{const names=reoRaw.split("\n").map(n=>n.trim()).filter(Boolean);const matches=names.map(n=>{const found=disp.find(c=>c.fullName?.toLowerCase()===n.toLowerCase());return{name:n,matched:!!found,id:found?.id}});setReoMatches(matches);setReoStep(2)};
@@ -225,7 +230,7 @@ const applyReorder=async()=>{const matched=reoMatches.filter(m=>m.matched);const
 const applyF=useCallback(list=>{let f=[...list];if(search){const s=search.toLowerCase(),sd2=s.replace(/\D/g,"");f=f.filter(c=>(c.fullName?.toLowerCase().includes(s))||(c.phone&&c.phone.replace(/\D/g,"").includes(sd2))||(c.email?.toLowerCase().includes(s))||(c.mailingAddress?.toLowerCase().includes(s))||(c.city?.toLowerCase().includes(s))||(c.zipCode?.includes(s))||(c.mbiNumber?.toLowerCase().includes(s))||(c.carrier?.toLowerCase().includes(s))||(c.planName?.toLowerCase().includes(s))||(c.statusNote?.toLowerCase().includes(s)))}if(stFilt!=="all")f=f.filter(c=>c.status===stFilt);Object.entries(flt).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v)});if(sf==="custom"){f.sort((a,b)=>(a.sortOrder!=null&&b.sortOrder!=null)?(a.sortOrder-b.sortOrder):0)}else{f.sort((a,b)=>{const av=a[sf]||"",bv=b[sf]||"";return sd==="asc"?(av<bv?-1:1):(av>bv?-1:1)})}return f},[search,stFilt,flt,sf,sd]);
 const uniV=useCallback((f,l)=>[...new Set(l.map(c=>c[f]).filter(Boolean))].sort(),[]);
 const cntV=useCallback((f,v,l)=>l.filter(c=>c[f]===v).length,[]);
-const qSave=async(id,f2,v)=>{await upd(id,{[f2]:v});setQe(null);flash("Updated")};
+const qSave=async(id,f2,v)=>{await upd(id,{[f2]:v});if(f2==="statusNote"&&v)logAct(id,"note","Note: "+v);setQe(null);flash("Updated")};
 const csv=()=>{const af=[...FIELDS,{key:"status",label:"Status"},{key:"commissionAmount",label:"Commission"},{key:"statusNote",label:"Notes"}];const h=af.map(f=>f.label).join(",");const r=disp.map(c=>af.map(f=>{let v=c[f.key]||"";if(typeof v==="string"&&(v.includes(",")||v.includes('"')))v='"'+v.replace(/"/g,'""')+'"';return v}).join(","));const bl=new Blob([h+"\n"+r.join("\n")],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download="medicare-"+td()+".csv";a.click();flash("Exported!")};
 
 /* Analytics */
@@ -301,7 +306,7 @@ if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"cent
 
 /* Row - plain function, NOT a component */
 const renderRow=(c,sp)=>{const st=ST[c.status]||ST.active;const co=cc?getCC(c.carrier):null;const pe=isPend(c);
-return<div key={c.id} onClick={()=>setVc(c)} style={{display:"grid",gridTemplateColumns:"2fr 1fr .7fr .6fr .6fr .8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",borderLeft:co?"4px solid "+co:"none"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--cs)"}}>
+return<div key={c.id} onClick={()=>{setVc(c);setVcNote("")}} style={{display:"grid",gridTemplateColumns:"2fr 1fr .7fr .6fr .6fr .8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",borderLeft:co?"4px solid "+co:"none"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--cs)"}}>
 <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:co?co+"18":"var(--hover)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:co||"var(--text)"}}>{(c.fullName||"?")[0].toUpperCase()}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPh(c.phone)}</div></div></div>
 <div style={{fontSize:12,fontWeight:600,color:co||"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtCar(c.carrier)}</div>
 <div style={{fontSize:12}}>{fmt(c.effectiveDate)}{pe&&" \u23F3"}</div>
@@ -335,24 +340,39 @@ return(
 {confirm2&&<Mdl onClose={()=>setConfirm2(null)} width={380} title={confirm2.title}><div style={{padding:24,fontSize:14,color:"var(--t2)"}}>{confirm2.msg}</div><div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setConfirm2(null)} style={bO}>Cancel</button><button onClick={confirm2.fn} style={{...bP,background:confirm2.dng?"#EF4444":"#3B8FD9"}}>{confirm2.lbl||"Confirm"}</button></div></Mdl>}
 
 {/* HEADER */}
-<header style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,boxShadow:"var(--cs)",position:"sticky",top:0,zIndex:100}}>
-<div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:40,height:40,borderRadius:12,background:"#3B8FD9",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontWeight:900,fontSize:18}}>U</span></div><div><div style={{fontWeight:800,fontSize:15,lineHeight:1.1}}>United Insurance</div><div style={{fontSize:9,fontWeight:800,letterSpacing:2,color:"#3B8FD9",textTransform:"uppercase"}}>PROFESSIONALS</div></div></div>
+<header style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 16px 0 12px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56,boxShadow:"var(--cs)",position:"sticky",top:0,zIndex:100}}>
 <div style={{display:"flex",alignItems:"center",gap:10}}>
-<span style={{fontSize:12,color:"var(--t3)"}}>{up?.displayName} ({up?.role})</span>
-<button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:20}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
-<button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:12}}>{"\uD83D\uDCCB Import"}</button>
-{isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:12}}>{"\uD83E\uDDF9 Dedup"}</button>}
-<button onClick={startReview} style={{...bO,fontSize:12,borderColor:revClients.length>0?"#8B5CF6":"var(--border)",color:revClients.length>0?"#8B5CF6":"var(--t3)"}}>{"\uD83D\uDCCB Review ("+revClients.length+")"}</button>
-<button onClick={()=>{setMuSel(new Set(disp.map(c=>c.id)));setMf("");setMv("");setShowMU(true)}} style={{...bO,fontSize:12}}>{"\u26A1 Mass Update"}</button>
-<button onClick={()=>{setReoRaw("");setReoStep(1);setShowReorder(true)}} style={{...bO,fontSize:12}}>{"\uD83D\uDD00 Reorder"}</button>
-<button onClick={()=>{resetF();setShowAdd(true)}} style={bP}>+ Add Client</button>
-<button onClick={()=>auth.signOut()} style={{...bO,fontSize:12,borderColor:"#EF4444",color:"#EF4444"}}>Sign Out</button>
+<button onClick={()=>setSideOpen(true)} style={{background:"none",border:"none",cursor:"pointer",padding:8,display:"flex",flexDirection:"column",gap:4,borderRadius:8}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>
+<div style={{width:20,height:2,background:"var(--text)",borderRadius:2}}/><div style={{width:20,height:2,background:"var(--text)",borderRadius:2}}/><div style={{width:20,height:2,background:"var(--text)",borderRadius:2}}/>
+</button>
+<span style={{fontSize:15,fontWeight:700,color:"var(--text)"}}>{tabs.find(t2=>t2.id===tab)?.ic+" "+tabs.find(t2=>t2.id===tab)?.label}</span>
+</div>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:4}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
+<button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCCB Import"}</button>
+{isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83E\uDDF9 Dedup"}</button>}
+<button onClick={startReview} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:revClients.length>0?"#8B5CF6":"var(--border)",color:revClients.length>0?"#8B5CF6":"var(--t3)"}}>{"\uD83D\uDCCB "+revClients.length}</button>
+<button onClick={()=>{setMuSel(new Set(disp.map(c=>c.id)));setMf("");setMv("");setShowMU(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\u26A1"}</button>
+<button onClick={()=>{setReoRaw("");setReoStep(1);setShowReorder(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDD00"}</button>
+<button onClick={()=>{resetF();setShowAdd(true)}} style={{...bP,fontSize:12,padding:"8px 14px"}}>+ Add</button>
 </div></header>
 
-{/* TABS */}
-<nav style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"0 24px",display:"flex",overflow:"auto"}}>
-{tabs.map(t2=><button key={t2.id} onClick={()=>{setTab(t2.id);setFlt({});setSearch("");setStFilt("all")}} style={{padding:"12px 18px",border:"none",background:"transparent",color:tab===t2.id?"#3B8FD9":"var(--t2)",borderBottom:tab===t2.id?"2px solid #3B8FD9":"2px solid transparent",cursor:"pointer",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:7,fontFamily:"var(--font)"}}><span>{t2.ic}</span>{t2.label}{t2.ct!=null&&<span style={{background:tab===t2.id?"#3B8FD9":"var(--border)",color:tab===t2.id?"#fff":"var(--t2)",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700}}>{t2.ct}</span>}</button>)}
-</nav>
+{/* SIDEBAR */}
+{sideOpen&&<div onClick={()=>setSideOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:200,animation:"fadeIn .15s"}}/>}
+<div style={{position:"fixed",top:0,left:0,bottom:0,width:260,background:"var(--card)",borderRight:"1px solid var(--border)",zIndex:201,transform:sideOpen?"translateX(0)":"translateX(-100%)",transition:"transform .25s ease",boxShadow:sideOpen?"4px 0 24px rgba(0,0,0,.12)":"none",display:"flex",flexDirection:"column"}}>
+<div style={{padding:"20px 20px 16px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+<div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:36,height:36,borderRadius:10,background:"#3B8FD9",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontWeight:900,fontSize:16}}>U</span></div><div><div style={{fontWeight:800,fontSize:14,lineHeight:1.1}}>United Insurance</div><div style={{fontSize:8,fontWeight:800,letterSpacing:2,color:"#3B8FD9",textTransform:"uppercase"}}>PROFESSIONALS</div></div></div>
+<button onClick={()=>setSideOpen(false)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"var(--t3)",padding:4}}>{"\u2715"}</button>
+</div>
+<div style={{flex:1,padding:"12px 10px",display:"flex",flexDirection:"column",gap:2}}>
+{tabs.map(t2=><button key={t2.id} onClick={()=>{setTab(t2.id);setFlt({});setSearch("");setStFilt("all");setSideOpen(false)}} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:10,border:"none",background:tab===t2.id?"var(--tabBg)":"transparent",color:tab===t2.id?"#3B8FD9":"var(--t2)",cursor:"pointer",fontSize:14,fontWeight:tab===t2.id?700:500,fontFamily:"var(--font)",textAlign:"left",width:"100%",transition:"background .15s"}}>
+<span style={{fontSize:18,width:24,textAlign:"center"}}>{t2.ic}</span>
+<span style={{flex:1}}>{t2.label}</span>
+{t2.ct!=null&&<span style={{background:tab===t2.id?"#3B8FD9":"var(--border)",color:tab===t2.id?"#fff":"var(--t2)",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700}}>{t2.ct}</span>}
+</button>)}
+</div>
+<div style={{padding:"12px 14px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:11,color:"var(--t3)"}}>{up?.displayName+" ("+up?.role+")"}</span><button onClick={()=>auth.signOut()} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"var(--font)"}}>Sign Out</button></div>
+</div>
 
 <main style={{maxWidth:1400,margin:"0 auto",padding:24}}>
 
@@ -533,6 +553,26 @@ return<>
 ].map(f=><div key={f.l} style={{padding:10,background:"var(--hover)",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5,marginBottom:3}}>{f.l}</div><div style={{fontSize:13,fontWeight:600,color:f.c||"var(--text)"}}>{f.v}</div></div>)}
 </div></div>
 {isA&&<div style={{fontSize:11,color:"var(--t3)",marginTop:12}}>{"Agent: "+(team.find(u=>u.uid===vc.agentId)?.displayName||"\u2014")}</div>}
+{/* Activity Log */}
+<div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
+<div style={{fontSize:13,fontWeight:700,marginBottom:12}}>{"\uD83D\uDCDD Activity Log"}</div>
+<div style={{display:"flex",gap:8,marginBottom:12}}>
+<input value={vcNote} onChange={e=>setVcNote(e.target.value)} placeholder="Add a note..." onKeyDown={e=>{if(e.key==="Enter"&&vcNote.trim()){const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:"note",detail:vcNote.trim()};logAct(vc.id,"note",vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("")}}} style={{...inp,flex:1,fontSize:12}}/>
+<button onClick={()=>{if(!vcNote.trim())return;const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:"note",detail:vcNote.trim()};logAct(vc.id,"note",vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("")}} disabled={!vcNote.trim()} style={{...bP,fontSize:12,padding:"8px 14px",opacity:vcNote.trim()?1:.4}}>Add</button>
+</div>
+{(vc.activityLog&&vc.activityLog.length>0)&&<div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:0}}>
+{[...vc.activityLog].sort((a,b)=>b.ts?.localeCompare(a.ts)||0).map((e,i)=>{
+const ic=e.action==="created"?"\uD83C\uDD95":e.action==="status"?"\uD83D\uDD04":e.action==="verified"?"\u2705":e.action==="edited"?"\u270F\uFE0F":e.action==="note"?"\uD83D\uDCDD":e.action==="mass_update"?"\u26A1":"\u2022";
+const col=e.action==="status"?"#3B8FD9":e.action==="verified"?"#22C55E":e.action==="created"?"#8B5CF6":"var(--t2)";
+return<div key={i} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:i<vc.activityLog.length-1?"1px solid var(--border)":"none"}}>
+<div style={{fontSize:14,width:20,textAlign:"center",flexShrink:0,paddingTop:1}}>{ic}</div>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontSize:12,fontWeight:600,color:col}}>{e.detail||e.action}</div>
+<div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>{fmtTs(e.ts)}{e.user&&(" \u00B7 "+e.user)}</div>
+</div>
+</div>})}
+</div>
+</div>}
 </div>
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
 <button onClick={()=>setConfirm2({title:"Delete",dng:true,lbl:"Delete",msg:"Delete "+vc.fullName+"?",fn:()=>del(vc.id)})} style={{...bO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>{"\uD83D\uDDD1 Delete"}</button>
