@@ -263,6 +263,10 @@ const doBulk=async()=>{const pr=buildPrev().filter(c=>c.fullName?.trim());const 
 const dedup=async()=>{const seen=new Map();const dupes=[];cls.forEach(c=>{const key=(c.fullName||"").toLowerCase()+"||"+(c.phone||"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"");if(seen.has(key))dupes.push(c.id);else seen.set(key,c.id)});if(dupes.length===0){flash("No duplicates found");return}const b=db.batch();dupes.forEach(id=>b.delete(db.collection("clients").doc(id)));await b.commit();flash("Removed "+dupes.length+" duplicates!")};
 
 /* Removed transferClients - hierarchy handles routing */
+const transferClients=async(fromUid,toUid)=>{const batch=db.batch();const snap=await db.collection("clients").where("agentId","==",fromUid).get();snap.forEach(d=>batch.update(d.ref,{agentId:toUid}));await batch.commit();flash("Transferred "+snap.size+" clients!");return snap.size};
+const deleteAgent=async(uid,reassignTo)=>{if(reassignTo){await transferClients(uid,reassignTo)}else{const snap=await db.collection("clients").where("agentId","==",uid).get();const b=db.batch();snap.forEach(d=>b.delete(d.ref));await b.commit()}await db.collection("users").doc(uid).delete();flash("Agent removed");setEditAgent(null)};
+const sendPwReset=async(email)=>{try{await auth.sendPasswordResetEmail(email);flash("Password reset sent to "+email)}catch(e){flash(e.message,"error")}};
+const toggleAgent=async(uid,disabled)=>{await db.collection("users").doc(uid).update({disabled:!disabled});flash(disabled?"Account enabled":"Account disabled")};
 
 /* Monthly Review Mode */
 const revClients=useMemo(()=>disp.filter(c=>c.status==="active"||c.status==="paid"),[disp]);
@@ -564,7 +568,7 @@ return<>
 <div style={{display:"grid",gridTemplateColumns:"1.5fr .7fr .5fr .5fr .5fr .7fr .7fr 1fr .5fr",gap:10,padding:"8px 18px",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.8}}><div>Name</div><div>Role</div><div>Clients</div><div>In Force</div><div>Dropped</div><div>Commission</div><div>Your Profit</div><div>Pay</div><div>Actions</div></div>
 {agS.map(u=><div key={u.uid} style={{display:"grid",gridTemplateColumns:"1.5fr .7fr .5fr .5fr .5fr .7fr .7fr 1fr .5fr",gap:10,padding:"14px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",alignItems:"center",boxShadow:"var(--cs)"}}>
 <div><div style={{fontWeight:700,fontSize:14}}>{u.displayName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{u.email}</div></div>
-<Badge color={u.role==="admin"?"#3B8FD9":u.role==="heap"?"#F97316":"#22C55E"}>{u.role}</Badge>
+<Badge color={u.role==="admin"?"#3B8FD9":u.role==="heap"?"#F97316":"#22C55E"}>{u.role}</Badge>{u.disabled&&<Badge color="#94A3B8">{"\u26D4"}</Badge>}
 <div style={{fontWeight:700}}>{u.role==="admin"?ana.allClientsCount:u.tot}{u.arch>0&&<span style={{fontSize:10,color:"var(--t3)"}}>{" +"+u.arch}</span>}</div>
 <div style={{fontWeight:700,color:"#22C55E"}}>{u.role==="broker"?u.inf:"\u2014"}</div>
 <div style={{fontWeight:700,color:"#EF4444"}}>{u.role==="broker"?u.dr:"\u2014"}</div>
@@ -662,17 +666,38 @@ return<>
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setShowCU(false)} style={bO}>Cancel</button><button onClick={doCU} disabled={!nu.email||!nu.password||!nu.displayName} style={{...bP,opacity:nu.email&&nu.password&&nu.displayName?1:.4}}>Create Account</button></div>
 </Mdl>}
 
-{editAgent&&<Mdl onClose={()=>setEditAgent(null)} width={420} title={"Edit "+editAgent.displayName}>
+{editAgent&&<Mdl onClose={()=>setEditAgent(null)} width={480} title={"Manage "+editAgent.displayName} subtitle={<Badge color={editAgent.disabled?"#94A3B8":editAgent.role==="heap"?"#F97316":"#22C55E"}>{editAgent.disabled?"Disabled":editAgent.role}</Badge>}>
 <div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Display Name</label>
+<input value={editAgent.displayName||""} onChange={e=>setEditAgent(p=>({...p,displayName:e.target.value}))} style={{...inp,marginTop:4}}/></div>
+<div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Email</label>
+<div style={{...inp,marginTop:4,background:"var(--hover)",color:"var(--t2)"}}>{editAgent.email}</div></div>
 <div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Role</label>
 <select value={editAgent.role} onChange={e=>setEditAgent(p=>({...p,role:e.target.value}))} style={{...inp,marginTop:4,cursor:"pointer"}}><option value="broker">Broker</option><option value="heap">HEAP</option></select></div>
 {editAgent.role==="broker"&&<div style={{display:"flex",alignItems:"center",gap:10,padding:12,background:editAgent.isOwner?"#EFF6FF":"var(--hover)",borderRadius:10,border:"1px solid "+(editAgent.isOwner?"#3B8FD9":"var(--border)"),cursor:"pointer"}} onClick={()=>setEditAgent(p=>({...p,isOwner:!p.isOwner}))}>
 <div style={{width:20,height:20,borderRadius:6,border:"2px solid "+(editAgent.isOwner?"#3B8FD9":"var(--border)"),background:editAgent.isOwner?"#3B8FD9":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{editAgent.isOwner&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>{"\u2713"}</span>}</div>
-<div><div style={{fontSize:13,fontWeight:600}}>This is my production account</div><div style={{fontSize:11,color:"var(--t3)"}}>Merges into admin stats, no $25/$50 override</div></div>
+<div><div style={{fontSize:13,fontWeight:600}}>This is my production account</div><div style={{fontSize:11,color:"var(--t3)"}}>Merges into admin stats, no broker referral fee</div></div>
 </div>}
 {editAgent.role==="heap"&&<><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End Pay ($)</label><input type="number" value={editAgent.heapFrontEnd||""} onChange={e=>setEditAgent(p=>({...p,heapFrontEnd:e.target.value}))} style={{...inp,marginTop:4}}/></div><div><label style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End Pay ($)</label><input type="number" value={editAgent.heapBackEnd||""} onChange={e=>setEditAgent(p=>({...p,heapBackEnd:e.target.value}))} style={{...inp,marginTop:4}}/></div></>}
+<div style={{borderTop:"1px solid var(--border)",paddingTop:14}}>
+<div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginBottom:8}}>Account Actions</div>
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+<button onClick={()=>sendPwReset(editAgent.email)} style={{...bO,fontSize:12,textAlign:"left",display:"flex",alignItems:"center",gap:8}}><span>{"\uD83D\uDD11"}</span> Send Password Reset Email</button>
+<button onClick={()=>toggleAgent(editAgent.uid,editAgent.disabled)} style={{...bO,fontSize:12,textAlign:"left",display:"flex",alignItems:"center",gap:8,borderColor:editAgent.disabled?"#22C55E":"#F59E0B",color:editAgent.disabled?"#22C55E":"#F59E0B"}}><span>{editAgent.disabled?"\u2705":"\u26D4"}</span>{editAgent.disabled?" Enable Account":" Disable Account"}</button>
+</div></div>
+<div style={{borderTop:"1px solid var(--border)",paddingTop:14}}>
+<div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginBottom:8}}>Client Management</div>
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+<div style={{display:"flex",gap:8,alignItems:"center"}}>
+<span style={{fontSize:12,color:"var(--t2)"}}>{cls.filter(c=>c.agentId===editAgent.uid).length+" clients"}</span>
+<select id="reassignTo" style={{...inp,flex:1,fontSize:12}} defaultValue=""><option value="" disabled>Reassign all to...</option>{team.filter(u=>u.uid!==editAgent.uid&&u.role!=="admin").map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select>
+<button onClick={()=>{const sel=document.getElementById("reassignTo").value;if(!sel){flash("Pick someone first","error");return}setConfirm2({title:"Reassign Clients",msg:"Move all "+cls.filter(c=>c.agentId===editAgent.uid).length+" clients from "+editAgent.displayName+" to "+team.find(u=>u.uid===sel)?.displayName+"?",fn:async()=>{await transferClients(editAgent.uid,sel);setEditAgent(p=>({...p}))},lbl:"Reassign"})}} style={{...bO,fontSize:12,padding:"8px 14px",whiteSpace:"nowrap"}}>{"\uD83D\uDD00 Move"}</button>
+</div></div></div>
+<div style={{borderTop:"1px solid var(--border)",paddingTop:14}}>
+<button onClick={()=>{const cnt=cls.filter(c=>c.agentId===editAgent.uid).length;setConfirm2({title:"\uD83D\uDDD1\uFE0F Delete "+editAgent.displayName+"?",msg:"This permanently removes this agent."+(cnt>0?" Their "+cnt+" clients will also be deleted unless you reassign them first.":""),fn:()=>deleteAgent(editAgent.uid,null),lbl:"Delete Agent"})}} style={{...bO,fontSize:12,width:"100%",borderColor:"#EF4444",color:"#EF4444",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span>{"\uD83D\uDDD1\uFE0F"}</span> Delete Agent</button>
 </div>
-<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setEditAgent(null)} style={bO}>Cancel</button><button onClick={()=>updAg(editAgent.uid,{role:editAgent.role,heapFrontEnd:editAgent.heapFrontEnd||"0",heapBackEnd:editAgent.heapBackEnd||"0",isOwner:!!editAgent.isOwner})} style={bP}>Save</button></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>setEditAgent(null)} style={bO}>Cancel</button><button onClick={()=>updAg(editAgent.uid,{displayName:editAgent.displayName,role:editAgent.role,heapFrontEnd:editAgent.heapFrontEnd||"0",heapBackEnd:editAgent.heapBackEnd||"0",isOwner:!!editAgent.isOwner})} style={bP}>Save Changes</button></div>
 </Mdl>}
 
 {/* REVIEW MODE OVERLAY */}
@@ -781,6 +806,7 @@ useEffect(()=>{const un=auth.onAuthStateChanged(async u=>{if(u){setUser(u);try{c
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif"}}><div style={{fontSize:18,fontWeight:700,color:"#64748B"}}>Loading...</div></div>;
 if(!user)return<LoginScreen/>;
 if(!prof)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif"}}><div style={{fontSize:14,color:"#64748B"}}>Setting up...</div></div>;
+if(prof.disabled)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif",background:"#F8FAFC"}}><div style={{background:"#fff",borderRadius:16,padding:40,maxWidth:400,textAlign:"center",boxShadow:"0 4px 20px rgba(0,0,0,.08)",border:"1px solid #E2E8F0"}}><div style={{fontSize:40,marginBottom:16}}>{"\u26D4"}</div><div style={{fontSize:18,fontWeight:800,color:"#0F172A",marginBottom:8}}>Account Disabled</div><div style={{fontSize:14,color:"#64748B",marginBottom:20}}>Your account has been disabled by an administrator. Contact your admin for assistance.</div><button onClick={()=>auth.signOut()} style={{padding:"10px 24px",borderRadius:10,border:"none",background:"#3B8FD9",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Sign Out</button></div></div>;
 return<EB><Tracker cu={user} up={prof}/></EB>;
 }
 ReactDOM.render(<App/>,document.getElementById("root"));
