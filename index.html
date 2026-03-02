@@ -204,6 +204,9 @@ const doBulk=async()=>{const pr=buildPrev().filter(c=>c.fullName?.trim());const 
 /* Deduplicate */
 const dedup=async()=>{const seen=new Map();const dupes=[];cls.forEach(c=>{const key=(c.fullName||"").toLowerCase()+"||"+(c.phone||"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"");if(seen.has(key))dupes.push(c.id);else seen.set(key,c.id)});if(dupes.length===0){flash("No duplicates found");return}const b=db.batch();dupes.forEach(id=>b.delete(db.collection("clients").doc(id)));await b.commit();flash("Removed "+dupes.length+" duplicates!")};
 
+/* Transfer admin clients to another agent */
+const transferClients=async(toUid)=>{const mine=cls.filter(c=>c.agentId===cu.uid);if(mine.length===0){flash("No clients to transfer");return}const b=db.batch();mine.forEach(c=>b.update(db.collection("clients").doc(c.id),{agentId:toUid}));await b.commit();flash("Transferred "+mine.length+" clients!")};
+
 /* Filters */
 const applyF=useCallback(list=>{let f=[...list];if(search){const s=search.toLowerCase(),sd2=s.replace(/\D/g,"");f=f.filter(c=>(c.fullName?.toLowerCase().includes(s))||(c.phone&&c.phone.replace(/\D/g,"").includes(sd2))||(c.email?.toLowerCase().includes(s))||(c.mailingAddress?.toLowerCase().includes(s))||(c.city?.toLowerCase().includes(s))||(c.zipCode?.includes(s))||(c.mbiNumber?.toLowerCase().includes(s))||(c.carrier?.toLowerCase().includes(s))||(c.planName?.toLowerCase().includes(s))||(c.statusNote?.toLowerCase().includes(s)))}if(stFilt!=="all")f=f.filter(c=>c.status===stFilt);Object.entries(flt).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v)});if(sf!=="custom")f.sort((a,b)=>{const av=a[sf]||"",bv=b[sf]||"";return sd==="asc"?(av<bv?-1:1):(av>bv?-1:1)});return f},[search,stFilt,flt,sf,sd]);
 const uniV=useCallback((f,l)=>[...new Set(l.map(c=>c[f]).filter(Boolean))].sort(),[]);
@@ -404,7 +407,10 @@ return(
 {tab==="team"&&isA&&<div style={{animation:"slideUp .3s"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
 <div><h1 style={{fontSize:24,fontWeight:800}}>Team Management</h1><p style={{fontSize:13,color:"var(--t3)"}}>{team.length+" members"}</p></div>
+<div style={{display:"flex",gap:10}}>
+{(()=>{const ow=team.find(u=>u.isOwner);const adminCount=cls.filter(c=>c.agentId===cu.uid).length;return ow&&adminCount>0?<button onClick={()=>setConfirm2({title:"Transfer Clients",msg:"Move all "+adminCount+" clients from your Admin account to "+ow.displayName+"? Commission still shows on your admin dashboard.",fn:()=>transferClients(ow.uid),lbl:"Transfer "+adminCount+" Clients"})} style={{...bO,fontSize:12,borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDD00 Transfer "+adminCount+" to "+ow.displayName}</button>:null})()}
 <button onClick={()=>{setNu({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});setCuErr("");setShowCU(true)}} style={bP}>+ Add Agent</button>
+</div>
 </div>
 {/* Site-wide summary */}
 <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
