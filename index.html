@@ -163,8 +163,8 @@ const arch=cls.filter(c=>hIds.has(c.agentId)&&(c.status==="active"||c.status==="
 if(arch.length>0){archRef.current=true;const b=db.batch();arch.forEach(c=>b.update(db.collection("clients").doc(c.id),{status:"heapArchived",heapArchived:true}));b.commit().then(()=>{archRef.current=false})}
 },[cls,team]);
 
-/* Migrate localStorage */
-useEffect(()=>{if(!isA||localStorage.getItem("uip-fb-mig"))return;const ks=["uip-medicare-clients-v5","uip-medicare-clients-v4","uip-medicare-clients-v3"];for(const k of ks){const r=localStorage.getItem(k);if(r){try{const old=JSON.parse(r);if(old.length>0){const b=db.batch();old.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:cu.uid});delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();b.set(ref,nc)});b.commit().then(()=>{localStorage.setItem("uip-fb-mig","1");flash("Migrated "+old.length+" clients!")})}}catch(e){console.error(e)}break}}localStorage.setItem("uip-fb-mig","1")},[isA,cu.uid]);
+/* Migrate localStorage - check flag first, set immediately */
+useEffect(()=>{if(!isA)return;if(localStorage.getItem("uip-fb-mig"))return;localStorage.setItem("uip-fb-mig","1");const ks=["uip-medicare-clients-v5","uip-medicare-clients-v4","uip-medicare-clients-v3"];for(const k of ks){const r=localStorage.getItem(k);if(r){try{const old=JSON.parse(r);if(old.length>0){const b=db.batch();old.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:cu.uid});delete nc.id;nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();b.set(ref,nc)});b.commit().then(()=>flash("Migrated "+old.length+" clients!"))}}catch(e){console.error(e)}break}}},[isA,cu.uid]);
 
 /* Filtered views */
 const agFilt=useMemo(()=>(!isA||selAgent==="all")?cls:cls.filter(c=>c.agentId===selAgent),[cls,isA,selAgent]);
@@ -196,6 +196,9 @@ const updAg=async(uid,u)=>{await db.collection("users").doc(uid).update(u);flash
 const parseBulk=()=>{const lines=[];let inQ=false,cur="",row=[];for(let i=0;i<bRaw.length;i++){const ch=bRaw[i];if(ch==='"'){if(inQ&&bRaw[i+1]==='"'){cur+='"';i++}else inQ=!inQ}else if(!inQ&&ch==="\t"){row.push(cur.trim());cur=""}else if(!inQ&&(ch==="\n"||(ch==="\r"&&bRaw[i+1]==="\n"))){if(ch==="\r")i++;row.push(cur.trim());if(row.some(c=>c))lines.push(row);cur="";row=[]}else cur+=ch}row.push(cur.trim());if(row.some(c=>c))lines.push(row);if(lines.length<2){flash("Need headers+data","error");return}setBHdr(lines[0]);setBRows(lines.slice(1));const am={};const fm={};FIELDS.forEach(f=>{fm[f.label.toLowerCase()]=f.key;fm[f.key.toLowerCase()]=f.key});lines[0].forEach((h,i)=>{const k=h.toLowerCase().trim();if(fm[k])am[i]=fm[k]});setBMap(am);setBStep(2)};
 const buildPrev=()=>bRows.map(r=>{const o={};Object.entries(bMap).forEach(([i,fk])=>{if(fk&&fk!=="skip")o[fk]=r[parseInt(i)]||""});return o});
 const doBulk=async()=>{const pr=buildPrev().filter(c=>c.fullName?.trim());const b=db.batch();pr.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:cu.uid,status:"active"});nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();b.set(ref,nc)});await b.commit();flash("Imported "+pr.length+"!");setShowBulk(false);setBRaw("");setBStep(1)};
+
+/* Deduplicate */
+const dedup=async()=>{const seen=new Map();const dupes=[];cls.forEach(c=>{const key=(c.fullName||"").toLowerCase()+"||"+(c.phone||"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"");if(seen.has(key))dupes.push(c.id);else seen.set(key,c.id)});if(dupes.length===0){flash("No duplicates found");return}const b=db.batch();dupes.forEach(id=>b.delete(db.collection("clients").doc(id)));await b.commit();flash("Removed "+dupes.length+" duplicates!")};
 
 /* Filters */
 const applyF=useCallback(list=>{let f=[...list];if(search){const s=search.toLowerCase(),sd2=s.replace(/\D/g,"");f=f.filter(c=>(c.fullName?.toLowerCase().includes(s))||(c.phone&&c.phone.replace(/\D/g,"").includes(sd2))||(c.email?.toLowerCase().includes(s))||(c.mailingAddress?.toLowerCase().includes(s))||(c.city?.toLowerCase().includes(s))||(c.zipCode?.includes(s))||(c.mbiNumber?.toLowerCase().includes(s))||(c.carrier?.toLowerCase().includes(s))||(c.planName?.toLowerCase().includes(s))||(c.statusNote?.toLowerCase().includes(s)))}if(stFilt!=="all")f=f.filter(c=>c.status===stFilt);Object.entries(flt).forEach(([k,v])=>{if(v&&v!=="all")f=f.filter(c=>c[k]===v)});if(sf!=="custom")f.sort((a,b)=>{const av=a[sf]||"",bv=b[sf]||"";return sd==="asc"?(av<bv?-1:1):(av>bv?-1:1)});return f},[search,stFilt,flt,sf,sd]);
@@ -242,8 +245,8 @@ const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",labe
 
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
 
-/* Row */
-const Row=({c,sp})=>{const st=ST[c.status]||ST.active;const co=cc?getCC(c.carrier):null;const pe=isPend(c);
+/* Row - plain function, NOT a component */
+const renderRow=(c,sp)=>{const st=ST[c.status]||ST.active;const co=cc?getCC(c.carrier):null;const pe=isPend(c);
 return<div key={c.id} onClick={()=>setVc(c)} style={{display:"grid",gridTemplateColumns:"2fr 1fr .7fr .6fr .6fr .8fr 1fr",gap:8,padding:"12px 18px",borderRadius:10,background:"var(--card)",border:"1px solid var(--border)",cursor:"pointer",alignItems:"center",boxShadow:"var(--cs)",borderLeft:co?"4px solid "+co:"none"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 0 0 2px #3B8FD9"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--cs)"}}>
 <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:co?co+"18":"var(--hover)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:co||"var(--text)"}}>{(c.fullName||"?")[0].toUpperCase()}</div><div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.fullName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{fmtPh(c.phone)}</div></div></div>
 <div style={{fontSize:12,fontWeight:600,color:co||"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtCar(c.carrier)}</div>
@@ -254,8 +257,8 @@ return<div key={c.id} onClick={()=>setVc(c)} style={{display:"grid",gridTemplate
 <div style={{fontSize:11,color:"var(--t3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} onClick={e=>{e.stopPropagation();setQe({id:c.id,f:"statusNote",v:c.statusNote||""})}}>{qe?.id===c.id?<input autoFocus value={qe.v} onChange={e=>setQe({...qe,v:e.target.value})} onBlur={()=>qSave(c.id,"statusNote",qe.v)} onKeyDown={e=>{if(e.key==="Enter")qSave(c.id,"statusNote",qe.v);if(e.key==="Escape")setQe(null)}} onClick={e=>e.stopPropagation()} style={{...inp,padding:"4px 8px",fontSize:11,width:"100%"}}/>:(c.statusNote||<span style={{fontStyle:"italic",opacity:.5}}>{"+ note"}</span>)}</div>
 </div>};
 
-/* Filter bar */
-const Filt=({src})=><div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
+/* Filter bar - plain function, NOT a component */
+const renderFilt=(src)=><div style={{background:"var(--card)",borderRadius:12,padding:18,border:"1px solid var(--border)",marginBottom:14,boxShadow:"var(--cs)"}}>
 <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
 <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.4}}>{"\uD83D\uDD0D"}</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." style={{...inp,paddingLeft:36}}/></div>
 <select value={flt.carrier||"all"} onChange={e=>setFlt(p=>({...p,carrier:e.target.value}))} style={{...inp,width:"auto",minWidth:100,cursor:"pointer"}}><option value="all">Carrier: All</option>{uniV("carrier",src).map(v=><option key={v} value={v}>{fmtCar(v)} ({cntV("carrier",v,src)})</option>)}</select>
@@ -284,6 +287,7 @@ return(
 <span style={{fontSize:12,color:"var(--t3)"}}>{up?.displayName} ({up?.role})</span>
 <button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:20}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
 <button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:12}}>{"\uD83D\uDCCB Import"}</button>
+{isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:12}}>{"\uD83E\uDDF9 Dedup"}</button>}
 <button onClick={()=>{resetF();setShowAdd(true)}} style={bP}>+ Add Client</button>
 <button onClick={()=>auth.signOut()} style={{...bO,fontSize:12,borderColor:"#EF4444",color:"#EF4444"}}>Sign Out</button>
 </div></header>
@@ -314,18 +318,18 @@ return(
 
 {tab==="book"&&<div style={{animation:"slideUp .3s"}}>
 <div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>{book.length+" active clients"}</p></div>
-<Filt src={book}/>
-{(()=>{const fl=applyF(book);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}>No clients match</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length+" shown"}</div>{colH}{fl.map(c=><Row key={c.id} c={c} sp/>)}</div>})()}
+{renderFilt(book)}
+{(()=>{const fl=applyF(book);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}>No clients match</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length+" shown"}</div>{colH}{fl.map(c=>renderRow(c,true))}</div>})()}
 </div>}
 
 {tab==="clients"&&<div style={{animation:"slideUp .3s"}}>
 <div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800}}>All Clients</h1></div>
-<Filt src={disp}/>
+{renderFilt(disp)}
 <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
 <button onClick={()=>setStFilt("all")} style={{...bO,fontSize:12,background:stFilt==="all"?"var(--tabBg)":"var(--card)",borderColor:stFilt==="all"?"#3B8FD9":"var(--border)",color:stFilt==="all"?"#3B8FD9":"var(--t2)"}}>{"All ("+disp.length+")"}</button>
 {Object.entries(ST).filter(([k])=>k!=="heapArchived").map(([k,v])=><button key={k} onClick={()=>setStFilt(k)} style={{...bO,fontSize:12,background:stFilt===k?v.color+"10":"var(--card)",borderColor:stFilt===k?v.color:"var(--border)",color:stFilt===k?v.color:"var(--t2)"}}>{v.icon+" "+v.label+" ("+(byS[k]?.length||0)+")"}</button>)}
 </div>
-{(()=>{const fl=applyF(disp);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}>No clients</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length+" shown"}</div>{colH}{fl.map(c=><Row key={c.id} c={c} sp/>)}</div>})()}
+{(()=>{const fl=applyF(disp);return fl.length===0?<div style={{background:"var(--card)",borderRadius:12,padding:50,textAlign:"center",border:"1px solid var(--border)",color:"var(--t3)"}}>No clients</div>:<div style={{display:"flex",flexDirection:"column",gap:6}}><div style={{padding:"4px 18px",fontSize:12,color:"var(--t2)",fontWeight:600}}>{fl.length+" shown"}</div>{colH}{fl.map(c=>renderRow(c,true))}</div>})()}
 </div>}
 
 {tab==="analytics"&&<div style={{animation:"slideUp .3s"}}>
