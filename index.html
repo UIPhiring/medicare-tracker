@@ -93,6 +93,7 @@ const HEAP_FE=135,HEAP_BE=190,HEAP_TOT=325;
 const calcHeap=ag=>(parseFloat(ag?.heapFrontEnd)||0)+(parseFloat(ag?.heapBackEnd)||0);
 const heapMoPast=eff=>{if(!eff)return 0;const e=new Date(eff+"T00:00:00"),n=new Date();return(n.getFullYear()-e.getFullYear())*12+(n.getMonth()-e.getMonth())};
 const canArchive=c=>c.effectiveDate&&heapMoPast(c.effectiveDate)>=4;
+const adminHeapProfit=ag=>HEAP_TOT-calcHeap(ag);
 
 /* Broker referral: Admin gets $50 if switched carriers, $25 if same carrier new plan */
 const BROKER_REF_SWITCH=50,BROKER_REF_SAME=25,BROKER_REF_NEW=100;
