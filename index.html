@@ -354,7 +354,62 @@ const brkByAg={};brkCl.forEach(c=>{const ag=team.find(u=>u.uid===c.agentId);if(!
 const totalProfit=myProdComm+admHP+admBrkProfit;
 /* All-site totals */
 const allClientsCount=cl.filter(c=>c.status!=="heapArchived").length;
-return{t,ac,pd,ina,cb,nie,inF,projInit,totCB,moRes:inF*29,annRes:inF*29*12,carS,stS,coh,cAM,sData,nieByCar,nieLost,needRev,hEarned,hActive,hDrop,admHP,hByAg,hTot:hCl.length,admBrkProfit,brkByAg,totalProfit,allClientsCount,myProdComm,myProdRes,myProdCount,myProdInForce,ownerIds}
+/* Paid vs Unpaid */
+const paidCl=cl.filter(c=>c.status==="paid");const unpaidCl=cl.filter(c=>c.status==="active");
+const paidTotal=paidCl.reduce((s,c)=>s+getComm(c),0);
+const unpaidTotal=unpaidCl.reduce((s,c)=>s+getComm(c),0);
+const avgComm=inF>0?projInit/inF:0;
+/* Election Period breakdown */
+const epMix={};cl.filter(c=>c.status!=="heapArchived").forEach(c=>{const ep=c.electionPeriod||"Unknown";epMix[ep]=(epMix[ep]||0)+1});
+const epComm={};cl.filter(c=>(c.status==="active"||c.status==="paid")).forEach(c=>{const ep=c.electionPeriod||"Unknown";epComm[ep]=(epComm[ep]||0)+getComm(c)});
+/* Plan Type mix */
+const ptMix={};cl.filter(c=>c.status!=="heapArchived").forEach(c=>{const pt=c.planType||"Unknown";ptMix[pt]=(ptMix[pt]||0)+1});
+const ptComm={};cl.filter(c=>(c.status==="active"||c.status==="paid")).forEach(c=>{const pt=c.planType||"Unknown";ptComm[pt]=(ptComm[pt]||0)+getComm(c)});
+/* Monthly production trend */
+const moTrend={};cl.filter(c=>c.status!=="heapArchived"&&c.applicationDate).forEach(c=>{const mk=c.applicationDate.substring(0,7);moTrend[mk]=(moTrend[mk]||0)+1});
+/* Chargeback rate by carrier */
+const cbByCar={};cl.filter(c=>c.status!=="heapArchived"&&c.carrier).forEach(c=>{if(!cbByCar[c.carrier])cbByCar[c.carrier]={total:0,cb:0};cbByCar[c.carrier].total++;if(c.status==="chargedBack"||c.status==="inactive")cbByCar[c.carrier].cb++});
+/* Call-back list (didn't enroll / diff plan) */
+const callBacks=cl.filter(c=>c.statusNote&&(c.statusNote.includes("didn't enroll")||c.statusNote.includes("different plan")));
+/* HEAP pipeline: clients grouped by months until 4-month mark */
+const hPipeline={};hCl.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchive(c)).forEach(c=>{if(!c.effectiveDate)return;const mo=heapMoPast(c.effectiveDate);const rem=4-mo;const lbl=rem<=1?"Completes this month":rem===2?"2 months left":"3 months left";hPipeline[lbl]=(hPipeline[lbl]||0)+1});
+/* HEAP completion rate */
+const hCompleted=hCl.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c)).length;
+const hTotal=hCl.filter(c=>c.status!=="neverInEffect").length;
+const hCompRate=hTotal>0?(hCompleted/hTotal*100).toFixed(0)+"%":"—";
+/* HEAP per-agent detail with FE earned, BE pending */
+const hAgDetail={};hCl.forEach(c=>{const ag=team.find(u=>u.uid===c.agentId);if(!ag)return;if(!hAgDetail[ag.uid])hAgDetail[ag.uid]={name:ag.displayName,fe:parseFloat(ag.heapFrontEnd)||0,be:parseFloat(ag.heapBackEnd)||0,completed:0,inProgress:0,lost:0,feEarned:0,bePending:0,beEarned:0,agFeTotal:0,agBeTotal:0};const h=hAgDetail[ag.uid];
+if(c.status==="heapArchived"||((c.status==="active"||c.status==="paid")&&canArchive(c))){h.completed++;h.feEarned+=(HEAP_FE-h.fe);h.beEarned+=(HEAP_BE-h.be);h.agFeTotal+=h.fe;h.agBeTotal+=h.be}
+else if((c.status==="active"||c.status==="paid")&&!canArchive(c)){h.inProgress++;h.feEarned+=(HEAP_FE-h.fe);h.bePending+=(HEAP_BE-h.be);h.agFeTotal+=h.fe}
+else if(c.status==="inactive"||c.status==="chargedBack"){h.lost++}});
+/* Admin per-agent profitability */
+const agProfit=team.filter(u=>u.role!=="admin").map(u=>{
+const ac2=cls.filter(c=>c.agentId===u.uid&&c.status!=="heapArchived");
+const inf2=ac2.filter(c=>c.status==="active"||c.status==="paid").length;
+const dr2=ac2.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;
+let yourProfit=0;
+if(u.role==="heap"){ac2.filter(c=>c.status==="active"||c.status==="paid"||c.status==="heapArchived").forEach(c=>{if(c.status==="heapArchived"||canArchive(c))yourProfit+=adminHeapProfit(u);else yourProfit+=(HEAP_BE-(parseFloat(u.heapBackEnd)||0))})}
+else if(u.role==="broker"&&!u.isOwner){ac2.filter(c=>c.status==="active"||c.status==="paid").forEach(c=>{yourProfit+=calcBrokerRef(c)})}
+const ret=inf2+dr2>0?((inf2/(inf2+dr2))*100).toFixed(0)+"%":"—";
+return{name:u.displayName,role:u.role,isOwner:u.isOwner,total:ac2.length,inForce:inf2,dropped:dr2,yourProfit,retention:ret}
+}).sort((a,b)=>b.yourProfit-a.yourProfit);
+/* Team leaderboard */
+const leaderboard=team.filter(u=>u.role!=="admin").map(u=>{
+const ac2=cls.filter(c=>c.agentId===u.uid);
+const inf2=ac2.filter(c=>c.status==="active"||c.status==="paid").length;
+const dr2=ac2.filter(c=>c.status==="inactive"||c.status==="chargedBack").length;
+let comm=0;if(u.role==="heap"){comm=ac2.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c)).length*calcHeap(u)}else{comm=ac2.filter(c=>c.status==="active"||c.status==="paid").reduce((s,c)=>s+calcInit(c.effectiveDate,c.electionPeriod),0)}
+const ret=inf2+dr2>0?((inf2/(inf2+dr2))*100).toFixed(0)+"%":"—";
+return{name:u.displayName,role:u.role,total:ac2.filter(c=>c.status!=="heapArchived").length,inForce:inf2,comm,retention:ret}
+}).sort((a,b)=>b.comm-a.comm);
+/* Team month-over-month growth */
+const teamMoGrowth={};cls.filter(c=>c.applicationDate&&c.status!=="heapArchived").forEach(c=>{const mk=c.applicationDate.substring(0,7);teamMoGrowth[mk]=(teamMoGrowth[mk]||0)+1});
+/* Broker referral detail by agent */
+const brkRefDetail=Object.values(brkByAg).sort((a,b)=>b.refProfit-a.refProfit);
+/* Income forecast (3/6/12 mo) */
+const moIncome=totalProfit>0?totalProfit/Math.max(1,Object.keys(moTrend).length):0;
+const forecast3=moIncome*3,forecast6=moIncome*6,forecast12=moIncome*12;
+return{t,ac,pd,ina,cb,nie,inF,projInit,totCB,moRes:inF*29,annRes:inF*29*12,carS,stS,coh,cAM,sData,nieByCar,nieLost,needRev,hEarned,hActive,hDrop,admHP,hByAg,hTot:hCl.length,admBrkProfit,brkByAg,totalProfit,allClientsCount,myProdComm,myProdRes,myProdCount,myProdInForce,ownerIds,paidTotal,unpaidTotal,avgComm,epMix,epComm,ptMix,ptComm,moTrend,cbByCar,callBacks,hPipeline,hCompRate,hAgDetail,agProfit,leaderboard,teamMoGrowth,brkRefDetail,forecast3,forecast6,forecast12,paidCount:paidCl.length,unpaidCount:unpaidCl.length}
 },[allForAnalytics,team]);
 
 /* Agent stats */
@@ -501,9 +556,57 @@ return(
 </div>}
 
 {tab==="analytics"&&<div style={{animation:"slideUp .3s"}}>
-<div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800}}>Analytics</h1>{isA&&<select value={selAgent} onChange={e=>setSelAgent(e.target.value)} style={{...inp,width:"auto",minWidth:150,marginTop:8,cursor:"pointer"}}><option value="all">All Agents</option>{team.map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select>}</div>
+<div style={{marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Analytics</h1>
+{isA&&<select value={selAgent} onChange={e=>setSelAgent(e.target.value)} style={{...inp,width:"auto",minWidth:180,cursor:"pointer"}}><option value="all">All Agents / Admin View</option>{team.filter(u=>u.role!=="admin").map(u=><option key={u.uid} value={u.uid}>{u.displayName+" ("+u.role+")"}</option>)}</select>}
+</div>
+
+{/* ═══════ ADMIN VIEW ═══════ */}
+{isA&&selAgent==="all"&&<>
+{/* Income Summary */}
+<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<Stat icon={"\uD83D\uDCB0"} value={money(ana.totalProfit)} label="Total Income" color="#22C55E" sub={"Prod + HEAP + Refs"} s/>
+<Stat icon={"\uD83D\uDC64"} value={money(ana.myProdComm)} label="My Production" color="#3B8FD9" sub={ana.myProdInForce+" in force"} s/>
+<Stat icon={"\uD83C\uDFE2"} value={money(ana.admHP)} label="HEAP Profit" color="#F97316" sub={ana.hEarned+" earned / "+ana.hActive+" pending"} s/>
+<Stat icon={"\uD83E\uDD1D"} value={money(ana.admBrkProfit)} label="Broker Referrals" color="#6366F1" s/>
+<Stat icon={"\uD83D\uDD01"} value={money(ana.myProdRes)+"/mo"} label="My Residual" color="#8B5CF6" sub={money(ana.annRes)+"/yr"} s/>
+<Stat icon={"\uD83D\uDCC8"} value={money(ana.forecast3)} label="3-Mo Forecast" color="#22C55E" s/>
+<Stat icon={"\uD83D\uDCC8"} value={money(ana.forecast6)} label="6-Mo Forecast" color="#3B8FD9" s/>
+<Stat icon={"\uD83D\uDCC8"} value={money(ana.forecast12)} label="12-Mo Forecast" color="#8B5CF6" s/>
+</div>
+
+{/* Income Breakdown */}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83D\uDCCA Income Breakdown"}><Bar data={[["My Production",ana.myProdComm],["HEAP Profit",ana.admHP],["Broker Referrals",ana.admBrkProfit]]} color="#3B8FD9"/></Crd>
+<Crd title={"\uD83C\uDFC6 Team Leaderboard"}>{ana.leaderboard.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No agents</div>:<MT headers={["Agent","Role","Clients","In Force","Commission","Retention"]} rows={ana.leaderboard.map((a,i)=>[<span>{(i===0?"\uD83E\uDD47 ":i===1?"\uD83E\uDD48 ":i===2?"\uD83E\uDD49 ":"")+a.name}</span>,<Badge color={a.role==="heap"?"#F97316":"#22C55E"}>{a.role}</Badge>,a.total,<span style={{color:"#22C55E",fontWeight:700}}>{a.inForce}</span>,<strong style={{color:"#22C55E"}}>{money(a.comm)}</strong>,<span style={{fontWeight:700}}>{a.retention}</span>])}/>}</Crd>
+</div>
+
+{/* Per-agent profitability */}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83D\uDCB5 Agent Profitability (Your Cut)"}>{ana.agProfit.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No agents</div>:<MT headers={["Agent","Type","Clients","In Force","Dropped","Your Profit","Retention"]} rows={ana.agProfit.map(a=>[<strong>{a.name}</strong>,<Badge color={a.role==="heap"?"#F97316":a.isOwner?"#8B5CF6":"#22C55E"}>{a.isOwner?"owner":a.role}</Badge>,a.total,<span style={{color:"#22C55E",fontWeight:700}}>{a.inForce}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{a.dropped}</span>,<strong style={{color:"#22C55E"}}>{money(a.yourProfit)}</strong>,<span style={{fontWeight:700}}>{a.retention}</span>])}/>}</Crd>
+<Crd title={"\uD83C\uDFE2 HEAP Profit Detail"}>{Object.keys(ana.hAgDetail).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No HEAP agents</div>:<MT headers={["Agent","Done","Pending","Lost","FE Profit","BE Earned","BE Pending"]} rows={Object.values(ana.hAgDetail).sort((a,b)=>(b.feEarned+b.beEarned)-(a.feEarned+a.beEarned)).map(h=>[<strong>{h.name}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{h.completed}</span>,<span style={{color:"#F59E0B",fontWeight:700}}>{h.inProgress}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{h.lost}</span>,<strong style={{color:"#22C55E"}}>{money(h.feEarned)}</strong>,<strong style={{color:"#22C55E"}}>{money(h.beEarned)}</strong>,<span style={{color:"#F59E0B",fontWeight:700}}>{money(h.bePending)}</span>])}/>}</Crd>
+</div>
+
+{/* Broker referral detail + team retention */}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83E\uDD1D Broker Referral Detail"}>{ana.brkRefDetail.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No broker agents</div>:<MT headers={["Agent","Clients","New","Switch","Same","Your Referral $"]} rows={ana.brkRefDetail.map(b=>[<strong>{b.name}</strong>,b.total,<span style={{color:"#22C55E",fontWeight:700}}>{b.newMed}</span>,<span style={{color:"#F59E0B",fontWeight:700}}>{b.switched}</span>,<span style={{color:"#94A3B8",fontWeight:700}}>{b.sameCar}</span>,<strong style={{color:"#22C55E"}}>{money(b.refProfit)}</strong>])}/>}</Crd>
+<Crd title={"\uD83D\uDCC8 Team Monthly Growth"}>{Object.keys(ana.teamMoGrowth).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.teamMoGrowth).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#8B5CF6"/>}</Crd>
+</div>
+
+{/* Carrier + chargeback */}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83C\uDFE2 Carrier Production (All Team)"}><MT headers={["Carrier","Total","Active","Paid","Inactive","CB","Comm"]} rows={Object.entries(ana.carS).sort((a,b)=>b[1].total-a[1].total).map(([cr,s])=>[<strong>{cr}</strong>,<strong>{s.total}</strong>,<span style={{color:"#22C55E"}}>{s.active}</span>,<span style={{color:"#3B8FD9"}}>{s.paid}</span>,<span style={{color:"#F59E0B"}}>{s.inactive}</span>,<span style={{color:"#EF4444"}}>{s.cb}</span>,<strong style={{color:"#22C55E"}}>{money(s.proj)}</strong>])}/></Crd>
+<Crd title={"\uD83D\uDCC9 Chargeback Rate by Carrier"}>{Object.keys(ana.cbByCar).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["Carrier","Total","Lost","CB Rate"]} rows={Object.entries(ana.cbByCar).sort((a,b)=>b[1].cb/Math.max(1,b[1].total)-a[1].cb/Math.max(1,a[1].total)).map(([cr,d])=>[<strong>{cr}</strong>,d.total,<span style={{color:"#EF4444",fontWeight:700}}>{d.cb}</span>,<span style={{fontWeight:800,color:d.total>0&&d.cb/d.total>.15?"#EF4444":"#22C55E"}}>{pct(d.cb,d.total)}</span>])}/>}</Crd>
+</div>
+</>}
+
+{/* ═══════ BROKER VIEW (agent logged in OR admin viewing a broker) ═══════ */}
+{((!isA&&up?.role==="broker")||(isA&&selAgent!=="all"&&(team.find(u=>u.uid===selAgent)?.role==="broker"||team.find(u=>u.uid===selAgent)?.role==="admin")))&&<>
 <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 <Stat icon={"\uD83D\uDCB5"} value={money(ana.projInit)} label="Projected Initial" color="#22C55E" sub={ana.inF+" in-force"} s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(ana.paidTotal)} label="Paid Commission" color="#3B8FD9" sub={ana.paidCount+" clients paid"} s/>
+<Stat icon={"\u23F3"} value={money(ana.unpaidTotal)} label="Outstanding" color="#F59E0B" sub={ana.unpaidCount+" awaiting"} s/>
+<Stat icon={"\uD83D\uDCCA"} value={money(ana.avgComm)} label="Avg Per Client" color="#8B5CF6" s/>
 <Stat icon={"\uD83D\uDD01"} value={money(ana.moRes)+"/mo"} label="Monthly Residual" color="#8B5CF6" sub={"$29 \u00D7 "+ana.inF} s/>
 <Stat icon={"\uD83D\uDCC8"} value={money(ana.annRes)} label="Annual Residual" color="#3B8FD9" s/>
 <Stat icon={"\uD83D\uDCC9"} value={money(ana.totCB)} label="Chargebacks" color="#EF4444" s/>
@@ -514,13 +617,71 @@ return(
 <Crd title={"\uD83D\uDCC5 Cohort Retention"}>{Object.keys(ana.coh).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["App Mo","Enrolled","In Force","Dropped","Comm","Retention"]} rows={Object.entries(ana.coh).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,d])=>[mLabel(mk),<strong>{d.enr}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{d.inf}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.dr}</span>,<strong style={{color:"#22C55E"}}>{money(d.pc)}</strong>,<span style={{fontWeight:800,color:d.enr>0&&d.inf/d.enr>=.85?"#22C55E":"#EF4444"}}>{pct(d.inf,d.enr)}</span>])}/>}</Crd>
 </div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83D\uDCC5 Election Period Mix"}><MT headers={["Period","Clients","Commission"]} rows={Object.entries(ana.epMix).sort((a,b)=>b[1]-a[1]).map(([ep,n])=>[<strong>{ep}</strong>,n,<strong style={{color:"#22C55E"}}>{money(ana.epComm[ep]||0)}</strong>])}/></Crd>
+<Crd title={"\uD83D\uDCCB Plan Type Mix"}><MT headers={["Type","Clients","Commission"]} rows={Object.entries(ana.ptMix).sort((a,b)=>b[1]-a[1]).map(([pt,n])=>[<strong>{pt}</strong>,n,<strong style={{color:"#22C55E"}}>{money(ana.ptComm[pt]||0)}</strong>])}/></Crd>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83D\uDCC8 Monthly Production Trend"}>{Object.keys(ana.moTrend).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.moTrend).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#8B5CF6"/>}</Crd>
+<Crd title={"\uD83D\uDCC9 Chargeback Rate by Carrier"}>{Object.keys(ana.cbByCar).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["Carrier","Total","Lost","CB Rate"]} rows={Object.entries(ana.cbByCar).sort((a,b)=>b[1].cb/Math.max(1,b[1].total)-a[1].cb/Math.max(1,a[1].total)).map(([cr,d])=>[<strong>{cr}</strong>,d.total,<span style={{color:"#EF4444",fontWeight:700}}>{d.cb}</span>,<span style={{fontWeight:800,color:d.total>0&&d.cb/d.total>.15?"#EF4444":"#22C55E"}}>{pct(d.cb,d.total)}</span>])}/>}</Crd>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83C\uDFE2 Carrier Production"}><MT headers={["Carrier","Total","Active","Paid","Inactive","CB","Comm"]} rows={Object.entries(ana.carS).sort((a,b)=>b[1].total-a[1].total).map(([cr,s])=>[<strong>{cr}</strong>,<strong>{s.total}</strong>,<span style={{color:"#22C55E"}}>{s.active}</span>,<span style={{color:"#3B8FD9"}}>{s.paid}</span>,<span style={{color:"#F59E0B"}}>{s.inactive}</span>,<span style={{color:"#EF4444"}}>{s.cb}</span>,<strong style={{color:"#22C55E"}}>{money(s.proj)}</strong>])}/></Crd>
 <Crd title={"\uD83D\uDCC9 Client Fall-Off"}>{ana.sData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients</div>:<Bar data={ana.sData} color="#EF4444"/>}</Crd>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDDFA\uFE0F States"}><Bar data={Object.entries(ana.stS).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA"/></Crd>
 <Crd title={"\uD83D\uDEAB Never in Effect"}>{ana.nie===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>None</div>:<div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{ana.nie}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Count</div></div><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#EF4444"}}>{money(ana.nieLost)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Lost</div></div><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{pct(ana.nie,ana.t)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Rate</div></div></div><Bar data={Object.entries(ana.nieByCar).sort((a,b)=>b[1]-a[1]).map(([c2,n])=>[c2,n])} color="#94A3B8"/></div>}</Crd>
 </div>
+{ana.callBacks.length>0&&<div style={{marginBottom:18}}><Crd title={"\uD83D\uDCDE Call-Back List ("+ana.callBacks.length+")"}><div style={{maxHeight:300,overflowY:"auto"}}>{ana.callBacks.map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderBottom:"1px solid var(--border)"}}><div><strong>{c.fullName}</strong><div style={{fontSize:11,color:"var(--t3)"}}>{c.statusNote}</div></div><div style={{fontSize:12,color:"var(--t2)"}}>{fmtCar(c.carrier)+" \u00B7 "+fmt(c.effectiveDate)}</div></div>)}</div></Crd></div>}
+</>}
+
+{/* ═══════ HEAP VIEW (agent logged in OR admin viewing a HEAP agent) ═══════ */}
+{((!isA&&up?.role==="heap")||(isA&&selAgent!=="all"&&team.find(u=>u.uid===selAgent)?.role==="heap"))&&<>
+{(()=>{
+const uid=isA?selAgent:cu.uid;const me=team.find(u=>u.uid===uid);if(!me)return null;
+const myCl=cls.filter(c=>c.agentId===uid);
+const feR=parseFloat(me.heapFrontEnd)||0;const beR=parseFloat(me.heapBackEnd)||0;
+const completed=myCl.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c));
+const inProg=myCl.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchive(c));
+const lost=myCl.filter(c=>c.status==="inactive"||c.status==="chargedBack");
+const nie2=myCl.filter(c=>c.status==="neverInEffect");
+const feEarned=(completed.length+inProg.length)*feR;
+const beEarned=completed.length*beR;
+const bePending=inProg.length*beR;
+const totalEarned=feEarned+beEarned;
+const projTotal=feEarned+beEarned+bePending;
+const compRate=completed.length+lost.length>0?((completed.length/(completed.length+lost.length))*100).toFixed(0)+"%":"\u2014";
+/* Pipeline by month */
+const pipe={};inProg.forEach(c=>{if(!c.effectiveDate)return;const mo=heapMoPast(c.effectiveDate);const rem=4-mo;const ef=new Date(c.effectiveDate+"T00:00:00");const compDate=new Date(ef.getFullYear(),ef.getMonth()+4,1);const mk=compDate.toISOString().substring(0,7);if(!pipe[mk])pipe[mk]=0;pipe[mk]++});
+/* Carrier breakdown */
+const hCarS={};myCl.filter(c=>c.status!=="heapArchived"&&c.carrier).forEach(c=>{if(!hCarS[c.carrier])hCarS[c.carrier]={total:0,completed:0,lost:0};hCarS[c.carrier].total++;if(c.status==="heapArchived"||((c.status==="active"||c.status==="paid")&&canArchive(c)))hCarS[c.carrier].completed++;else if(c.status==="inactive"||c.status==="chargedBack")hCarS[c.carrier].lost++});
+return<>
+<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<Stat icon={"\u2705"} value={completed.length} label="Completed (4+ mo)" color="#22C55E" s/>
+<Stat icon={"\u23F3"} value={inProg.length} label="In Progress" color="#F59E0B" s/>
+<Stat icon={"\u274C"} value={lost.length} label="Lost" color="#EF4444" s/>
+<Stat icon={"\uD83D\uDCC8"} value={compRate} label="Completion Rate" color="#3B8FD9" s/>
+<Stat icon={"\uD83D\uDCB5"} value={money(totalEarned)} label="Total Earned" color="#22C55E" sub={"FE: "+money(feEarned)+" + BE: "+money(beEarned)} s/>
+<Stat icon={"\u23F3"} value={money(bePending)} label="BE Pending" color="#F59E0B" sub={inProg.length+" clients waiting"} s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(projTotal)} label="Projected Total" color="#8B5CF6" sub={"If all complete"} s/>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83D\uDCB5 Your Pay Rates"}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,padding:10}}>
+<div style={{textAlign:"center",padding:16,background:"var(--hover)",borderRadius:12}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End</div><div style={{fontSize:28,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(feR)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{"of "+money(HEAP_FE)+" total"}</div></div>
+<div style={{textAlign:"center",padding:16,background:"var(--hover)",borderRadius:12}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End</div><div style={{fontSize:28,fontWeight:900,color:"#3B8FD9",marginTop:4}}>{money(beR)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{"of "+money(HEAP_BE)+" total (4mo)"}</div></div>
+<div style={{textAlign:"center",padding:16,background:"var(--hover)",borderRadius:12,gridColumn:"span 2"}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Total Per Completed Client</div><div style={{fontSize:28,fontWeight:900,color:"#8B5CF6",marginTop:4}}>{money(feR+beR)}</div></div>
+</div></Crd>
+<Crd title={"\uD83D\uDCC5 Completion Pipeline"}>{Object.keys(pipe).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No clients in pipeline</div>:<><div style={{fontSize:12,color:"var(--t3)",marginBottom:8,padding:"0 4px"}}>When in-progress clients hit 4 months:</div><Bar data={Object.entries(pipe).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#F59E0B"/></>}</Crd>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83C\uDFE2 Carrier Breakdown"}>{Object.keys(hCarS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["Carrier","Total","Completed","Lost","Rate"]} rows={Object.entries(hCarS).sort((a,b)=>b[1].total-a[1].total).map(([cr,d])=>[<strong>{cr}</strong>,d.total,<span style={{color:"#22C55E",fontWeight:700}}>{d.completed}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.lost}</span>,<span style={{fontWeight:800,color:d.total>0&&d.completed/d.total>=.75?"#22C55E":"#EF4444"}}>{pct(d.completed,d.total)}</span>])}/>}</Crd>
+<Crd title={"\uD83D\uDCC9 Client Fall-Off"}>{ana.sData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients</div>:<Bar data={ana.sData} color="#EF4444"/>}</Crd>
+</div>
+{inProg.length>0&&<div style={{marginBottom:18}}><Crd title={"\u23F3 In-Progress Clients ("+inProg.length+")"}><div style={{maxHeight:300,overflowY:"auto"}}>{inProg.sort((a,b)=>(a.effectiveDate||"").localeCompare(b.effectiveDate||"")).map(c=>{const mo=c.effectiveDate?heapMoPast(c.effectiveDate):0;const rem=Math.max(0,4-mo);return<div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderBottom:"1px solid var(--border)"}}><div><strong>{c.fullName}</strong><div style={{fontSize:11,color:"var(--t3)"}}>{fmtCar(c.carrier)+" \u00B7 Eff "+fmt(c.effectiveDate)}</div></div><Badge color={rem<=1?"#22C55E":"#F59E0B"}>{rem<=1?"Almost done!":rem+" mo left"}</Badge></div>})}</div></Crd></div>}
+{nie2.length>0&&<Crd title={"\uD83D\uDEAB Never in Effect ("+nie2.length+")"}><Bar data={Object.entries(nie2.reduce((o,c)=>{o[c.carrier||"Unknown"]=(o[c.carrier||"Unknown"]||0)+1;return o},{})).sort((a,b)=>b[1]-a[1]).map(([c2,n])=>[c2,n])} color="#94A3B8"/></Crd>}
+</>})()}
+</>}
+
 </div>}
 
 {tab==="team"&&isA&&<div style={{animation:"slideUp .3s"}}>
