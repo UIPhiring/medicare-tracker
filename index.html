@@ -19,6 +19,18 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 @keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 input,select,textarea{font-family:var(--font)}
+@media(max-width:768px){
+  main{padding:12px!important}
+  header{padding:8px 12px!important}
+  .stat-grid{gap:8px!important}
+  .stat-card{min-width:calc(50% - 8px)!important;padding:12px!important}
+  .crd-grid{grid-template-columns:1fr!important}
+  .hdr-btns>button{font-size:10px!important;padding:4px 6px!important}
+  .hdr-btns{gap:4px!important;flex-wrap:wrap!important}
+  .row-grid{font-size:11px!important}
+  .col-hide-mob{display:none!important}
+}
+@media(max-width:480px){.stat-card{min-width:100%!important}main{padding:8px!important}}
 </style>
 </head>
 <body>
@@ -103,7 +115,7 @@ const normClient=c=>{const n={...c};if(n.carrier){n.carrier=n.carrier.trim();con
 
 /* ═══════════ UI ATOMS ═══════════ */
 const Badge=({children,color="var(--accent)"})=><span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,letterSpacing:.6,background:color+"14",color,textTransform:"uppercase"}}>{children}</span>;
-const Stat=({label,value,sub,icon,color,s})=><div style={{background:"var(--card)",borderRadius:12,padding:s?"14px 16px":"20px 24px",border:"1px solid var(--border)",flex:s?"1 1 140px":"1 1 180px",minWidth:s?130:170,boxShadow:"var(--cs)"}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:s?8:12}}><span style={{fontSize:s?14:18}}>{icon}</span><span style={{fontSize:s?9:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",color:"var(--t3)"}}>{label}</span></div><div style={{fontSize:s?24:36,fontWeight:800,color:color||"var(--text)",lineHeight:1}}>{value}</div>{sub&&<div style={{fontSize:s?10:12,color:"var(--t3)",marginTop:s?3:6}}>{sub}</div>}</div>;
+const Stat=({label,value,sub,icon,color,s})=><div className="stat-card" style={{background:"var(--card)",borderRadius:12,padding:s?"14px 16px":"20px 24px",border:"1px solid var(--border)",flex:s?"1 1 140px":"1 1 180px",minWidth:s?130:170,boxShadow:"var(--cs)"}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:s?8:12}}><span style={{fontSize:s?14:18}}>{icon}</span><span style={{fontSize:s?9:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",color:"var(--t3)"}}>{label}</span></div><div style={{fontSize:s?24:36,fontWeight:800,color:color||"var(--text)",lineHeight:1}}>{value}</div>{sub&&<div style={{fontSize:s?10:12,color:"var(--t3)",marginTop:s?3:6}}>{sub}</div>}</div>;
 const Bar=({data,color="#3B8FD9",max=8})=>{const s=data.slice(0,max);const mx=Math.max(...s.map(d=>d[1]),1);return<div style={{display:"flex",flexDirection:"column",gap:6}}>{s.map(([l,v])=><div key={l} style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:95,fontSize:12,textAlign:"right",color:"var(--t2)",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</div><div style={{flex:1,background:"var(--bar)",borderRadius:6,height:26,overflow:"hidden"}}><div style={{height:"100%",borderRadius:6,background:color,width:(v/mx*100)+"%",display:"flex",alignItems:"center",paddingLeft:8,fontSize:11,fontWeight:700,color:"#fff",minWidth:32}}>{typeof v==="number"&&v>999?money(v):v}</div></div></div>)}</div>};
 const MT=({headers,rows,em})=><div style={{borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"var(--hover)"}}>{headers.map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontWeight:700,color:"var(--t3)",fontSize:10,textTransform:"uppercase",letterSpacing:.6,borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={headers.length} style={{padding:20,textAlign:"center",color:"var(--t3)"}}>{em||"No data"}</td></tr>:rows.map((r,i)=><tr key={i} style={{background:i%2?"var(--hover)":"transparent"}}>{r.map((c,j)=><td key={j} style={{padding:"8px 12px",borderBottom:"1px solid var(--border)"}}>{c}</td>)}</tr>)}</tbody></table></div>;
 const Crd=({title,children})=><div style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",overflow:"hidden",boxShadow:"var(--cs)"}}><div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:700,fontSize:15}}>{title}</div><div style={{padding:20}}>{children}</div></div>;
@@ -151,7 +163,7 @@ const[toast,setToast]=useState(null);
 const[form,setForm]=useState({});
 const[showAdd,setShowAdd]=useState(false);
 const[editId,setEditId]=useState(null);
-const[vc,setVc]=useState(null);const[vcNote,setVcNote]=useState("");
+const[vc,setVc]=useState(null);const[vcNote,setVcNote]=useState("");const[vcLogType,setVcLogType]=useState("note");
 const[search,setSearch]=useState("");
 const[stFilt,setStFilt]=useState("all");
 const[cc,setCc]=useState(false);
@@ -354,6 +366,12 @@ const brkByAg={};brkCl.forEach(c=>{const ag=team.find(u=>u.uid===c.agentId);if(!
 const totalProfit=myProdComm+admHP+admBrkProfit;
 /* All-site totals */
 const allClientsCount=cl.filter(c=>c.status!=="heapArchived").length;
+const today2=new Date();const todayStr=td();
+const bdays=cl.filter(c=>c.dob&&(c.status==="active"||c.status==="paid")).map(c=>{const d=new Date(c.dob+"T00:00:00");const bday=new Date(today2.getFullYear(),d.getMonth(),d.getDate());const diff=Math.floor((bday-today2)/(1000*60*60*24));const adj=diff<-14?diff+365:diff;return{...c,daysUntil:adj,bday:bday}}).filter(c=>c.daysUntil>=-1&&c.daysUntil<=30).sort((a,b)=>a.daysUntil-b.daysUntil);
+const needsVerify=cl.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBtwn(c.lastVerified,todayStr)>=28)).length;
+const recentInactive=cl.filter(c=>c.status==="inactive"&&c.inactiveDate&&daysBtwn(c.inactiveDate,todayStr)<=14);
+const followUps=cl.filter(c=>(c.status==="active"||c.status==="paid"||c.status==="neverInEffect")&&c.activityLog&&c.activityLog.some(a=>a.action==="followup")).map(c=>{const last=c.activityLog.filter(a=>a.action==="followup").pop();return{...c,lastFollowUp:last?.ts,followNote:last?.detail}}).sort((a,b)=>(a.lastFollowUp||"").localeCompare(b.lastFollowUp||""));
+const newThisMonth=cl.filter(c=>c.applicationDate&&c.applicationDate.substring(0,7)===todayStr.substring(0,7)&&c.status!=="heapArchived").length;
 /* Paid vs Unpaid */
 const paidCl=cl.filter(c=>c.status==="paid");const unpaidCl=cl.filter(c=>c.status==="active");
 const paidTotal=paidCl.reduce((s,c)=>s+getComm(c),0);
@@ -409,7 +427,7 @@ const brkRefDetail=Object.values(brkByAg).sort((a,b)=>b.refProfit-a.refProfit);
 /* Income forecast (3/6/12 mo) */
 const moIncome=totalProfit>0?totalProfit/Math.max(1,Object.keys(moTrend).length):0;
 const forecast3=moIncome*3,forecast6=moIncome*6,forecast12=moIncome*12;
-return{t,ac,pd,ina,cb,nie,inF,projInit,totCB,moRes:inF*29,annRes:inF*29*12,carS,stS,coh,cAM,sData,nieByCar,nieLost,needRev,hEarned,hActive,hDrop,admHP,hByAg,hTot:hCl.length,admBrkProfit,brkByAg,totalProfit,allClientsCount,myProdComm,myProdRes,myProdCount,myProdInForce,ownerIds,paidTotal,unpaidTotal,avgComm,epMix,epComm,ptMix,ptComm,moTrend,cbByCar,callBacks,hPipeline,hCompRate,hAgDetail,agProfit,leaderboard,teamMoGrowth,brkRefDetail,forecast3,forecast6,forecast12,paidCount:paidCl.length,unpaidCount:unpaidCl.length}
+return{t,ac,pd,ina,cb,nie,inF,projInit,totCB,moRes:inF*29,annRes:inF*29*12,carS,stS,coh,cAM,sData,nieByCar,nieLost,needRev,hEarned,hActive,hDrop,admHP,hByAg,hTot:hCl.length,admBrkProfit,brkByAg,totalProfit,allClientsCount,myProdComm,myProdRes,myProdCount,myProdInForce,ownerIds,paidTotal,unpaidTotal,avgComm,epMix,epComm,ptMix,ptComm,moTrend,cbByCar,callBacks,hPipeline,hCompRate,hAgDetail,agProfit,leaderboard,teamMoGrowth,brkRefDetail,forecast3,forecast6,forecast12,paidCount:paidCl.length,unpaidCount:unpaidCl.length,bdays,needsVerify,recentInactive,followUps,newThisMonth}
 },[allForAnalytics,team]);
 
 /* Agent stats */
@@ -477,7 +495,7 @@ return(
 </button>
 <span style={{fontSize:15,fontWeight:700,color:"var(--text)"}}>{tabs.find(t2=>t2.id===tab)?.ic+" "+tabs.find(t2=>t2.id===tab)?.label}</span>
 </div>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div className="hdr-btns" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
 <button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:4}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
 <button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCCB Import"}</button>
 {isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83E\uDDF9 Dedup"}</button>}
@@ -505,11 +523,11 @@ return(
 <div style={{padding:"12px 14px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:11,color:"var(--t3)"}}>{up?.displayName+" ("+up?.role+")"}</span><button onClick={()=>auth.signOut()} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"var(--font)"}}>Sign Out</button></div>
 </div>
 
-<main style={{maxWidth:1400,margin:"0 auto",padding:24}}>
+<main style={{maxWidth:1400,margin:"0 auto",padding:24,paddingBottom:80}}>
 
 {tab==="dashboard"&&<div style={{animation:"slideUp .3s"}}>
 <h1 style={{fontSize:28,fontWeight:900,marginBottom:24}}>Dashboard</h1>
-<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 {isA?<>
 <Stat icon={"\uD83D\uDCCB"} value={ana.allClientsCount} label="Total Clients (Site)" s/>
 <Stat icon={"\uD83D\uDC64"} value={ana.myProdCount} label="My Production" color="#3B8FD9" sub={ana.myProdInForce+" in force"} s/>
@@ -527,7 +545,19 @@ return(
 {up?.role==="broker"&&<Stat icon={"\uD83D\uDCC8"} value={ana.t>0?pct(ana.inF,ana.t):"\u2014"} label="Retention" s/>}
 </>}
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(340px,1fr))",gap:18}}>
+
+{/* Notifications & Reminders */}
+{(ana.bdays.length>0||ana.needsVerify>0||ana.recentInactive.length>0||ana.followUps.length>0)&&
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:18,marginBottom:20}}>
+<div style={{fontSize:15,fontWeight:800,marginBottom:14}}>{"\uD83D\uDD14 Reminders & Alerts"}</div>
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+{ana.needsVerify>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#FEF3C7",borderRadius:10,border:"1px solid #FCD34D"}}><span style={{fontSize:18}}>{"\uD83D\uDD0D"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#92400E"}}>{ana.needsVerify+" clients need MARX verification"}</div><div style={{fontSize:11,color:"#B45309"}}>Last checked 28+ days ago</div></div><button onClick={()=>startReview(1)} style={{...bO,fontSize:11,padding:"6px 12px",borderColor:"#D97706",color:"#D97706"}}>Start MARX</button></div>}
+{ana.recentInactive.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#FEE2E2",borderRadius:10,border:"1px solid #FECACA"}}><span style={{fontSize:18}}>{"\u26A0\uFE0F"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#991B1B"}}>{ana.recentInactive.length+" clients recently went inactive"}</div><div style={{fontSize:11,color:"#B91C1C"}}>In the last 14 days</div></div></div>}
+{ana.followUps.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#EFF6FF",borderRadius:10,border:"1px solid #BFDBFE"}}><span style={{fontSize:18}}>{"\uD83D\uDD14"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#1E40AF"}}>{ana.followUps.length+" follow-ups tagged"}</div><div style={{fontSize:11,color:"#3B82F6"}}>Clients with pending follow-up notes</div></div></div>}
+{ana.bdays.length>0&&<div style={{padding:"10px 14px",background:"#F0FDF4",borderRadius:10,border:"1px solid #BBF7D0"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:18}}>{"\uD83C\uDF82"}</span><div style={{fontSize:13,fontWeight:700,color:"#166534"}}>{"Upcoming Birthdays ("+ana.bdays.length+")"}</div></div>
+<div style={{display:"flex",flexDirection:"column",gap:4}}>{ana.bdays.slice(0,5).map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12}}><span style={{fontWeight:600}}>{c.fullName}</span><span style={{color:c.daysUntil<=0?"#22C55E":c.daysUntil<=7?"#F59E0B":"var(--t3)",fontWeight:700}}>{c.daysUntil<=0?"Today!":c.daysUntil===1?"Tomorrow":c.daysUntil+" days"}</span></div>)}{ana.bdays.length>5&&<div style={{fontSize:11,color:"var(--t3)",marginTop:4}}>{"+"+(ana.bdays.length-5)+" more..."}</div>}</div></div>}
+</div></div>}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(340px,100%),1fr))",gap:18}}>
 <Crd title={"\uD83C\uDFE2 Carrier Production"}>{Object.keys(ana.carS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.carS).sort((a,b)=>b[1].total-a[1].total).map(([c2,s])=>[c2,s.total])}/>}</Crd>
 <Crd title={"\uD83D\uDDFA\uFE0F States"}>{Object.keys(ana.stS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.stS).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA"/>}</Crd>
 </div>
@@ -564,7 +594,7 @@ return(
 {/* ═══════ ADMIN VIEW ═══════ */}
 {isA&&selAgent==="all"&&<>
 {/* Income Summary */}
-<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 <Stat icon={"\uD83D\uDCB0"} value={money(ana.totalProfit)} label="Total Income" color="#22C55E" sub={"Prod + HEAP + Refs"} s/>
 <Stat icon={"\uD83D\uDC64"} value={money(ana.myProdComm)} label="My Production" color="#3B8FD9" sub={ana.myProdInForce+" in force"} s/>
 <Stat icon={"\uD83C\uDFE2"} value={money(ana.admHP)} label="HEAP Profit" color="#F97316" sub={ana.hEarned+" earned / "+ana.hActive+" pending"} s/>
@@ -576,25 +606,25 @@ return(
 </div>
 
 {/* Income Breakdown */}
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDCCA Income Breakdown"}><Bar data={[["My Production",ana.myProdComm],["HEAP Profit",ana.admHP],["Broker Referrals",ana.admBrkProfit]]} color="#3B8FD9"/></Crd>
 <Crd title={"\uD83C\uDFC6 Team Leaderboard"}>{ana.leaderboard.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No agents</div>:<MT headers={["Agent","Role","Clients","In Force","Commission","Retention"]} rows={ana.leaderboard.map((a,i)=>[<span>{(i===0?"\uD83E\uDD47 ":i===1?"\uD83E\uDD48 ":i===2?"\uD83E\uDD49 ":"")+a.name}</span>,<Badge color={a.role==="heap"?"#F97316":"#22C55E"}>{a.role}</Badge>,a.total,<span style={{color:"#22C55E",fontWeight:700}}>{a.inForce}</span>,<strong style={{color:"#22C55E"}}>{money(a.comm)}</strong>,<span style={{fontWeight:700}}>{a.retention}</span>])}/>}</Crd>
 </div>
 
 {/* Per-agent profitability */}
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDCB5 Agent Profitability (Your Cut)"}>{ana.agProfit.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No agents</div>:<MT headers={["Agent","Type","Clients","In Force","Dropped","Your Profit","Retention"]} rows={ana.agProfit.map(a=>[<strong>{a.name}</strong>,<Badge color={a.role==="heap"?"#F97316":a.isOwner?"#8B5CF6":"#22C55E"}>{a.isOwner?"owner":a.role}</Badge>,a.total,<span style={{color:"#22C55E",fontWeight:700}}>{a.inForce}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{a.dropped}</span>,<strong style={{color:"#22C55E"}}>{money(a.yourProfit)}</strong>,<span style={{fontWeight:700}}>{a.retention}</span>])}/>}</Crd>
 <Crd title={"\uD83C\uDFE2 HEAP Profit Detail"}>{Object.keys(ana.hAgDetail).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No HEAP agents</div>:<MT headers={["Agent","Done","Pending","Lost","FE Profit","BE Earned","BE Pending"]} rows={Object.values(ana.hAgDetail).sort((a,b)=>(b.feEarned+b.beEarned)-(a.feEarned+a.beEarned)).map(h=>[<strong>{h.name}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{h.completed}</span>,<span style={{color:"#F59E0B",fontWeight:700}}>{h.inProgress}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{h.lost}</span>,<strong style={{color:"#22C55E"}}>{money(h.feEarned)}</strong>,<strong style={{color:"#22C55E"}}>{money(h.beEarned)}</strong>,<span style={{color:"#F59E0B",fontWeight:700}}>{money(h.bePending)}</span>])}/>}</Crd>
 </div>
 
 {/* Broker referral detail + team retention */}
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83E\uDD1D Broker Referral Detail"}>{ana.brkRefDetail.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No broker agents</div>:<MT headers={["Agent","Clients","New","Switch","Same","Your Referral $"]} rows={ana.brkRefDetail.map(b=>[<strong>{b.name}</strong>,b.total,<span style={{color:"#22C55E",fontWeight:700}}>{b.newMed}</span>,<span style={{color:"#F59E0B",fontWeight:700}}>{b.switched}</span>,<span style={{color:"#94A3B8",fontWeight:700}}>{b.sameCar}</span>,<strong style={{color:"#22C55E"}}>{money(b.refProfit)}</strong>])}/>}</Crd>
 <Crd title={"\uD83D\uDCC8 Team Monthly Growth"}>{Object.keys(ana.teamMoGrowth).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.teamMoGrowth).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#8B5CF6"/>}</Crd>
 </div>
 
 {/* Carrier + chargeback */}
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83C\uDFE2 Carrier Production (All Team)"}><MT headers={["Carrier","Total","Active","Paid","Inactive","CB","Comm"]} rows={Object.entries(ana.carS).sort((a,b)=>b[1].total-a[1].total).map(([cr,s])=>[<strong>{cr}</strong>,<strong>{s.total}</strong>,<span style={{color:"#22C55E"}}>{s.active}</span>,<span style={{color:"#3B8FD9"}}>{s.paid}</span>,<span style={{color:"#F59E0B"}}>{s.inactive}</span>,<span style={{color:"#EF4444"}}>{s.cb}</span>,<strong style={{color:"#22C55E"}}>{money(s.proj)}</strong>])}/></Crd>
 <Crd title={"\uD83D\uDCC9 Chargeback Rate by Carrier"}>{Object.keys(ana.cbByCar).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["Carrier","Total","Lost","CB Rate"]} rows={Object.entries(ana.cbByCar).sort((a,b)=>b[1].cb/Math.max(1,b[1].total)-a[1].cb/Math.max(1,a[1].total)).map(([cr,d])=>[<strong>{cr}</strong>,d.total,<span style={{color:"#EF4444",fontWeight:700}}>{d.cb}</span>,<span style={{fontWeight:800,color:d.total>0&&d.cb/d.total>.15?"#EF4444":"#22C55E"}}>{pct(d.cb,d.total)}</span>])}/>}</Crd>
 </div>
@@ -602,7 +632,7 @@ return(
 
 {/* ═══════ BROKER VIEW (agent logged in OR admin viewing a broker) ═══════ */}
 {((!isA&&up?.role==="broker")||(isA&&selAgent!=="all"&&(team.find(u=>u.uid===selAgent)?.role==="broker"||team.find(u=>u.uid===selAgent)?.role==="admin")))&&<>
-<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 <Stat icon={"\uD83D\uDCB5"} value={money(ana.projInit)} label="Projected Initial" color="#22C55E" sub={ana.inF+" in-force"} s/>
 <Stat icon={"\uD83D\uDCB0"} value={money(ana.paidTotal)} label="Paid Commission" color="#3B8FD9" sub={ana.paidCount+" clients paid"} s/>
 <Stat icon={"\u23F3"} value={money(ana.unpaidTotal)} label="Outstanding" color="#F59E0B" sub={ana.unpaidCount+" awaiting"} s/>
@@ -612,23 +642,23 @@ return(
 <Stat icon={"\uD83D\uDCC9"} value={money(ana.totCB)} label="Chargebacks" color="#EF4444" s/>
 <Stat icon={"\uD83D\uDCC8"} value={ana.t>0?pct(ana.inF,ana.t):"0%"} label="Retention" s/>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDCB5 Commission by App Month"}>{Object.keys(ana.cAM).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.cAM).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#22C55E"/>}</Crd>
 <Crd title={"\uD83D\uDCC5 Cohort Retention"}>{Object.keys(ana.coh).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["App Mo","Enrolled","In Force","Dropped","Comm","Retention"]} rows={Object.entries(ana.coh).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,d])=>[mLabel(mk),<strong>{d.enr}</strong>,<span style={{color:"#22C55E",fontWeight:700}}>{d.inf}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.dr}</span>,<strong style={{color:"#22C55E"}}>{money(d.pc)}</strong>,<span style={{fontWeight:800,color:d.enr>0&&d.inf/d.enr>=.85?"#22C55E":"#EF4444"}}>{pct(d.inf,d.enr)}</span>])}/>}</Crd>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDCC5 Election Period Mix"}><MT headers={["Period","Clients","Commission"]} rows={Object.entries(ana.epMix).sort((a,b)=>b[1]-a[1]).map(([ep,n])=>[<strong>{ep}</strong>,n,<strong style={{color:"#22C55E"}}>{money(ana.epComm[ep]||0)}</strong>])}/></Crd>
 <Crd title={"\uD83D\uDCCB Plan Type Mix"}><MT headers={["Type","Clients","Commission"]} rows={Object.entries(ana.ptMix).sort((a,b)=>b[1]-a[1]).map(([pt,n])=>[<strong>{pt}</strong>,n,<strong style={{color:"#22C55E"}}>{money(ana.ptComm[pt]||0)}</strong>])}/></Crd>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDCC8 Monthly Production Trend"}>{Object.keys(ana.moTrend).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.moTrend).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#8B5CF6"/>}</Crd>
 <Crd title={"\uD83D\uDCC9 Chargeback Rate by Carrier"}>{Object.keys(ana.cbByCar).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["Carrier","Total","Lost","CB Rate"]} rows={Object.entries(ana.cbByCar).sort((a,b)=>b[1].cb/Math.max(1,b[1].total)-a[1].cb/Math.max(1,a[1].total)).map(([cr,d])=>[<strong>{cr}</strong>,d.total,<span style={{color:"#EF4444",fontWeight:700}}>{d.cb}</span>,<span style={{fontWeight:800,color:d.total>0&&d.cb/d.total>.15?"#EF4444":"#22C55E"}}>{pct(d.cb,d.total)}</span>])}/>}</Crd>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83C\uDFE2 Carrier Production"}><MT headers={["Carrier","Total","Active","Paid","Inactive","CB","Comm"]} rows={Object.entries(ana.carS).sort((a,b)=>b[1].total-a[1].total).map(([cr,s])=>[<strong>{cr}</strong>,<strong>{s.total}</strong>,<span style={{color:"#22C55E"}}>{s.active}</span>,<span style={{color:"#3B8FD9"}}>{s.paid}</span>,<span style={{color:"#F59E0B"}}>{s.inactive}</span>,<span style={{color:"#EF4444"}}>{s.cb}</span>,<strong style={{color:"#22C55E"}}>{money(s.proj)}</strong>])}/></Crd>
 <Crd title={"\uD83D\uDCC9 Client Fall-Off"}>{ana.sData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients</div>:<Bar data={ana.sData} color="#EF4444"/>}</Crd>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDDFA\uFE0F States"}><Bar data={Object.entries(ana.stS).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA"/></Crd>
 <Crd title={"\uD83D\uDEAB Never in Effect"}>{ana.nie===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>None</div>:<div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{ana.nie}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Count</div></div><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#EF4444"}}>{money(ana.nieLost)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Lost</div></div><div style={{textAlign:"center",padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:24,fontWeight:800,color:"#94A3B8"}}>{pct(ana.nie,ana.t)}</div><div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",marginTop:4}}>Rate</div></div></div><Bar data={Object.entries(ana.nieByCar).sort((a,b)=>b[1]-a[1]).map(([c2,n])=>[c2,n])} color="#94A3B8"/></div>}</Crd>
 </div>
@@ -656,7 +686,7 @@ const pipe={};inProg.forEach(c=>{if(!c.effectiveDate)return;const mo=heapMoPast(
 /* Carrier breakdown */
 const hCarS={};myCl.filter(c=>c.status!=="heapArchived"&&c.carrier).forEach(c=>{if(!hCarS[c.carrier])hCarS[c.carrier]={total:0,completed:0,lost:0};hCarS[c.carrier].total++;if(c.status==="heapArchived"||((c.status==="active"||c.status==="paid")&&canArchive(c)))hCarS[c.carrier].completed++;else if(c.status==="inactive"||c.status==="chargedBack")hCarS[c.carrier].lost++});
 return<>
-<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 <Stat icon={"\u2705"} value={completed.length} label="Completed (4+ mo)" color="#22C55E" s/>
 <Stat icon={"\u23F3"} value={inProg.length} label="In Progress" color="#F59E0B" s/>
 <Stat icon={"\u274C"} value={lost.length} label="Lost" color="#EF4444" s/>
@@ -665,7 +695,7 @@ return<>
 <Stat icon={"\u23F3"} value={money(bePending)} label="BE Pending" color="#F59E0B" sub={inProg.length+" clients waiting"} s/>
 <Stat icon={"\uD83D\uDCB0"} value={money(projTotal)} label="Projected Total" color="#8B5CF6" sub={"If all complete"} s/>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDCB5 Your Pay Rates"}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,padding:10}}>
 <div style={{textAlign:"center",padding:16,background:"var(--hover)",borderRadius:12}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End</div><div style={{fontSize:28,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(feR)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{"of "+money(HEAP_FE)+" total"}</div></div>
 <div style={{textAlign:"center",padding:16,background:"var(--hover)",borderRadius:12}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End</div><div style={{fontSize:28,fontWeight:900,color:"#3B8FD9",marginTop:4}}>{money(beR)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{"of "+money(HEAP_BE)+" total (4mo)"}</div></div>
@@ -673,7 +703,7 @@ return<>
 </div></Crd>
 <Crd title={"\uD83D\uDCC5 Completion Pipeline"}>{Object.keys(pipe).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No clients in pipeline</div>:<><div style={{fontSize:12,color:"var(--t3)",marginBottom:8,padding:"0 4px"}}>When in-progress clients hit 4 months:</div><Bar data={Object.entries(pipe).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#F59E0B"/></>}</Crd>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18,marginBottom:18}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83C\uDFE2 Carrier Breakdown"}>{Object.keys(hCarS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["Carrier","Total","Completed","Lost","Rate"]} rows={Object.entries(hCarS).sort((a,b)=>b[1].total-a[1].total).map(([cr,d])=>[<strong>{cr}</strong>,d.total,<span style={{color:"#22C55E",fontWeight:700}}>{d.completed}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.lost}</span>,<span style={{fontWeight:800,color:d.total>0&&d.completed/d.total>=.75?"#22C55E":"#EF4444"}}>{pct(d.completed,d.total)}</span>])}/>}</Crd>
 <Crd title={"\uD83D\uDCC9 Client Fall-Off"}>{ana.sData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients</div>:<Bar data={ana.sData} color="#EF4444"/>}</Crd>
 </div>
@@ -693,7 +723,7 @@ return<>
 </div>
 </div>
 {/* Site-wide summary */}
-<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 <Stat icon={"\uD83D\uDCCB"} value={ana.allClientsCount} label="Total Clients (Site)" s/>
 <Stat icon={"\uD83D\uDC64"} value={ana.myProdCount} label="My Production" color="#3B8FD9" sub={ana.myProdInForce+" in force"} s/>
 <Stat icon={"\uD83D\uDCB5"} value={money(ana.myProdComm)} label="My Commission" color="#22C55E" s/>
@@ -800,13 +830,14 @@ return<>
 <div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
 <div style={{fontSize:13,fontWeight:700,marginBottom:12}}>{"\uD83D\uDCDD Activity Log"}</div>
 <div style={{display:"flex",gap:8,marginBottom:12}}>
-<input value={vcNote} onChange={e=>setVcNote(e.target.value)} placeholder="Add a note..." onKeyDown={e=>{if(e.key==="Enter"&&vcNote.trim()){const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:"note",detail:vcNote.trim()};logAct(vc.id,"note",vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("")}}} style={{...inp,flex:1,fontSize:12}}/>
-<button onClick={()=>{if(!vcNote.trim())return;const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:"note",detail:vcNote.trim()};logAct(vc.id,"note",vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("")}} disabled={!vcNote.trim()} style={{...bP,fontSize:12,padding:"8px 14px",opacity:vcNote.trim()?1:.4}}>Add</button>
+<select value={vcLogType||"note"} onChange={e=>setVcLogType(e.target.value)} style={{...inp,width:120,fontSize:11,cursor:"pointer"}}><option value="note">\uD83D\uDCDD Note</option><option value="call_out">\uD83D\uDCDE Called</option><option value="call_in">\uD83D\uDCF2 Received</option><option value="email">\uD83D\uDCE7 Email</option><option value="meeting">\uD83E\uDD1D Meeting</option><option value="followup">\uD83D\uDD14 Follow-Up</option></select>
+<input value={vcNote} onChange={e=>setVcNote(e.target.value)} placeholder="Details..." onKeyDown={e=>{if(e.key==="Enter"&&vcNote.trim()){const tp=vcLogType||"note";const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:tp,detail:vcNote.trim()};logAct(vc.id,tp,vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("");setVcLogType("note")}}} style={{...inp,flex:1,fontSize:12}}/>
+<button onClick={()=>{if(!vcNote.trim())return;const tp=vcLogType||"note";const entry={ts:new Date().toISOString(),user:up?.displayName||"System",action:tp,detail:vcNote.trim()};logAct(vc.id,tp,vcNote.trim());setVc(p=>({...p,activityLog:[...(p.activityLog||[]),entry]}));setVcNote("");setVcLogType("note")}} disabled={!vcNote.trim()} style={{...bP,fontSize:12,padding:"8px 14px",opacity:vcNote.trim()?1:.4}}>Add</button>
 </div>
 {!!(vc.activityLog&&vc.activityLog.length)&&<div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:0}}>
 {[].concat(vc.activityLog).reverse().map((al,ai)=>
 <div key={ai} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
-<div style={{fontSize:14,width:20,textAlign:"center",flexShrink:0,paddingTop:1}}>{al.action==="created"?"\uD83C\uDD95":al.action==="status"?"\uD83D\uDD04":al.action==="verified"?"\u2705":al.action==="edited"?"\u270F\uFE0F":al.action==="note"?"\uD83D\uDCDD":al.action==="mass_update"?"\u26A1":"\u2022"}</div>
+<div style={{fontSize:14,width:20,textAlign:"center",flexShrink:0,paddingTop:1}}>{al.action==="created"?"\uD83C\uDD95":al.action==="status"?"\uD83D\uDD04":al.action==="verified"?"\u2705":al.action==="edited"?"\u270F\uFE0F":al.action==="note"?"\uD83D\uDCDD":al.action==="call_out"?"\uD83D\uDCDE":al.action==="call_in"?"\uD83D\uDCF2":al.action==="email"?"\uD83D\uDCE7":al.action==="meeting"?"\uD83E\uDD1D":al.action==="followup"?"\uD83D\uDD14":al.action==="mass_update"?"\u26A1":"\u2022"}</div>
 <div style={{flex:1,minWidth:0}}>
 <div style={{fontSize:12,fontWeight:600,color:al.action==="status"?"#3B8FD9":al.action==="verified"?"#22C55E":al.action==="created"?"#8B5CF6":"var(--t2)"}}>{al.detail||al.action}</div>
 <div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>{fmtTs(al.ts)}{al.user?(" \u00B7 "+al.user):""}</div>
@@ -929,7 +960,7 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>State</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{c.state||"\u2014"}</div></div>
 <div style={{padding:12,background:"var(--hover)",borderRadius:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>Election Period</div><div style={{fontSize:14,fontWeight:600,marginTop:4}}>{c.electionPeriod||"\u2014"}</div></div>
 </div>
-{revPass===1?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8}}>
+{revPass===1?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))",gap:8}}>
 <button onClick={()=>revAction("active")} style={{padding:12,borderRadius:12,border:"2px solid #22C55E",background:"#22C55E10",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\u2705"}</div><div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginTop:4}}>On Book</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 1</div></button>
 <button onClick={()=>revAction("inactive")} style={{padding:12,borderRadius:12,border:"2px solid #EF4444",background:"#EF444410",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\u274C"}</div><div style={{fontSize:11,fontWeight:700,color:"#EF4444",marginTop:4}}>Left Book</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 2</div></button>
 <button onClick={()=>revAction("noEnroll")} style={{padding:12,borderRadius:12,border:"2px solid #94A3B8",background:"#94A3B810",cursor:"pointer",textAlign:"center",fontFamily:"var(--font)"}}><div style={{fontSize:24}}>{"\u26D4"}</div><div style={{fontSize:11,fontWeight:700,color:"#94A3B8",marginTop:4}}>Didn't Enroll</div><div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>Press 3</div></button>
