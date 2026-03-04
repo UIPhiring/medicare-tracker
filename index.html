@@ -548,6 +548,42 @@ const LEAD_STAGES=[{id:"new",label:"New Lead",color:"#3B8FD9",icon:"\uD83C\uDD95
 const saveLead=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("leads").doc(id).update(d);return id}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();d.agentId=d.agentId||cu.uid;d.stage=d.stage||"new";d.activityLog=[{ts:estTS(),user:up?.displayName||"System",action:"created",detail:"Lead added"}];const ref=await db.collection("leads").add(d);return ref.id}};
 const convertLead=async(lead)=>{const cl={fullName:lead.fullName,phone:lead.phone||"",email:lead.email||"",dob:lead.dob||"",state:lead.state||"",mailingAddress:lead.address||"",city:lead.city||"",zipCode:lead.zip||"",mbiNumber:lead.mbi||"",carrier:"",planName:"",effectiveDate:"",applicationDate:td(),status:"active",agentId:lead.agentId||cu.uid,electionPeriod:lead.electionPeriod||"",statusNote:"Converted from lead"};const id=await save(cl);await db.collection("leads").doc(lead.id).update({stage:"applied",convertedClientId:id,convertedDate:td()});flash(lead.fullName+" converted to client!");setViewLead(null)};
 const saveContact=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("carrierContacts").doc(id).update(d)}else{await db.collection("carrierContacts").add(d)}flash("Contact saved!");setShowContact(false);setContactForm({})};
+const seedContacts=async()=>{const SEED=[
+{carrier:"Zing Health",name:"Broker Support",title:"Agent/Broker Line",phone:"1-844-946-4226",email:"brokers@myzinghealth.com",notes:""},
+{carrier:"Zing Health",name:"Member Services",title:"Member Line",phone:"1-866-946-4458",email:"",notes:""},
+{carrier:"CarePlus",name:"Member Services",title:"Member Line",phone:"1-800-794-5907",email:"",notes:"Humana subsidiary"},
+{carrier:"CarePlus",name:"Application Fax",title:"Fax Line",phone:"1-855-819-8679",email:"",notes:"Fax only"},
+{carrier:"Humana",name:"Agent Support",title:"Agent/Broker Line",phone:"1-800-309-3163",email:"",notes:"Mon-Fri 8am-7pm ET"},
+{carrier:"Humana",name:"Broker Referral",title:"Referral Line",phone:"1-800-967-1961",email:"",notes:"Beneficiary must be on call"},
+{carrier:"Humana",name:"Agency Management",title:"Agency Line",phone:"1-855-330-8128",email:"",notes:""},
+{carrier:"Humana",name:"Elite Agents",title:"Elite Line",phone:"1-866-254-8779",email:"",notes:""},
+{carrier:"Humana",name:"App Fax",title:"Fax Line",phone:"1-877-889-9936",email:"",notes:"Fax only - Medicare & Med Supp apps"},
+{carrier:"Humana",name:"Member Services",title:"Member Line",phone:"1-800-457-4708",email:"",notes:"Daily 8am-8pm"},
+{carrier:"Aetna",name:"Broker Support",title:"Agent/Broker Line",phone:"1-866-714-9301",email:"brokersupport@aetna.com",notes:"Mon-Fri 8am-8pm ET"},
+{carrier:"Aetna",name:"Med Supp Line",title:"Medicare Supplement",phone:"1-800-264-4000",email:"aetssiinformation@aetna.com",notes:"Option 3, then Option 1"},
+{carrier:"Molina",name:"Broker Services",title:"Agent/Broker Line",phone:"1-866-714-8996",email:"",notes:"Mon-Fri 8am-5pm PT"},
+{carrier:"CareSource",name:"Broker Services",title:"Agent/Broker Line",phone:"1-833-230-2002",email:"salessupport@caresource.com",notes:""},
+{carrier:"Peoples Health",name:"Sales Line",title:"Sales",phone:"1-800-978-9765",email:"",notes:"UHC subsidiary - Louisiana"},
+{carrier:"Peoples Health",name:"Provider Line",title:"Provider",phone:"1-800-631-8443",email:"",notes:"Mon-Fri 8am-5pm"},
+{carrier:"UnitedHealthcare",name:"Broker Service Center",title:"Agent/Broker Line",phone:"1-800-474-4467",email:"",notes:""},
+{carrier:"UnitedHealthcare",name:"Medicare Supplement",title:"Med Supp Line",phone:"1-800-523-5800",email:"",notes:""},
+{carrier:"UnitedHealthcare",name:"Member Services",title:"Member Line",phone:"1-866-801-4409",email:"",notes:"Plans through work"},
+{carrier:"Devoted Health",name:"Broker Support",title:"Agent/Broker Line",phone:"1-877-764-9446",email:"",notes:"Daily 9am-10pm ET (AEP), Weekdays otherwise"},
+{carrier:"Anthem",name:"General Line",title:"Main Line",phone:"Contact regional BCBS",email:"",notes:"Varies by state - no single national broker line"},
+{carrier:"Blue Cross Blue Shield",name:"General Line",title:"Main Line",phone:"Contact regional BCBS",email:"",notes:"Varies by state - contact your local BCBS company"},
+{carrier:"Optimum HealthCare",name:"Main Line",title:"General",phone:"1-866-245-5360",email:"",notes:"Florida only"},
+{carrier:"Freedom Health",name:"Member Services",title:"Member Line",phone:"1-800-401-2740",email:"",notes:"Florida only"},
+{carrier:"Freedom Health",name:"Sales Line",title:"Sales",phone:"1-877-962-8332",email:"",notes:"Florida only"},
+{carrier:"WellCare",name:"Broker Support",title:"Agent/Broker Line",phone:"1-866-822-1339",email:"",notes:"Mon-Fri 8am-8pm"},
+{carrier:"WellCare",name:"Member Services",title:"Member Line",phone:"1-800-581-9952",email:"",notes:"24/7"},
+{carrier:"Cigna",name:"Customer Service",title:"General",phone:"1-800-997-1654",email:"",notes:""},
+{carrier:"Cigna",name:"IFP Broker Line",title:"Agent/Broker Line",phone:"1-877-244-6215",email:"",notes:"Mon-Fri 8am-8pm ET"},
+{carrier:"Clover Health",name:"Broker Support",title:"Agent/Broker Line",phone:"Contact through FMO",email:"",notes:"No published national broker line"},
+{carrier:"Oscar Health",name:"Broker Support",title:"Agent/Broker Line",phone:"Contact through FMO",email:"",notes:"No published national broker line"},
+{carrier:"Centene",name:"Broker Support",title:"Agent/Broker Line",phone:"Use WellCare lines",email:"",notes:"Parent company of WellCare/Ambetter"},
+{carrier:"Alignment Health",name:"General Line",title:"General",phone:"1-844-310-2247",email:"",notes:""},
+{carrier:"Kaiser Permanente",name:"General Line",title:"General",phone:"Contact regional Kaiser",email:"",notes:"Doesn't typically use outside brokers"}
+];const b=db.batch();SEED.forEach(c=>{const ref=db.collection("carrierContacts").doc();b.set(ref,c)});await b.commit();flash("Added "+SEED.length+" carrier contacts!")};
 const saveGoal=async(d)=>{try{if(!d.month||!d.target){flash("Month and target required","error");return}d.target=Number(d.target)||0;if(!d.agentId)d.agentId="all";d.incentive=d.incentive||"";if(d.id){const id=d.id;delete d.id;await db.collection("goals").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection("goals").add(d)}flash("Goal saved!");setShowGoal(false);setGoalForm({})}catch(e){console.error("saveGoal error:",e);flash("Error saving goal: "+e.message,"error")}};
 const savePGoal=async(d)=>{try{if(!d.title){flash("Title required","error");return}d.agentId=d.agentId||cu.uid;d.agentName=d.agentName||up?.displayName||"";d.done=d.done||false;if(d.id){const id=d.id;delete d.id;await db.collection("personalGoals").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection("personalGoals").add(d)}flash("Goal saved!");setShowPGoal(false);setPGoalForm({})}catch(e){flash("Error: "+e.message,"error")}};
 const togglePGoal=async(g)=>{await db.collection("personalGoals").doc(g.id).update({done:!g.done,doneDate:!g.done?td():null})};
@@ -1110,7 +1146,7 @@ stageLds.map(l=><div key={l.id} onClick={()=>setViewLead(l)} style={{padding:"10
 {tab==="directory"&&<div style={{animation:"slideUp .3s"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
 <h1 style={{fontSize:24,fontWeight:800}}>Carrier Directory</h1>
-{isA&&<button onClick={()=>{setContactForm({});setEditContact(null);setShowContact(true)}} style={bP}>+ Add Contact</button>}
+{isA&&<div style={{display:"flex",gap:8}}><button onClick={()=>{if(contacts.length>0&&!window.confirm("This will add 34 carrier contacts. Existing contacts won't be affected. Continue?")){return}seedContacts()}} style={bO}>{"\uD83D\uDCDE Seed All Carriers"}</button><button onClick={()=>{setContactForm({});setEditContact(null);setShowContact(true)}} style={bP}>+ Add Contact</button></div>}
 </div>
 {contacts.length===0?<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:50,textAlign:"center",color:"var(--t3)"}}>{isA?"No contacts yet — add your carrier reps, support lines, and key contacts.":"No carrier contacts have been added yet."}</div>:
 (()=>{const grouped={};contacts.forEach(c=>{const g=c.carrier||"Other";if(!grouped[g])grouped[g]=[];grouped[g].push(c)});
@@ -1863,7 +1899,7 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 {/* CARRIER CONTACT MODAL */}
 {showContact&&<Mdl onClose={()=>{setShowContact(false);setContactForm({})}} title={editContact?"Edit Contact":"Add Carrier Contact"}>
 <div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-{[{k:"carrier",l:"Carrier",t:"select",opts:["Humana","CarePlus","UnitedHealthcare","Aetna","Devoted","Freedom","Wellcare","Cigna","BCBS","Other"]},{k:"name",l:"Contact Name",t:"text"},{k:"title",l:"Title / Role",t:"text"},{k:"phone",l:"Phone",t:"tel"},{k:"email",l:"Email",t:"email"}].map(f=><div key={f.k}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>{f.l}</label>
+{[{k:"carrier",l:"Carrier",t:"select",opts:["Humana","CarePlus","UnitedHealthcare","Aetna","Devoted Health","Freedom Health","WellCare","Cigna","Blue Cross Blue Shield","Anthem","Molina","CareSource","Peoples Health","Zing Health","Optimum HealthCare","Clover Health","Oscar Health","Centene","Alignment Health","Kaiser Permanente","Other"]},{k:"name",l:"Contact Name",t:"text"},{k:"title",l:"Title / Role",t:"text"},{k:"phone",l:"Phone",t:"tel"},{k:"email",l:"Email",t:"email"}].map(f=><div key={f.k}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>{f.l}</label>
 {f.t==="select"?<select value={contactForm[f.k]||""} onChange={e=>setContactForm(p=>({...p,[f.k]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="">Select...</option>{f.opts.map(o=><option key={o} value={o}>{o}</option>)}</select>
 :<input type={f.t} value={contactForm[f.k]||""} onChange={e=>setContactForm(p=>({...p,[f.k]:e.target.value}))} style={inp}/>}
 </div>)}
