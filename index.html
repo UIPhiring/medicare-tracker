@@ -205,6 +205,9 @@ const[leads,setLeads]=useState([]);const[showLead,setShowLead]=useState(false);c
 const[contacts,setContacts]=useState([]);const[showContact,setShowContact]=useState(false);const[contactForm,setContactForm]=useState({});const[editContact,setEditContact]=useState(null);
 /* Goals */
 const[goals,setGoals]=useState([]);const[showGoal,setShowGoal]=useState(false);const[goalForm,setGoalForm]=useState({});
+const[pGoals,setPGoals]=useState([]);const[showPGoal,setShowPGoal]=useState(false);const[pGoalForm,setPGoalForm]=useState({});
+const[posts,setPosts]=useState([]);const[showPost,setShowPost]=useState(false);const[postForm,setPostForm]=useState({});
+const[goalSub,setGoalSub]=useState("production");
 const[showTree,setShowTree]=useState(false);
 
 const flash=(m,t="success")=>{setToast({m,t});setTimeout(()=>setToast(null),3e3)};
@@ -233,6 +236,9 @@ useEffect(()=>{const un=db.collection("events").onSnapshot(s=>setEvents(s.docs.m
 /* Commission history */
 const[commHist,setCommHist]=useState([]);
 useEffect(()=>{const un=db.collection("commissionHistory").onSnapshot(s=>setCommHist(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
+/* Load personal goals + bulletin */
+useEffect(()=>{const un=db.collection("personalGoals").onSnapshot(s=>setPGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
+useEffect(()=>{const un=db.collection("bulletinPosts").orderBy("createdAt","desc").onSnapshot(s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))),e=>{const un2=db.collection("bulletinPosts").onSnapshot(s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un2()});return()=>un()},[]);
 /* Load goals */
 useEffect(()=>{const un=db.collection("goals").onSnapshot(s=>setGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 
@@ -527,7 +533,13 @@ const LEAD_STAGES=[{id:"new",label:"New Lead",color:"#3B8FD9",icon:"\uD83C\uDD95
 const saveLead=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("leads").doc(id).update(d);return id}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();d.agentId=d.agentId||cu.uid;d.stage=d.stage||"new";d.activityLog=[{ts:estTS(),user:up?.displayName||"System",action:"created",detail:"Lead added"}];const ref=await db.collection("leads").add(d);return ref.id}};
 const convertLead=async(lead)=>{const cl={fullName:lead.fullName,phone:lead.phone||"",email:lead.email||"",dob:lead.dob||"",state:lead.state||"",mailingAddress:lead.address||"",city:lead.city||"",zipCode:lead.zip||"",mbiNumber:lead.mbi||"",carrier:"",planName:"",effectiveDate:"",applicationDate:td(),status:"active",agentId:lead.agentId||cu.uid,electionPeriod:lead.electionPeriod||"",statusNote:"Converted from lead"};const id=await save(cl);await db.collection("leads").doc(lead.id).update({stage:"applied",convertedClientId:id,convertedDate:td()});flash(lead.fullName+" converted to client!");setViewLead(null)};
 const saveContact=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("carrierContacts").doc(id).update(d)}else{await db.collection("carrierContacts").add(d)}flash("Contact saved!");setShowContact(false);setContactForm({})};
-const saveGoal=async(d)=>{try{if(!d.month||!d.target){flash("Month and target required","error");return}d.target=Number(d.target)||0;if(!d.agentId)d.agentId="all";if(d.id){const id=d.id;delete d.id;await db.collection("goals").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection("goals").add(d)}flash("Goal saved!");setShowGoal(false);setGoalForm({})}catch(e){console.error("saveGoal error:",e);flash("Error saving goal: "+e.message,"error")}};
+const saveGoal=async(d)=>{try{if(!d.month||!d.target){flash("Month and target required","error");return}d.target=Number(d.target)||0;if(!d.agentId)d.agentId="all";d.incentive=d.incentive||"";if(d.id){const id=d.id;delete d.id;await db.collection("goals").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection("goals").add(d)}flash("Goal saved!");setShowGoal(false);setGoalForm({})}catch(e){console.error("saveGoal error:",e);flash("Error saving goal: "+e.message,"error")}};
+const savePGoal=async(d)=>{try{if(!d.title){flash("Title required","error");return}d.agentId=d.agentId||cu.uid;d.agentName=d.agentName||up?.displayName||"";d.done=d.done||false;if(d.id){const id=d.id;delete d.id;await db.collection("personalGoals").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection("personalGoals").add(d)}flash("Goal saved!");setShowPGoal(false);setPGoalForm({})}catch(e){flash("Error: "+e.message,"error")}};
+const togglePGoal=async(g)=>{await db.collection("personalGoals").doc(g.id).update({done:!g.done,doneDate:!g.done?td():null})};
+const delPGoal=async(id)=>{await db.collection("personalGoals").doc(id).delete();flash("Deleted")};
+const savePost=async(d)=>{try{if(!d.message){flash("Message required","error");return}d.authorId=cu.uid;d.authorName=up?.displayName||"";if(d.id){const id=d.id;delete d.id;await db.collection("bulletinPosts").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();d.likes=[];await db.collection("bulletinPosts").add(d)}flash("Posted!");setShowPost(false);setPostForm({})}catch(e){flash("Error: "+e.message,"error")}};
+const likePost=async(p)=>{const likes=p.likes||[];const has=likes.includes(cu.uid);await db.collection("bulletinPosts").doc(p.id).update({likes:has?likes.filter(u=>u!==cu.uid):[...likes,cu.uid]})};
+const delPost=async(id)=>{await db.collection("bulletinPosts").doc(id).delete();flash("Deleted")};
 
 /* Templates */
 const TEMPLATES=[
@@ -1103,8 +1115,18 @@ return Object.entries(grouped).sort((a,b)=>a[0].localeCompare(b[0])).map(([carri
 {/* ═══ GOALS TAB ═══ */}
 {tab==="goals"&&<div style={{animation:"slideUp .3s"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-<h1 style={{fontSize:24,fontWeight:800}}>Goals & KPIs</h1>
-{isA&&<button onClick={()=>{setGoalForm({month:td().substring(0,7),agentId:"all",target:""});setShowGoal(true)}} style={bP}>+ Set Goal</button>}
+<h1 style={{fontSize:24,fontWeight:800}}>Goals & Team</h1>
+</div>
+
+{/* Sub-tabs */}
+<div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
+{[{id:"production",label:"\uD83D\uDCCA Production Goals"},{id:"personal",label:"\uD83C\uDFAF My Goals"},{id:"board",label:"\uD83D\uDCCC Team Board"}].map(s=><button key={s.id} onClick={()=>setGoalSub(s.id)} style={{padding:"8px 16px",borderRadius:10,border:"1px solid "+(goalSub===s.id?"#3B8FD9":"var(--border)"),background:goalSub===s.id?"#3B8FD915":"transparent",color:goalSub===s.id?"#3B8FD9":"var(--text)",fontSize:13,fontWeight:goalSub===s.id?700:500,cursor:"pointer",fontFamily:"var(--font)"}}>{s.label}</button>)}
+</div>
+
+{/* ══ PRODUCTION GOALS ══ */}
+{goalSub==="production"&&<div>
+<div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+{isA&&<button onClick={()=>{setGoalForm({month:td().substring(0,7),agentId:"all",target:"",incentive:""});setShowGoal(true)}} style={bP}>+ Set Goal</button>}
 </div>
 {(()=>{const curMo=td().substring(0,7);const moGoals=goals.filter(g=>g.month===curMo);
 const agents=isA?[{uid:"all",displayName:"All Team"},...team.filter(u=>u.role!=="admin")]:[{uid:cu.uid,displayName:up?.displayName}];
@@ -1112,10 +1134,10 @@ return<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(mi
 {agents.map(ag=>{const g=moGoals.find(g2=>g2.agentId===ag.uid);const target=g?parseInt(g.target)||0:0;
 const actual=ag.uid==="all"?cls.filter(c=>c.applicationDate&&c.applicationDate.substring(0,7)===curMo&&c.status!=="heapArchived").length:cls.filter(c=>c.agentId===ag.uid&&c.applicationDate&&c.applicationDate.substring(0,7)===curMo&&c.status!=="heapArchived").length;
 const pctDone=target>0?Math.min(100,Math.round(actual/target*100)):0;
-return<div key={ag.uid} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20}}>
+return<div key={ag.uid} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20,borderLeft:pctDone>=100?"4px solid #22C55E":"none"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
 <div><div style={{fontSize:15,fontWeight:800}}>{ag.displayName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{mLabel(curMo)+" Goal"}</div></div>
-{isA&&<button onClick={()=>{setGoalForm({...(g||{month:curMo,agentId:ag.uid,target:""}),id:g?.id});setShowGoal(true)}} style={{...bO,fontSize:11,padding:"4px 10px"}}>{g?"Edit":"Set"}</button>}
+{isA&&<button onClick={()=>{setGoalForm({...(g||{month:curMo,agentId:ag.uid,target:"",incentive:""}),id:g?.id,incentive:g?.incentive||""});setShowGoal(true)}} style={{...bO,fontSize:11,padding:"4px 10px"}}>{g?"Edit":"Set"}</button>}
 </div>
 <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:8}}>
 <span style={{fontSize:36,fontWeight:900,color:pctDone>=100?"#22C55E":pctDone>=50?"#F59E0B":"var(--text)"}}>{actual}</span>
@@ -1123,9 +1145,108 @@ return<div key={ag.uid} style={{background:"var(--card)",borderRadius:14,border:
 </div>
 {target>0&&<div style={{height:8,background:"var(--border)",borderRadius:8,overflow:"hidden"}}><div style={{height:"100%",background:pctDone>=100?"#22C55E":pctDone>=75?"#3B8FD9":pctDone>=50?"#F59E0B":"#EF4444",width:pctDone+"%",borderRadius:8,transition:"width .5s"}}/></div>}
 {target>0&&<div style={{fontSize:11,color:"var(--t3)",marginTop:4,textAlign:"right"}}>{pctDone+"%"}</div>}
+{g?.incentive&&<div style={{marginTop:10,padding:"8px 12px",background:"var(--hover)",borderRadius:8,border:"1px solid var(--border)"}}><div style={{fontSize:10,fontWeight:700,color:"#F59E0B",textTransform:"uppercase",letterSpacing:.5,marginBottom:2}}>{"\uD83C\uDFC6 Incentive"}</div><div style={{fontSize:13}}>{g.incentive}</div></div>}
+{pctDone>=100&&g?.incentive&&<div style={{marginTop:8,padding:"8px 12px",background:"#22C55E15",borderRadius:8,border:"1px solid #22C55E40",fontSize:13,fontWeight:700,color:"#22C55E",textAlign:"center"}}>{"\uD83C\uDF89 Goal Hit! Incentive Earned!"}</div>}
 {target===0&&!isA&&<div style={{fontSize:12,color:"var(--t3)"}}>No goal set for this month</div>}
 </div>})}
 </div>})()}
+</div>}
+
+{/* ══ MY PERSONAL GOALS ══ */}
+{goalSub==="personal"&&<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+<p style={{fontSize:13,color:"var(--t3)"}}>Set your own personal and professional development goals</p>
+<button onClick={()=>{setPGoalForm({category:"sales",title:"",deadline:"",notes:""});setShowPGoal(true)}} style={bP}>+ Add Goal</button>
+</div>
+
+{(()=>{
+const myPG=pGoals.filter(g=>g.agentId===cu.uid);
+const active=myPG.filter(g=>!g.done);
+const completed=myPG.filter(g=>g.done);
+const cats={sales:{icon:"\uD83D\uDCB0",label:"Sales",color:"#22C55E"},learning:{icon:"\uD83D\uDCDA",label:"Learning",color:"#3B8FD9"},fitness:{icon:"\uD83C\uDFCB\uFE0F",label:"Health/Fitness",color:"#8B5CF6"},personal:{icon:"\u2B50",label:"Personal",color:"#F59E0B"},career:{icon:"\uD83D\uDE80",label:"Career Growth",color:"#EC4899"}};
+
+return<>
+{active.length===0&&completed.length===0?<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:50,textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>{"\uD83C\uDFAF"}</div><div style={{fontSize:16,fontWeight:700,marginBottom:4}}>No personal goals yet</div><div style={{fontSize:13,color:"var(--t3)"}}>Add a goal to start tracking your growth</div></div>:
+<>
+{active.length>0&&<div style={{marginBottom:24}}>
+<div style={{fontSize:14,fontWeight:700,marginBottom:10,color:"var(--t2)"}}>{"\uD83D\uDD25 Active Goals ("+active.length+")"}</div>
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+{active.map(g=>{const cat=cats[g.category]||cats.personal;const overdue=g.deadline&&g.deadline<td();return<div key={g.id} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",padding:"14px 18px",display:"flex",alignItems:"center",gap:14}}>
+<div onClick={()=>togglePGoal(g)} style={{width:28,height:28,borderRadius:8,border:"2px solid "+cat.color,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"transparent"}}/>
+<div style={{flex:1,minWidth:0}}>
+<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+<span style={{fontSize:13}}>{cat.icon}</span>
+<span style={{fontSize:14,fontWeight:700}}>{g.title}</span>
+<Badge color={cat.color}>{cat.label}</Badge>
+</div>
+{g.notes&&<div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{g.notes}</div>}
+{g.deadline&&<div style={{fontSize:11,marginTop:4,color:overdue?"#EF4444":"var(--t3)",fontWeight:overdue?700:400}}>{overdue?"\u26A0\uFE0F Overdue \u2014 ":"\uD83D\uDCC5 Due "}{fmt(g.deadline)}</div>}
+</div>
+<button onClick={()=>{setPGoalForm({...g});setShowPGoal(true)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:4}}>{"\u270F\uFE0F"}</button>
+<button onClick={()=>delPGoal(g.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:4}}>{"\uD83D\uDDD1\uFE0F"}</button>
+</div>})}
+</div></div>}
+
+{completed.length>0&&<div>
+<div style={{fontSize:14,fontWeight:700,marginBottom:10,color:"var(--t2)"}}>{"\u2705 Completed ("+completed.length+")"}</div>
+<div style={{display:"flex",flexDirection:"column",gap:6}}>
+{completed.map(g=>{const cat=cats[g.category]||cats.personal;return<div key={g.id} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",padding:"12px 18px",display:"flex",alignItems:"center",gap:14,opacity:.7}}>
+<div onClick={()=>togglePGoal(g)} style={{width:28,height:28,borderRadius:8,border:"2px solid #22C55E",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#22C55E20",fontSize:14,color:"#22C55E"}}>{"\u2713"}</div>
+<div style={{flex:1}}><span style={{fontSize:13,fontWeight:600,textDecoration:"line-through"}}>{g.title}</span>{g.doneDate&&<span style={{fontSize:11,color:"var(--t3)",marginLeft:8}}>{"Completed "+fmt(g.doneDate)}</span>}</div>
+<button onClick={()=>delPGoal(g.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:4}}>{"\uD83D\uDDD1\uFE0F"}</button>
+</div>})}
+</div></div>}
+</>}
+
+{/* Show team goals if admin */}
+{isA&&<div style={{marginTop:30}}>
+<div style={{fontSize:14,fontWeight:700,marginBottom:10,color:"var(--t2)"}}>{"\uD83D\uDC65 Team Personal Goals"}</div>
+{(()=>{const others=pGoals.filter(g=>g.agentId!==cu.uid);
+return others.length===0?<div style={{fontSize:12,color:"var(--t3)",padding:20,textAlign:"center"}}>No team goals yet</div>:
+<div style={{display:"flex",flexDirection:"column",gap:6}}>
+{others.map(g=>{const cat=cats[g.category]||cats.personal;return<div key={g.id} style={{background:"var(--card)",borderRadius:10,border:"1px solid var(--border)",padding:"10px 16px",display:"flex",alignItems:"center",gap:12}}>
+<div style={{width:24,height:24,borderRadius:6,background:g.done?"#22C55E20":"var(--hover)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:g.done?"#22C55E":"var(--t3)"}}>{g.done?"\u2713":cat.icon}</div>
+<div style={{flex:1}}><span style={{fontSize:13,fontWeight:600}}>{g.agentName}</span><span style={{fontSize:12,color:"var(--t3)",marginLeft:8}}>{g.title}</span></div>
+<Badge color={g.done?"#22C55E":cat.color}>{g.done?"Done":cat.label}</Badge>
+</div>})}
+</div>})()}
+</div>}
+</>})()}
+</div>}
+
+{/* ══ TEAM BOARD ══ */}
+{goalSub==="board"&&<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+<p style={{fontSize:13,color:"var(--t3)"}}>Shoutouts, tips, motivation, and team updates</p>
+<button onClick={()=>{setPostForm({type:"shoutout",message:""});setShowPost(true)}} style={bP}>+ New Post</button>
+</div>
+
+{posts.length===0?<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:50,textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>{"\uD83D\uDCCC"}</div><div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Team Board is empty</div><div style={{fontSize:13,color:"var(--t3)"}}>Be the first to post a shoutout or tip!</div></div>:
+<div style={{display:"flex",flexDirection:"column",gap:12}}>
+{posts.map(p=>{
+const types={shoutout:{icon:"\uD83C\uDF1F",label:"Shoutout",color:"#F59E0B"},tip:{icon:"\uD83D\uDCA1",label:"Tip",color:"#3B8FD9"},motivation:{icon:"\uD83D\uDD25",label:"Motivation",color:"#EF4444"},win:{icon:"\uD83C\uDFC6",label:"Win",color:"#22C55E"},question:{icon:"\u2753",label:"Question",color:"#8B5CF6"},update:{icon:"\uD83D\uDCE2",label:"Update",color:"#F97316"}};
+const t=types[p.type]||types.shoutout;
+const liked=(p.likes||[]).includes(cu.uid);
+const likeCount=(p.likes||[]).length;
+const isOwn=p.authorId===cu.uid;
+const ago=(()=>{const d=p.createdAt?.toDate?.();if(!d)return"";const diff=Date.now()-d.getTime();const mins=Math.floor(diff/60000);if(mins<1)return"just now";if(mins<60)return mins+"m ago";const hrs=Math.floor(mins/60);if(hrs<24)return hrs+"h ago";const days=Math.floor(hrs/24);return days+"d ago"})();
+return<div key={p.id} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden"}}>
+<div style={{padding:"16px 20px"}}>
+<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+<div style={{width:36,height:36,borderRadius:"50%",background:t.color+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{t.icon}</div>
+<div style={{flex:1}}><div style={{fontSize:14,fontWeight:700}}>{p.authorName||"Team Member"}</div><div style={{fontSize:11,color:"var(--t3)"}}>{ago}</div></div>
+<Badge color={t.color}>{t.label}</Badge>
+</div>
+<div style={{fontSize:14,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{p.message}</div>
+</div>
+<div style={{padding:"10px 20px",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",gap:14}}>
+<button onClick={()=>likePost(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,fontFamily:"var(--font)",display:"flex",alignItems:"center",gap:4,color:liked?"#EF4444":"var(--t3)",fontWeight:liked?700:400}}>{liked?"\u2764\uFE0F":"\uD83E\uDD0D"}{likeCount>0?" "+likeCount:""}</button>
+{(isOwn||isA)&&<button onClick={()=>delPost(p.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"var(--t3)",fontFamily:"var(--font)",marginLeft:"auto"}}>Delete</button>}
+</div>
+</div>})}
+</div>}
+</div>}
+
 </div>}
 
 
@@ -1517,10 +1638,35 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 <div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Month</label><input type="month" value={goalForm.month||""} onChange={e=>setGoalForm(p=>({...p,month:e.target.value}))} style={inp}/></div>
 <div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Agent</label><select value={goalForm.agentId||""} onChange={e=>setGoalForm(p=>({...p,agentId:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="all">All Team</option>{team.filter(u=>u.role!=="admin").map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select></div>
 <div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Target (# of apps)</label><input type="number" value={goalForm.target||""} onChange={e=>setGoalForm(p=>({...p,target:e.target.value}))} style={inp} placeholder="e.g. 15"/></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>{"\uD83C\uDFC6 Incentive (optional)"}</label><input value={goalForm.incentive||""} onChange={e=>setGoalForm(p=>({...p,incentive:e.target.value}))} style={inp} placeholder="e.g. $200 bonus, dinner on me, extra PTO day"/></div>
 </div>
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
 <button onClick={()=>{setShowGoal(false);setGoalForm({})}} style={bO}>Cancel</button>
 <button onClick={()=>saveGoal({...goalForm})} style={bP}>Save Goal</button>
+</div></Mdl>}
+
+{/* Personal Goal Modal */}
+{showPGoal&&<Mdl onClose={()=>{setShowPGoal(false);setPGoalForm({})}} title={pGoalForm.id?"Edit Goal":"Add Personal Goal"}>
+<div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Category</label><select value={pGoalForm.category||"sales"} onChange={e=>setPGoalForm(p=>({...p,category:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="sales">{"\uD83D\uDCB0 Sales"}</option><option value="learning">{"\uD83D\uDCDA Learning"}</option><option value="fitness">{"\uD83C\uDFCB\uFE0F Health/Fitness"}</option><option value="personal">{"\u2B50 Personal"}</option><option value="career">{"\uD83D\uDE80 Career Growth"}</option></select></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Goal Title</label><input value={pGoalForm.title||""} onChange={e=>setPGoalForm(p=>({...p,title:e.target.value}))} style={inp} placeholder="e.g. Complete Medicare certification, Run a 5K, Read 2 books this month"/></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Deadline (optional)</label><input type="date" value={pGoalForm.deadline||""} onChange={e=>setPGoalForm(p=>({...p,deadline:e.target.value}))} style={inp}/></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Notes (optional)</label><textarea value={pGoalForm.notes||""} onChange={e=>setPGoalForm(p=>({...p,notes:e.target.value}))} style={{...inp,minHeight:60}} placeholder="Any extra details..."/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+<button onClick={()=>{setShowPGoal(false);setPGoalForm({})}} style={bO}>Cancel</button>
+<button onClick={()=>savePGoal({...pGoalForm})} style={bP}>{pGoalForm.id?"Update":"Add Goal"}</button>
+</div></Mdl>}
+
+{/* Bulletin Post Modal */}
+{showPost&&<Mdl onClose={()=>{setShowPost(false);setPostForm({})}} title="New Team Post">
+<div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Type</label><select value={postForm.type||"shoutout"} onChange={e=>setPostForm(p=>({...p,type:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="shoutout">{"\uD83C\uDF1F Shoutout"}</option><option value="win">{"\uD83C\uDFC6 Win"}</option><option value="tip">{"\uD83D\uDCA1 Tip"}</option><option value="motivation">{"\uD83D\uDD25 Motivation"}</option><option value="question">{"\u2753 Question"}</option><option value="update">{"\uD83D\uDCE2 Update"}</option></select></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Message</label><textarea value={postForm.message||""} onChange={e=>setPostForm(p=>({...p,message:e.target.value}))} style={{...inp,minHeight:100}} placeholder="Share a win, give a shoutout, drop a tip, or motivate the team..."/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+<button onClick={()=>{setShowPost(false);setPostForm({})}} style={bO}>Cancel</button>
+<button onClick={()=>savePost({...postForm})} style={bP}>Post</button>
 </div></Mdl>}
 
 
