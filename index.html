@@ -184,6 +184,12 @@ const[editAgent,setEditAgent]=useState(null);
 const[showBulk,setShowBulk]=useState(false);const[bRaw,setBRaw]=useState("");const[bStep,setBStep]=useState(1);const[bHdr,setBHdr]=useState([]);const[bRows,setBRows]=useState([]);const[bMap,setBMap]=useState({});
 const archRef=useRef(false);
 const[showOverrides,setShowOverrides]=useState(null);
+/* Calendar */
+const[calMonth,setCalMonth]=useState(()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),1)});
+const[calView,setCalView]=useState("month");
+const[showEvent,setShowEvent]=useState(false);const[eventForm,setEventForm]=useState({});const[events,setEvents]=useState([]);const[editEvent,setEditEvent]=useState(null);
+/* Scripts expand state */
+const[expandedScript,setExpandedScript]=useState(null);
 /* Leads */
 const[leads,setLeads]=useState([]);const[showLead,setShowLead]=useState(false);const[leadForm,setLeadForm]=useState({});const[editLead,setEditLead]=useState(null);const[viewLead,setViewLead]=useState(null);const[leadNote,setLeadNote]=useState("");const[leadLogType,setLeadLogType]=useState("note");
 /* Carrier Contacts */
@@ -213,6 +219,8 @@ useEffect(()=>{const un=db.collection("users").onSnapshot(s=>setTeam(s.docs.map(
 useEffect(()=>{const un=db.collection("leads").onSnapshot(s=>setLeads(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 /* Load carrier contacts */
 useEffect(()=>{const un=db.collection("carrierContacts").onSnapshot(s=>setContacts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
+/* Load events */
+useEffect(()=>{const un=db.collection("events").onSnapshot(s=>setEvents(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 /* Load goals */
 useEffect(()=>{const un=db.collection("goals").onSnapshot(s=>setGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 
@@ -318,6 +326,46 @@ if(revIdx+1>=revClients.length){setRevMode(false);
 if(revPass===1){flash("MARX done! "+t.active+" on book, "+t.inactive+" left, "+t.noEnroll+" didn't enroll, "+t.diffPlan+" diff plan");
 }else{flash("Payment check done! "+t.paid+" paid, "+t.active+" not yet, "+t.skipped+" skipped")}
 }else setRevIdx(revIdx+1)};
+
+/* Event functions */
+const saveEvent=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("events").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();d.agentId=d.agentId||cu.uid;await db.collection("events").add(d)}flash("Event saved!");setShowEvent(false);setEventForm({})};
+const delEvent=async(id)=>{await db.collection("events").doc(id).delete();flash("Deleted");setShowEvent(false);setEventForm({})};
+
+/* Scripts & Objection Handlers */
+const SCRIPTS=[
+{cat:"Opening",title:"Cold Call Opener",body:"Hi, this is {agent} with United Insurance Professionals. I'm reaching out because I help people in your area review their Medicare options to make sure they're getting the most out of their benefits. Do you have about 2 minutes?",tips:["Sound natural, not scripted","Pause after asking — let them respond","If they say no, ask 'Is there a better time to call back?'"]},
+{cat:"Opening",title:"Warm Referral",body:"Hi {name}, I'm {agent} with United Insurance Professionals. {referrer} suggested I reach out to you — they thought you might benefit from a free Medicare plan review. I help people make sure they're not overpaying or missing benefits. Would you like to chat for a few minutes?",tips:["Name-drop the referrer early","Emphasize 'free' and 'no obligation'","Have referrer's details ready in case they ask"]},
+{cat:"Opening",title:"Door Knock Intro",body:"Hi there! I'm {agent} with United Insurance Professionals. I'm in the neighborhood today helping folks review their Medicare coverage. A lot of people don't realize they might qualify for extra benefits or lower costs. Mind if I take just a couple minutes of your time?",tips:["Smile, step back from door","Have badge/ID visible","Leave a business card even if they say no"]},
+{cat:"Needs Analysis",title:"Discovery Questions",body:"Let me ask you a few questions to make sure I find the right fit for you:\n\n1. What doctors do you see regularly?\n2. What prescriptions are you currently taking?\n3. Do you have any upcoming surgeries or procedures planned?\n4. How important is keeping your current doctors?\n5. Do you travel or spend time in another state?\n6. Are you currently getting any help from Medicaid?\n7. What's most important to you in a health plan — low costs, keeping your doctors, or extra benefits?",tips:["Listen more than you talk","Take notes","Don't recommend a plan until you have all the answers","Ask about spouse too"]},
+{cat:"Needs Analysis",title:"Current Plan Review",body:"Can you tell me about your current plan? Who is it with?\n\nGreat — and are you happy with it? Any issues you've had?\n\nWhat are you paying for your Part D?\nAny medications that aren't covered or cost too much?\nAre all your doctors in-network?\n\nLet me pull up what's available in your area and see if we can do better.",tips:["Never bash their current plan","Focus on what they're missing, not what's wrong","If they love their plan, compliment their choice and check for savings"]},
+{cat:"Closing",title:"Soft Close",body:"Based on everything you've told me, the {carrier} plan looks like the best fit because [reasons]. It keeps your doctors in-network, covers your medications, and actually gives you some extra benefits you don't have now.\n\nWould you like me to get you enrolled today? The application only takes about 10 minutes and everything goes effective {effective}.",tips:["Summarize their specific needs and how the plan addresses each","Don't rush — let them process","Have the application ready to go"]},
+{cat:"Closing",title:"Urgency Close (AEP)",body:"I want to make sure you know that open enrollment ends December 7th. After that, you'd have to wait until next year to make any changes. Based on what we discussed, this plan saves you money and gives you better coverage. Should we get the application started so you're all set for January 1st?",tips:["Only use real urgency, never fake deadlines","Reference specific savings numbers","Have enrollment form ready"]},
+{cat:"Objection",title:"'I need to think about it'",body:"Absolutely, this is an important decision. What specifically would you like to think about? Is it the cost, the doctors, or something else?\n\n[After they respond]\n\nThat makes sense. Let me address that for you...\n\nIf they still want time: I completely understand. How about I check back with you on [day]? And in the meantime, here's my card — call me anytime if questions come up.",tips:["Never pressure","Identify the real objection behind 'think about it'","Set a specific follow-up date","Leave materials with them"]},
+{cat:"Objection",title:"'I'm happy with my plan'",body:"That's great to hear — I'm glad you have a plan you like! Out of curiosity, when was the last time you compared it to what else is available? Plans change every year, and sometimes there are new options that offer the same coverage for less, or extra benefits you might not know about.\n\nWould it hurt to do a quick comparison? If your current plan is still the best, I'll be the first to tell you to keep it.",tips:["Validate their satisfaction","Position as a 'checkup' not a switch","Focus on what they might be missing","Be genuinely willing to confirm their current plan is best"]},
+{cat:"Objection",title:"'I don't trust insurance agents'",body:"I totally understand that concern, and honestly, you should be careful. There are agents out there who don't put the client first. Here's what makes me different: I don't work for one insurance company — I work for you. I compare plans from multiple carriers and my only job is to find what's best for your situation. And my services are completely free to you — Medicare pays me, not you. Plus, you can change plans every year, so you're never locked in.",tips:["Acknowledge their concern as valid","Emphasize independence and free service","Offer references from other clients","Don't get defensive"]},
+{cat:"Objection",title:"'My friend/family handles my insurance'",body:"That's wonderful that you have someone you trust! Are they a licensed Medicare agent? The reason I ask is that Medicare plans change every year, and unless someone is tracking all the carrier updates, it's easy to miss a better option. I'd be happy to do a free side-by-side comparison — if they already have you in the best plan, I'll confirm it. Would that be okay?",tips:["Never badmouth their contact","Position as a second opinion","Offer to work WITH their person","If they decline, leave your card for future reference"]},
+{cat:"Compliance",title:"SOA Script",body:"Before we discuss any specific plan options, I need to go over a few things with you. I'm {agent}, a licensed insurance agent. This appointment is to review Medicare Advantage and/or Part D prescription drug plan options. You're not obligated to enroll in anything today, and there's no cost to you for this appointment. I represent multiple carriers including [list carriers]. I need your permission to discuss these plans with you — is that okay? Great, I'll have you sign this Scope of Appointment form which just confirms what we'll be talking about today.",tips:["ALWAYS do SOA before discussing plans","Document the date and time","Keep signed SOAs for 10 years","Never skip this — it's a CMS requirement"]},
+{cat:"Compliance",title:"Recording Disclaimer",body:"I want to let you know that for quality and compliance purposes, this call may be recorded. By continuing our conversation, you're agreeing to be recorded. Is that alright with you?",tips:["Required if recording calls","Get verbal confirmation","Note the time of consent","If they decline recording, turn it off and note that in your records"]}
+];
+
+/* Training Resources */
+const TRAINING=[
+{cat:"Getting Started",items:[
+{title:"Medicare Basics 101",desc:"Understanding Parts A, B, C, D and how they work together",content:"**Medicare Parts:**\n\n**Part A (Hospital):** Covers inpatient hospital, skilled nursing, hospice. Most people don't pay a premium.\n\n**Part B (Medical):** Covers doctor visits, outpatient, preventive. Standard premium ~$185/mo (2026).\n\n**Part C (Medicare Advantage):** Private plans that bundle A+B, usually include D. Can have $0 premiums and extra benefits (dental, vision, hearing, OTC).\n\n**Part D (Prescription):** Standalone drug plans. Required if not in an MA plan with drug coverage.\n\n**Medigap/Supplement:** Fills gaps in Original Medicare. Can't have with MA plan."},
+{title:"Enrollment Periods",desc:"AEP, OEP, SEP, IEP, ICEP — when clients can enroll",content:"**AEP (Annual Enrollment):** Oct 15 - Dec 7. Anyone can switch MA/PDP plans. Effective Jan 1.\n\n**OEP (Open Enrollment):** Jan 1 - Mar 31. MA members can switch to another MA or drop to Original Medicare + PDP. One change allowed.\n\n**IEP (Initial Enrollment):** 7-month window around 65th birthday (3 months before, birth month, 3 months after).\n\n**ICEP (Initial Coverage):** For people who missed IEP or have other coverage ending.\n\n**SEP (Special Enrollment):** Triggered by qualifying events: moving, losing coverage, Medicaid changes, 5-star plan, institutional, etc."},
+{title:"DSNP & Medicaid",desc:"Dual-eligible plans and Medicaid benefit levels",content:"**D-SNP (Dual Special Needs Plan):** For people with both Medicare AND Medicaid. Extra benefits, usually $0 premium and copays.\n\n**Medicaid Levels:**\n- QMB: Qualifying Medicare Beneficiary — Medicaid pays Part A & B premiums + deductibles\n- QMB+: QMB plus full Medicaid benefits\n- SLMB: Specified Low-Income — Medicaid pays Part B premium only\n- FDBE: Full Dual Benefit Eligible — full Medicaid + Medicare\n\n**Key:** Always check Medicaid status in your state system. DSNP eligibility depends on having active Medicaid."}
+]},
+{cat:"Sales Process",items:[
+{title:"Lead to Close Workflow",desc:"Step-by-step from first contact to enrollment",content:"1. **Generate Lead** — referral, door knock, event, call-in\n2. **First Contact** — introduce yourself, qualify interest, set appointment\n3. **SOA** — ALWAYS get Scope of Appointment signed BEFORE discussing plans\n4. **Needs Analysis** — doctors, drugs, budget, preferences\n5. **Plan Comparison** — show 2-3 options max, recommend best fit\n6. **Present & Close** — explain benefits, handle objections, enroll\n7. **Follow Up** — confirm application, welcome call, 30-day check-in\n8. **Retain** — birthday calls, AEP reviews, be available year-round"},
+{title:"MARX Lookups",desc:"How to verify enrollment status in CMS MARX system",content:"**What is MARX?** CMS system to verify if a beneficiary is enrolled in a plan.\n\n**When to check:**\n- 15th-20th of the month after effective date\n- Monthly for all active clients\n- When a client reports issues\n\n**What to look for:**\n- Confirm they're in the plan you submitted\n- Check for retroactive disenrollments\n- Verify effective dates match\n\n**If not enrolled:** Contact carrier immediately. May need to resubmit application or file a CTM complaint."},
+{title:"Commission Structure",desc:"How you get paid — initial, residuals, chargebacks",content:"**Initial Commission:** $347 - ($29 × (effectiveMonth - 1))\n- January effective = $347 (max)\n- February = $318\n- March = $289, etc.\n\n**IEP Enrollments:** Double the initial rate!\n\n**Residuals:** $29/month starting January of the FOLLOWING year. Continues as long as client stays enrolled.\n\n**Chargebacks:** If a client leaves within the first year, you may owe back the initial commission. This is why retention matters!\n\n**HEAP Structure:** Front-end + back-end pay. Back-end paid after 4 months on book."}
+]},
+{cat:"Compliance",items:[
+{title:"CMS Marketing Rules",desc:"What you can and can't do",content:"**DO:**\n- Always identify yourself as an insurance agent\n- Get SOA before plan discussions\n- Provide accurate plan information\n- Report complaints to carrier\n- Keep records for 10 years\n\n**DON'T:**\n- Never offer cash, gifts, or meals to entice enrollment\n- Never do unsolicited door knocks (must have appointment or permission)\n- Never use scare tactics or misleading claims\n- Never enroll someone without their clear consent\n- Never badmouth other agents or plans\n- Never say 'government approved' or imply government endorsement"},
+{title:"Record Keeping",desc:"What to save and for how long",content:"**Keep for 10 years:**\n- Signed SOA forms\n- Enrollment applications\n- Call recordings (if applicable)\n- Written correspondence\n- Marketing materials used\n\n**Keep updated:**\n- Client contact information\n- Plan details and changes\n- Commission statements\n- Compliance training certificates"},
+{title:"Annual Certification",desc:"AHIP and carrier certifications",content:"**AHIP Certification:** Required annually before selling Medicare. Must be completed before AEP.\n\n**Carrier Certifications:** Each carrier requires separate annual certification. Complete before AEP (usually available July-September).\n\n**Required carriers to certify with:** All carriers you plan to sell\n\n**Keep copies** of all certification completions for your records."}
+]}
+];
 
 /* Lead functions */
 const LEAD_STAGES=[{id:"new",label:"New Lead",color:"#3B8FD9",icon:"\uD83C\uDD95"},{id:"contacted",label:"Contacted",color:"#8B5CF6",icon:"\uD83D\uDCDE"},{id:"appointment",label:"Appointment Set",color:"#F59E0B",icon:"\uD83D\uDCC5"},{id:"quoted",label:"Quoted",color:"#F97316",icon:"\uD83D\uDCCB"},{id:"applied",label:"Applied",color:"#22C55E",icon:"\u2705"},{id:"lost",label:"Lost",color:"#EF4444",icon:"\u274C"}];
@@ -484,7 +532,7 @@ return team.map(u=>{
 })},[isA,team,cls]);
 
 const myLeads=leads.filter(c=>isA||c.agentId===cu.uid);
-const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"}]:[])];
+const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"}]:[])];
 
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
 
@@ -925,7 +973,127 @@ return<div key={ag.uid} style={{background:"var(--card)",borderRadius:14,border:
 </div>})()}
 </div>}
 
+
+{/* ═══ CALENDAR TAB ═══ */}
+{tab==="calendar"&&<div style={{animation:"slideUp .3s"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Calendar</h1>
+<div style={{display:"flex",gap:8}}>
+<button onClick={()=>setCalMonth(new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1))} style={{...bO,padding:"8px 14px"}}>{"\u2190"}</button>
+<span style={{fontSize:16,fontWeight:700,minWidth:160,textAlign:"center",lineHeight:"38px"}}>{calMonth.toLocaleDateString("en-US",{month:"long",year:"numeric"})}</span>
+<button onClick={()=>setCalMonth(new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1))} style={{...bO,padding:"8px 14px"}}>{"\u2192"}</button>
+<button onClick={()=>setCalMonth(new Date(new Date().getFullYear(),new Date().getMonth(),1))} style={{...bO,fontSize:12}}>Today</button>
+<button onClick={()=>{setEventForm({date:td(),time:"09:00",type:"appointment"});setEditEvent(null);setShowEvent(true)}} style={bP}>+ Event</button>
+</div></div>
+
+{(()=>{
+const y=calMonth.getFullYear(),m=calMonth.getMonth();
+const firstDay=new Date(y,m,1).getDay();
+const daysInMonth=new Date(y,m+1,0).getDate();
+const todayD=new Date();const isToday=(d)=>todayD.getFullYear()===y&&todayD.getMonth()===m&&todayD.getDate()===d;
+const cells=[];for(let i=0;i<firstDay;i++)cells.push(null);for(let d=1;d<=daysInMonth;d++)cells.push(d);
+/* Key dates */
+const keyDates={};
+const addKD=(date,label,color,icon)=>{if(date.substring(0,7)===(y+"-"+String(m+1).padStart(2,"0"))){const d=parseInt(date.substring(8,10));if(!keyDates[d])keyDates[d]=[];keyDates[d].push({label,color,icon})}};
+/* AEP/OEP dates */
+addKD(y+"-10-15","AEP Starts","#8B5CF6","\uD83D\uDFE3");addKD(y+"-12-07","AEP Ends","#8B5CF6","\uD83D\uDFE3");
+addKD(y+"-01-01","OEP Starts","#3B8FD9","\uD83D\uDD35");addKD(y+"-03-31","OEP Ends","#3B8FD9","\uD83D\uDD35");
+/* Client effective dates this month */
+const moStr=y+"-"+String(m+1).padStart(2,"0");
+cls.filter(c=>c.effectiveDate&&c.effectiveDate.substring(0,7)===moStr&&(c.status==="active"||c.status==="paid")).forEach(c=>{const d=parseInt(c.effectiveDate.substring(8,10));if(!keyDates[d])keyDates[d]=[];keyDates[d].push({label:c.fullName+" effective",color:"#22C55E",icon:"\u2705"})});
+/* Client birthdays this month */
+cls.filter(c=>c.dob&&(c.status==="active"||c.status==="paid")).forEach(c=>{const bd=new Date(c.dob+"T00:00:00");if(bd.getMonth()===m){const d=bd.getDate();if(!keyDates[d])keyDates[d]=[];keyDates[d].push({label:c.fullName+" birthday",color:"#F59E0B",icon:"\uD83C\uDF82"})}});
+/* Custom events */
+const myEvents=events.filter(e2=>isA||e2.agentId===cu.uid);
+myEvents.filter(e2=>e2.date&&e2.date.substring(0,7)===moStr).forEach(e2=>{const d=parseInt(e2.date.substring(8,10));if(!keyDates[d])keyDates[d]=[];keyDates[d].push({label:e2.title||e2.type,color:e2.type==="appointment"?"#3B8FD9":e2.type==="followup"?"#F59E0B":e2.type==="meeting"?"#8B5CF6":"#94A3B8",icon:e2.type==="appointment"?"\uD83D\uDCC5":e2.type==="followup"?"\uD83D\uDD14":e2.type==="meeting"?"\uD83E\uDD1D":"\uD83D\uDCCC",id:e2.id})});
+
+return<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden"}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=><div key={d} style={{padding:"10px 4px",textAlign:"center",fontSize:11,fontWeight:700,color:"var(--t3)",borderBottom:"1px solid var(--border)"}}>{d}</div>)}
+{cells.map((d,i)=><div key={i} style={{minHeight:90,padding:4,borderBottom:"1px solid var(--border)",borderRight:i%7!==6?"1px solid var(--border)":"none",background:d&&isToday(d)?"#EFF6FF":d?"transparent":"var(--hover)",cursor:d?"pointer":"default",transition:"background .15s"}} onMouseEnter={e=>{if(d)e.currentTarget.style.background=isToday(d)?"#DBEAFE":"var(--hover)"}} onMouseLeave={e=>{if(d)e.currentTarget.style.background=isToday(d)?"#EFF6FF":"transparent"}} onClick={()=>{if(d){const ds=y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");setEventForm({date:ds,time:"09:00",type:"appointment"});setEditEvent(null);setShowEvent(true)}}}>
+{d&&<>
+<div style={{fontSize:12,fontWeight:isToday(d)?800:500,color:isToday(d)?"#3B8FD9":"var(--text)",marginBottom:2}}>{d}</div>
+{(keyDates[d]||[]).slice(0,3).map((ev,j)=><div key={j} onClick={e2=>{e2.stopPropagation();if(ev.id){const evt=myEvents.find(e3=>e3.id===ev.id);if(evt){setEventForm(evt);setEditEvent(evt.id);setShowEvent(true)}}}} style={{fontSize:9,padding:"1px 4px",borderRadius:4,background:ev.color+"15",color:ev.color,fontWeight:600,marginBottom:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",cursor:ev.id?"pointer":"default"}}>{ev.icon+" "+ev.label}</div>)}
+{(keyDates[d]||[]).length>3&&<div style={{fontSize:9,color:"var(--t3)"}}>{"+"+(keyDates[d].length-3)+" more"}</div>}
+</>}
+</div>)}
+</div></div>})()}
+
+{/* Key dates legend */}
+<div style={{display:"flex",gap:16,marginTop:14,flexWrap:"wrap",fontSize:11,color:"var(--t3)"}}>
+<span>{"\uD83D\uDFE3 AEP Period"}</span>
+<span>{"\uD83D\uDD35 OEP Period"}</span>
+<span>{"\u2705 Effective Dates"}</span>
+<span>{"\uD83C\uDF82 Birthdays"}</span>
+<span>{"\uD83D\uDCC5 Appointments"}</span>
+<span>{"\uD83D\uDD14 Follow-ups"}</span>
+</div>
+</div>}
+
+{/* ═══ SCRIPTS TAB ═══ */}
+{tab==="scripts"&&<div style={{animation:"slideUp .3s"}}>
+<h1 style={{fontSize:24,fontWeight:800,marginBottom:6}}>Scripts & Objection Handlers</h1>
+<p style={{fontSize:13,color:"var(--t3)",marginBottom:20}}>Tap any script to expand. Customize with your name and details.</p>
+{["Opening","Needs Analysis","Closing","Objection","Compliance"].map(cat=><div key={cat} style={{marginBottom:24}}>
+<div style={{fontSize:16,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>{cat==="Opening"?"\uD83D\uDCDE":cat==="Needs Analysis"?"\uD83D\uDD0D":cat==="Closing"?"\u2705":cat==="Objection"?"\uD83D\uDEE1\uFE0F":"\uD83D\uDCCB"}{" "+cat}</div>
+<div style={{display:"flex",flexDirection:"column",gap:10}}>
+{SCRIPTS.filter(s=>s.cat===cat).map((s,i)=>{const key=cat+"-"+i;const isExp=expandedScript===key;
+return<div key={key} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",overflow:"hidden",transition:"all .2s"}}>
+<div onClick={()=>setExpandedScript(isExp?null:key)} style={{padding:"14px 18px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
+<div style={{fontSize:14,fontWeight:700}}>{s.title}</div>
+<span style={{fontSize:14,color:"var(--t3)",transform:isExp?"rotate(180deg)":"none",transition:"transform .2s"}}>{"\u25BC"}</span>
+</div>
+{isExp&&<div style={{padding:"0 18px 18px",borderTop:"1px solid var(--border)"}}>
+<div style={{fontSize:13,lineHeight:1.7,color:"var(--t2)",whiteSpace:"pre-wrap",padding:"14px 0",borderBottom:"1px solid var(--border)"}}>{s.body}</div>
+{s.tips&&s.tips.length>0&&<div style={{marginTop:12}}>
+<div style={{fontSize:11,fontWeight:700,color:"#22C55E",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>{"\uD83D\uDCA1 Tips"}</div>
+{s.tips.map((tip,ti)=><div key={ti} style={{fontSize:12,color:"var(--t2)",padding:"4px 0",paddingLeft:16,position:"relative"}}>
+<span style={{position:"absolute",left:0,color:"#22C55E"}}>{"•"}</span>{tip}</div>)}
+</div>}
+<div style={{marginTop:12}}>
+<button onClick={()=>{navigator.clipboard.writeText(s.body);flash("Script copied!")}} style={{...bO,fontSize:11,padding:"6px 12px"}}>{"\uD83D\uDCCB Copy Script"}</button>
+</div>
+</div>}
+</div>})}
+</div></div>)}
+</div>}
+
+{/* ═══ TRAINING TAB ═══ */}
+{tab==="training"&&<div style={{animation:"slideUp .3s"}}>
+<h1 style={{fontSize:24,fontWeight:800,marginBottom:6}}>Training & Resources</h1>
+<p style={{fontSize:13,color:"var(--t3)",marginBottom:20}}>Everything you need to know about Medicare sales. Click any topic to expand.</p>
+{TRAINING.map(section=><div key={section.cat} style={{marginBottom:28}}>
+<div style={{fontSize:18,fontWeight:800,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>{section.cat==="Getting Started"?"\uD83D\uDE80":section.cat==="Sales Process"?"\uD83D\uDCBC":"\uD83D\uDCCB"}{" "+section.cat}</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:12}}>
+{section.items.map((item,i)=>{const key=section.cat+"-"+i;const isExp=expandedScript===key;
+return<div key={key} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden"}}>
+<div onClick={()=>setExpandedScript(isExp?null:key)} style={{padding:18,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
+<div><div style={{fontSize:14,fontWeight:700}}>{item.title}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:4}}>{item.desc}</div></div>
+<span style={{fontSize:14,color:"var(--t3)",transform:isExp?"rotate(180deg)":"none",transition:"transform .2s",flexShrink:0,marginLeft:12}}>{"\u25BC"}</span>
+</div>
+{isExp&&<div style={{padding:"0 18px 18px",borderTop:"1px solid var(--border)"}}>
+<div style={{fontSize:13,lineHeight:1.8,color:"var(--t2)",whiteSpace:"pre-wrap",paddingTop:14}}>{item.content.replace(/\*\*(.*?)\*\*/g,"$1")}</div>
+</div>}
+</div>})}
+</div></div>)}
+</div>}
+
 </main>
+
+{/* EVENT MODAL */}
+{showEvent&&<Mdl onClose={()=>{setShowEvent(false);setEventForm({});setEditEvent(null)}} title={editEvent?"Edit Event":"New Event"}>
+<div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Title</label><input value={eventForm.title||""} onChange={e=>setEventForm(p=>({...p,title:e.target.value}))} style={inp} placeholder="e.g. John Smith appointment"/></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Type</label><select value={eventForm.type||"appointment"} onChange={e=>setEventForm(p=>({...p,type:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="appointment">Appointment</option><option value="followup">Follow-Up</option><option value="meeting">Meeting</option><option value="deadline">Deadline</option><option value="other">Other</option></select></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Date</label><input type="date" value={eventForm.date||""} onChange={e=>setEventForm(p=>({...p,date:e.target.value}))} style={inp}/></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Time</label><input type="time" value={eventForm.time||""} onChange={e=>setEventForm(p=>({...p,time:e.target.value}))} style={inp}/></div>
+<div style={{gridColumn:"1/-1"}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Notes</label><textarea value={eventForm.notes||""} onChange={e=>setEventForm(p=>({...p,notes:e.target.value}))} style={{...inp,minHeight:60}} rows={2}/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
+<div>{editEvent&&<button onClick={()=>delEvent(editEvent)} style={{...bO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>Delete</button>}</div>
+<div style={{display:"flex",gap:10}}><button onClick={()=>{setShowEvent(false);setEventForm({});setEditEvent(null)}} style={bO}>Cancel</button>
+<button onClick={()=>saveEvent({...eventForm,id:editEvent||undefined})} style={bP}>{editEvent?"Update":"Save"}</button></div>
+</div></Mdl>}
 
 {/* LEAD MODAL */}
 {showLead&&<Mdl onClose={()=>{setShowLead(false);setLeadForm({})}} title={editLead?"Edit Lead":"Add New Lead"}>
