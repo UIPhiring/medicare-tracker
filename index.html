@@ -1220,24 +1220,17 @@ const BADGES=[
 {id:"k3",cat:"Streaks",icon:"\uD83D\uDCC8",label:"Half Year Hustle",desc:"6 consecutive months with apps",tier:"silver",check:maxStreak>=6,reward:"$50 gift card"},
 {id:"k4",cat:"Streaks",icon:"\uD83D\uDCAA",label:"Year-Round Grinder",desc:"12 consecutive months with apps",tier:"gold",check:maxStreak>=12,reward:"$200 bonus + extra PTO day"},
 {id:"k5",cat:"Streaks",icon:"\uD83C\uDFC6",label:"Iron Streak",desc:"18 consecutive months with apps",tier:"platinum",check:maxStreak>=18,reward:"$500 bonus"},
-{id:"d1",cat:"Diversity",icon:"\uD83C\uDF10",label:"Multi-Carrier",desc:"Sell 3+ different carriers",tier:"bronze",check:uniqueCarriers>=3,reward:""},
-{id:"d2",cat:"Diversity",icon:"\uD83C\uDFAD",label:"Carrier Expert",desc:"Sell 5+ different carriers",tier:"silver",check:uniqueCarriers>=5,reward:"$25 gift card"},
-{id:"d3",cat:"Diversity",icon:"\uD83C\uDDFA\uD83C\uDDF8",label:"Multi-State",desc:"Clients in 2+ states",tier:"bronze",check:uniqueStates>=2,reward:""},
-{id:"d4",cat:"Diversity",icon:"\uD83D\uDDFA\uFE0F",label:"Coast to Coast",desc:"Clients in 5+ states",tier:"silver",check:uniqueStates>=5,reward:"$50 gift card"},
-{id:"d5",cat:"Diversity",icon:"\uD83C\uDF0E",label:"Nationwide",desc:"Clients in 10+ states",tier:"gold",check:uniqueStates>=10,reward:"$150 bonus"},
 {id:"l1",cat:"Leads",icon:"\uD83C\uDFAF",label:"Closer",desc:"Convert your first lead",tier:"bronze",check:myLeadsCon>=1,reward:""},
 {id:"l2",cat:"Leads",icon:"\uD83E\uDD1D",label:"Pipeline Pro",desc:"Convert 10 leads",tier:"silver",check:myLeadsCon>=10,reward:"$25 gift card"},
 {id:"l3",cat:"Leads",icon:"\uD83D\uDD04",label:"Lead Machine",desc:"Convert 25 leads",tier:"gold",check:myLeadsCon>=25,reward:"$100 bonus"},
 {id:"l4",cat:"Leads",icon:"\uD83C\uDFAF",label:"Conversion King",desc:"Convert 50 leads",tier:"platinum",check:myLeadsCon>=50,reward:"$300 bonus"},
-{id:"l5",cat:"Leads",icon:"\uD83D\uDCCB",label:"Prospector",desc:"Add 25+ leads to pipeline",tier:"silver",check:myLeadsTotal>=25,reward:"$25 gift card"},
+{id:"l5",cat:"Leads",icon:"\uD83D\uDCCB",label:"Prospector",desc:"Add 25+ leads to pipeline",tier:"bronze",check:myLeadsTotal>=25,reward:""},
 {id:"g1",cat:"Growth",icon:"\uD83C\uDFAF",label:"Goal Getter",desc:"Complete 3 personal goals",tier:"bronze",check:myGoalsDone>=3,reward:""},
-{id:"g2",cat:"Growth",icon:"\uD83C\uDF96\uFE0F",label:"Achiever",desc:"Complete 10 personal goals",tier:"silver",check:myGoalsDone>=10,reward:"Leave early Friday"},
+{id:"g2",cat:"Growth",icon:"\uD83C\uDF96\uFE0F",label:"Achiever",desc:"Complete 10 personal goals",tier:"silver",check:myGoalsDone>=10,reward:"$25 gift card"},
 {id:"g3",cat:"Growth",icon:"\uD83E\uDDD8",label:"Self-Improver",desc:"Complete 25 personal goals",tier:"gold",check:myGoalsDone>=25,reward:"$75 gift card"},
-{id:"g4",cat:"Growth",icon:"\uD83C\uDF93",label:"Growth Mindset",desc:"Goals in 3+ categories",tier:"bronze",check:[...new Set(pGoals.filter(g=>g.agentId===cu.uid).map(g=>g.category))].length>=3,reward:""},
 {id:"g5",cat:"Growth",icon:"\uD83D\uDCAF",label:"Perfectionist",desc:"Complete 50 personal goals",tier:"platinum",check:myGoalsDone>=50,reward:"$200 bonus"},
 {id:"t1",cat:"Team",icon:"\uD83D\uDCE3",label:"Team Player",desc:"Post your first win",tier:"bronze",check:myWins>=1,reward:""},
-{id:"t2",cat:"Team",icon:"\uD83D\uDCAC",label:"Contributor",desc:"Make 10+ team posts",tier:"silver",check:myTotalPosts>=10,reward:"$25 gift card"},
-{id:"t3",cat:"Team",icon:"\u2764\uFE0F",label:"Fan Favorite",desc:"Receive 10+ likes on posts",tier:"gold",check:myTotalLikes>=10,reward:"Team lunch"}
+{id:"t2",cat:"Team",icon:"\uD83D\uDCAC",label:"Contributor",desc:"Make 30+ team posts",tier:"silver",check:myTotalPosts>=30,reward:"$50 gift card"},
 ];
 const TIER_COLORS={bronze:"#CD7F32",silver:"#94A3B8",gold:"#F59E0B",platinum:"#8B5CF6",diamond:"#06B6D4"};
 const TIER_ORDER={bronze:0,silver:1,gold:2,platinum:3,diamond:4};
