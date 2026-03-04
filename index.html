@@ -187,6 +187,7 @@ const[cuErr,setCuErr]=useState("");
 const[selAgent,setSelAgent]=useState("all");
 const[editAgent,setEditAgent]=useState(null);
 const[showBulk,setShowBulk]=useState(false);const[bRaw,setBRaw]=useState("");const[bStep,setBStep]=useState(1);const[bHdr,setBHdr]=useState([]);const[bRows,setBRows]=useState([]);const[bMap,setBMap]=useState({});
+const[showQP,setShowQP]=useState(false);const[qpRaw,setQpRaw]=useState("");const[qpParsed,setQpParsed]=useState([]);const[qpStep,setQpStep]=useState(1);
 const archRef=useRef(false);
 const[showOverrides,setShowOverrides]=useState(null);
 /* Calendar */
@@ -312,6 +313,12 @@ const saveOverrides=async(targetUid,fe,be)=>{const key="overrides."+targetUid;aw
 const parseBulk=()=>{const lines=[];let inQ=false,cur="",row=[];for(let i=0;i<bRaw.length;i++){const ch=bRaw[i];if(ch==='"'){if(inQ&&bRaw[i+1]==='"'){cur+='"';i++}else inQ=!inQ}else if(!inQ&&ch==="\t"){row.push(cur.trim());cur=""}else if(!inQ&&(ch==="\n"||(ch==="\r"&&bRaw[i+1]==="\n"))){if(ch==="\r")i++;row.push(cur.trim());if(row.some(c=>c))lines.push(row);cur="";row=[]}else cur+=ch}row.push(cur.trim());if(row.some(c=>c))lines.push(row);if(lines.length<2){flash("Need headers+data","error");return}setBHdr(lines[0]);setBRows(lines.slice(1));const am={};const fm={};FIELDS.forEach(f=>{fm[f.label.toLowerCase()]=f.key;fm[f.key.toLowerCase()]=f.key});lines[0].forEach((h,i)=>{const k=h.toLowerCase().trim();if(fm[k])am[i]=fm[k]});setBMap(am);setBStep(2)};
 const buildPrev=()=>bRows.map(r=>{const o={};Object.entries(bMap).forEach(([i,fk])=>{if(fk&&fk!=="skip")o[fk]=r[parseInt(i)]||""});return o});
 const doBulk=async()=>{const pr=buildPrev().filter(c=>c.fullName?.trim());const b=db.batch();pr.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:cu.uid,status:"active"});nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();b.set(ref,nc)});await b.commit();flash("Imported "+pr.length+"!");setShowBulk(false);setBRaw("");setBStep(1)};
+
+/* Quick Paste - auto-mapped sheet import */
+const qpDateFix=(d)=>{if(!d||d==="N/A")return"";const m=d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return m[3]+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0");return d};
+const QP_COLS=["applicationDate","effectiveDate","fullName","phone","dob","mailingAddress","zipCode","city","mbiNumber","electionPeriod","medicaidNumber","medicaidLevel","state","planName","carrier","previousCarrier","sunfireCode"];
+const parseQP=()=>{const lines=qpRaw.trim().split(/\n/).filter(l=>l.trim());const parsed=[];lines.forEach(line=>{const cols=line.split("\t");if(cols.length<3)return;const c={};QP_COLS.forEach((key,i)=>{let v=(cols[i]||"").trim();if(v==="N/A"||v==="n/a")v="";if(key==="applicationDate"||key==="effectiveDate"||key==="dob")v=qpDateFix(v);c[key]=v});if(c.fullName)parsed.push(c)});if(parsed.length===0){flash("No valid rows found","error");return}setQpParsed(parsed);setQpStep(2)};
+const doQP=async()=>{const b=db.batch();qpParsed.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:cu.uid,status:"active"});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:estTS(),user:up?.displayName||"System",action:"created",detail:"Quick paste import"}];b.set(ref,nc)});await b.commit();flash("Imported "+qpParsed.length+" clients!");setShowQP(false);setQpRaw("");setQpParsed([]);setQpStep(1)};
 
 /* Deduplicate */
 const dedup=async()=>{const seen=new Map();const dupes=[];cls.forEach(c=>{const key=(c.fullName||"").toLowerCase()+"||"+(c.phone||"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"");if(seen.has(key))dupes.push(c.id);else seen.set(key,c.id)});if(dupes.length===0){flash("No duplicates found");return}const b=db.batch();dupes.forEach(id=>b.delete(db.collection("clients").doc(id)));await b.commit();flash("Removed "+dupes.length+" duplicates!")};
@@ -754,6 +761,7 @@ return(
 <div className="hdr-btns" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
 <button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:4}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
 <button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCCB Import"}</button>
+<button onClick={()=>{setQpRaw("");setQpParsed([]);setQpStep(1);setShowQP(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCE5 Quick Paste"}</button>
 {isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83E\uDDF9 Dedup"}</button>}
 <button onClick={()=>startReview(1)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#8B5CF6",color:"#8B5CF6"}}>{"\uD83D\uDD0D MARX"}</button>
 <button onClick={()=>startReview(2)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDCB0 Payments"}</button>
@@ -1967,6 +1975,38 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 {bStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}><div style={{background:"var(--hover)",borderRadius:10,padding:12,marginBottom:16,border:"1px solid var(--border)",fontSize:12,color:"var(--t2)"}}>{bHdr.length+" columns, "+bRows.length+" rows"}</div>{bHdr.map((h,idx)=><div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 32px 1fr",gap:10,alignItems:"center",padding:"10px 14px",borderRadius:8,background:"var(--hover)",border:"1px solid var(--border)",marginBottom:6}}><div><div style={{fontWeight:700,fontSize:13}}>{h}</div><div style={{fontSize:11,color:"var(--t3)",fontStyle:"italic"}}>{bRows.slice(0,3).map(r=>r[idx]||"").filter(Boolean).join(", ")||"(empty)"}</div></div><div style={{textAlign:"center",color:bMap[idx]&&bMap[idx]!=="skip"?"#3B8FD9":"var(--t3)"}}>{bMap[idx]&&bMap[idx]!=="skip"?"\u2192":"\u00B7"}</div><select value={bMap[idx]||"skip"} onChange={e=>setBMap(p=>({...p,[idx]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="skip">{"\u2014 Skip \u2014"}</option>{FIELDS.map(f=><option key={f.key} value={f.key}>{f.label}</option>)}</select></div>)}</div>}
 {bStep===3&&<div style={{padding:24}}><div style={{padding:"8px 14px",borderRadius:8,background:"var(--alertGBg)",border:"1px solid var(--alertGBdr)",fontSize:13}}><strong style={{color:"#22C55E"}}>{buildPrev().filter(c=>c.fullName?.trim()).length}</strong>{" ready to import"}</div></div>}
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}><button onClick={()=>{if(bStep===1)setShowBulk(false);else setBStep(s=>s-1)}} style={bO}>{bStep===1?"Cancel":"\u2190 Back"}</button>{bStep===1&&<button onClick={parseBulk} disabled={!bRaw.trim()} style={{...bP,opacity:bRaw.trim()?1:.4}}>{"Parse \u2192"}</button>}{bStep===2&&<button onClick={()=>{if(!Object.values(bMap).includes("fullName")){flash("Map Full Name","error");return}setBStep(3)}} style={bP}>{"Preview \u2192"}</button>}{bStep===3&&<button onClick={doBulk} style={bP}>{"Import "+buildPrev().filter(c=>c.fullName?.trim()).length}</button>}</div>
+</Mdl>}
+
+{showQP&&<Mdl onClose={()=>setShowQP(false)} width={900} title={"\uD83D\uDCE5 Quick Paste"} subtitle={qpStep===1?"Paste rows from your spreadsheet":"Preview "+qpParsed.length+" clients"}>
+{qpStep===1&&<div style={{padding:24}}>
+<div style={{padding:"10px 14px",borderRadius:8,background:"var(--hover)",border:"1px solid var(--border)",fontSize:12,color:"var(--t3)",marginBottom:12,lineHeight:1.6}}>
+{"Copy rows directly from your spreadsheet and paste below. Expected column order:"}<br/>
+{"App Date | Effective Date | Name | Phone | DOB | Address | Zip | City | MBI | Election Period | Medicaid # | Medicaid Level | State | Plan Name | Carrier | Prev Carrier | Sunfire Code"}
+</div>
+<textarea value={qpRaw} onChange={e=>setQpRaw(e.target.value)} placeholder={"Paste rows here (no headers needed)...\n\nExample:\n03/04/2026\t03/01/2026\tLarry Grigsby\t615-574-1240\t12/02/1948\t4708 VOLUNTEER DR\t37013\tAntioch\t8VH7JM0QT49\tOEP\tN/A\tN/A\tTN\tHumana Total Complete\tHumana\tN/A\tsc3406xk"} style={{...inp,height:220,resize:"vertical",fontFamily:"monospace",fontSize:11,whiteSpace:"pre"}}/>
+</div>}
+{qpStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}>
+<div style={{padding:"10px 14px",borderRadius:8,background:"var(--alertGBg)",border:"1px solid var(--alertGBdr)",fontSize:13,marginBottom:14}}><strong style={{color:"#22C55E"}}>{qpParsed.length}</strong>{" clients parsed and ready to import"}</div>
+<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+<thead><tr>{["Name","Phone","App Date","Eff Date","City","State","Carrier","Plan","MBI"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"left",borderBottom:"2px solid var(--border)",fontWeight:700,color:"var(--t3)",fontSize:10,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+<tbody>{qpParsed.slice(0,50).map((c,i)=><tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
+<td style={{padding:"6px 8px",fontWeight:600}}>{c.fullName}</td>
+<td style={{padding:"6px 8px"}}>{c.phone}</td>
+<td style={{padding:"6px 8px"}}>{c.applicationDate}</td>
+<td style={{padding:"6px 8px"}}>{c.effectiveDate}</td>
+<td style={{padding:"6px 8px"}}>{c.city}</td>
+<td style={{padding:"6px 8px"}}>{c.state}</td>
+<td style={{padding:"6px 8px"}}>{c.carrier}</td>
+<td style={{padding:"6px 8px",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.planName}</td>
+<td style={{padding:"6px 8px",fontFamily:"monospace",fontSize:10}}>{c.mbiNumber}</td>
+</tr>)}</tbody></table></div>
+{qpParsed.length>50&&<div style={{fontSize:11,color:"var(--t3)",marginTop:8}}>{"Showing first 50 of "+qpParsed.length+"..."}</div>}
+</div>}
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
+<button onClick={()=>{if(qpStep===1){setShowQP(false)}else setQpStep(1)}} style={bO}>{qpStep===1?"Cancel":"\u2190 Back"}</button>
+{qpStep===1&&<button onClick={parseQP} disabled={!qpRaw.trim()} style={{...bP,opacity:qpRaw.trim()?1:.4}}>{"Parse \u2192"}</button>}
+{qpStep===2&&<button onClick={doQP} style={bP}>{"Import "+qpParsed.length+" Clients"}</button>}
+</div>
 </Mdl>}
 
 {showCU&&<Mdl onClose={()=>setShowCU(false)} width={480} title="Add Team Member">
