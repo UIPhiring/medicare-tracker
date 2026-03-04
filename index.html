@@ -1186,24 +1186,21 @@ const expected=pm===12?ny===py+1&&nm===1:ny===py&&nm===pm+1;
 if(expected)curStreak2++;else curStreak2=1}else curStreak2=1;
 if(curStreak2>maxStreak)maxStreak=curStreak2;prevMo2=mo});
 const BADGES=[
-{id:"b1",cat:"Book Size",icon:"\uD83C\uDF1F",label:"First Sale",desc:"Submit your first application",tier:"bronze",check:totalClients>=1,reward:""},
-{id:"b2",cat:"Book Size",icon:"\u2B50",label:"High Five",desc:"5 clients on your book",tier:"bronze",check:totalClients>=5,reward:""},
-{id:"b3",cat:"Book Size",icon:"\uD83D\uDD25",label:"On Fire",desc:"10 clients on your book",tier:"silver",check:totalClients>=10,reward:"$25 gift card"},
-{id:"b4",cat:"Book Size",icon:"\uD83D\uDCA5",label:"Unstoppable",desc:"20 clients on your book",tier:"silver",check:totalClients>=20,reward:"$50 gift card"},
-{id:"b5",cat:"Book Size",icon:"\uD83D\uDE80",label:"Rocket",desc:"50 clients on your book",tier:"gold",check:totalClients>=50,reward:"$100 bonus"},
-{id:"b6",cat:"Book Size",icon:"\uD83D\uDC8E",label:"Diamond",desc:"100 clients on your book",tier:"gold",check:totalClients>=100,reward:"$250 bonus"},
-{id:"b7",cat:"Book Size",icon:"\uD83C\uDF0D",label:"Empire Builder",desc:"150 clients on your book",tier:"platinum",check:totalClients>=150,reward:"$500 bonus"},
-{id:"b8",cat:"Book Size",icon:"\uD83D\uDC51",label:"Legend",desc:"200 clients on your book",tier:"platinum",check:totalClients>=200,reward:"$750 bonus + extra PTO day"},
-{id:"b9",cat:"Book Size",icon:"\u2604\uFE0F",label:"Supernova",desc:"300 clients on your book",tier:"platinum",check:totalClients>=300,reward:"$1,000 bonus"},
-{id:"b10",cat:"Book Size",icon:"\uD83C\uDFDB\uFE0F",label:"Hall of Fame",desc:"500 clients on your book",tier:"platinum",check:totalClients>=500,reward:"$2,000 bonus + dinner for two"},
-{id:"m1",cat:"Monthly Apps",icon:"\u26A1",label:"Power Month",desc:"5 apps in one month",tier:"bronze",check:bestMonth>=5,reward:""},
-{id:"m2",cat:"Monthly Apps",icon:"\uD83C\uDFC6",label:"Champion",desc:"10 apps in one month",tier:"silver",check:bestMonth>=10,reward:"$25 gift card"},
-{id:"m3",cat:"Monthly Apps",icon:"\uD83D\uDC51",label:"King",desc:"15 apps in one month",tier:"gold",check:bestMonth>=15,reward:"$100 bonus"},
-{id:"m4",cat:"Monthly Apps",icon:"\uD83E\uDD85",label:"Dominator",desc:"20 apps in one month",tier:"gold",check:bestMonth>=20,reward:"$200 bonus"},
-{id:"m5",cat:"Monthly Apps",icon:"\uD83C\uDF0B",label:"Eruption",desc:"25 apps in one month",tier:"platinum",check:bestMonth>=25,reward:"$350 bonus"},
-{id:"m6",cat:"Monthly Apps",icon:"\uD83D\uDD2E",label:"Legendary Month",desc:"30 apps in one month",tier:"platinum",check:bestMonth>=30,reward:"$500 bonus + extra PTO day"},
-{id:"m7",cat:"Monthly Apps",icon:"\uD83D\uDCC5",label:"Consistent",desc:"Apps in 3+ different months",tier:"bronze",check:monthsWithApps>=3,reward:""},
-{id:"m8",cat:"Monthly Apps",icon:"\uD83D\uDCC8",label:"Marathon",desc:"Apps in 6+ different months",tier:"silver",check:monthsWithApps>=6,reward:"$25 gift card"},
+{id:"b1",cat:"Book Size",icon:"\uD83C\uDF1F",label:"First Sale",desc:"Submit your first application",tier:"bronze",check:totalClients>=1,reward:"Welcome to the team \uD83C\uDF89"},
+{id:"b2",cat:"Book Size",icon:"\u2B50",label:"Double Digits",desc:"10 clients on your book",tier:"bronze",check:totalClients>=10,reward:"$25 gift card"},
+{id:"b3",cat:"Book Size",icon:"\uD83D\uDD25",label:"On Fire",desc:"50 clients on your book",tier:"silver",check:totalClients>=50,reward:"$50 gift card"},
+{id:"b4",cat:"Book Size",icon:"\uD83D\uDCA5",label:"Century Club",desc:"100 clients on your book",tier:"silver",check:totalClients>=100,reward:"$75 gift card + team shoutout"},
+{id:"b5",cat:"Book Size",icon:"\uD83D\uDE80",label:"Rocket",desc:"250 clients on your book",tier:"gold",check:totalClients>=250,reward:"$150 cash bonus"},
+{id:"b6",cat:"Book Size",icon:"\uD83D\uDC8E",label:"Diamond",desc:"500 clients on your book",tier:"gold",check:totalClients>=500,reward:"$300 cash bonus"},
+{id:"b7",cat:"Book Size",icon:"\uD83D\uDC51",label:"Legend",desc:"1,000 clients on your book",tier:"platinum",check:totalClients>=1000,reward:"$500 cash bonus"},
+{id:"b8",cat:"Book Size",icon:"\uD83C\uDFDB\uFE0F",label:"Hall of Fame",desc:"2,000 clients on your book",tier:"diamond",check:totalClients>=2000,reward:"$5,000 cash bonus + paid cruise"},
+{id:"m1",cat:"Monthly Apps",icon:"\u26A1",label:"40 Club",desc:"40 apps in a single month (one-time)",tier:"bronze",check:bestMonth>=40,reward:"$100 cash bonus"},
+{id:"m2",cat:"Monthly Apps",icon:"\uD83C\uDFC6",label:"50 Club",desc:"50 apps in a single month (one-time)",tier:"silver",check:bestMonth>=50,reward:"$250 cash bonus"},
+{id:"m3",cat:"Monthly Apps",icon:"\uD83D\uDC51",label:"60 Club",desc:"60 apps in a single month (one-time)",tier:"gold",check:bestMonth>=60,reward:"$500 cash bonus"},
+{id:"m4",cat:"Monthly Apps",icon:"\uD83E\uDD85",label:"70 Club",desc:"70 apps in a single month (one-time)",tier:"gold",check:bestMonth>=70,reward:"$750 cash bonus"},
+{id:"m5",cat:"Monthly Apps",icon:"\uD83C\uDF0B",label:"80 Club",desc:"80 apps in a single month (one-time)",tier:"platinum",check:bestMonth>=80,reward:"$1,000 cash bonus"},
+{id:"m6",cat:"Monthly Apps",icon:"\uD83D\uDD25",label:"90 Club",desc:"90 apps in a single month (one-time)",tier:"platinum",check:bestMonth>=90,reward:"$2,500 cash bonus + dinner for two"},
+{id:"m7",cat:"Monthly Apps",icon:"\uD83D\uDC8E",label:"100 Club",desc:"100 apps in a single month (one-time)",tier:"diamond",check:bestMonth>=100,reward:"$5,000 cash bonus + paid cruise"},
 {id:"c1",cat:"Commissions",icon:"\uD83D\uDCB5",label:"First Check",desc:"Earn your first commission",tier:"bronze",check:myCommPaid>=1,reward:""},
 {id:"c2",cat:"Commissions",icon:"\uD83D\uDCB0",label:"$1K Club",desc:"Earn $1,000 in commissions",tier:"bronze",check:myCommPaid>=1000,reward:""},
 {id:"c3",cat:"Commissions",icon:"\uD83D\uDCB3",label:"$5K Club",desc:"Earn $5,000 in commissions",tier:"silver",check:myCommPaid>=5000,reward:"Leave early Friday"},
@@ -1250,8 +1247,8 @@ const BADGES=[
 {id:"t2",cat:"Team",icon:"\uD83D\uDCAC",label:"Contributor",desc:"Make 10+ team posts",tier:"silver",check:myTotalPosts>=10,reward:"$25 gift card"},
 {id:"t3",cat:"Team",icon:"\u2764\uFE0F",label:"Fan Favorite",desc:"Receive 10+ likes on posts",tier:"gold",check:myTotalLikes>=10,reward:"Team lunch"}
 ];
-const TIER_COLORS={bronze:"#CD7F32",silver:"#94A3B8",gold:"#F59E0B",platinum:"#8B5CF6"};
-const TIER_ORDER={bronze:0,silver:1,gold:2,platinum:3};
+const TIER_COLORS={bronze:"#CD7F32",silver:"#94A3B8",gold:"#F59E0B",platinum:"#8B5CF6",diamond:"#06B6D4"};
+const TIER_ORDER={bronze:0,silver:1,gold:2,platinum:3,diamond:4};
 const CATS=[...new Set(BADGES.map(b=>b.cat))];
 const earned=BADGES.filter(b=>b.check);
 const locked=BADGES.filter(b=>!b.check);
