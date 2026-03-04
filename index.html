@@ -208,6 +208,7 @@ const[goals,setGoals]=useState([]);const[showGoal,setShowGoal]=useState(false);c
 const[pGoals,setPGoals]=useState([]);const[showPGoal,setShowPGoal]=useState(false);const[pGoalForm,setPGoalForm]=useState({});
 const[posts,setPosts]=useState([]);const[showPost,setShowPost]=useState(false);const[postForm,setPostForm]=useState({});
 const[goalSub,setGoalSub]=useState("production");
+const[badgeInc,setBadgeInc]=useState({});const[showBadgeInc,setShowBadgeInc]=useState(null);const[badgeIncVal,setBadgeIncVal]=useState("");
 const[showTree,setShowTree]=useState(false);
 
 const flash=(m,t="success")=>{setToast({m,t});setTimeout(()=>setToast(null),3e3)};
@@ -236,6 +237,8 @@ useEffect(()=>{const un=db.collection("events").onSnapshot(s=>setEvents(s.docs.m
 /* Commission history */
 const[commHist,setCommHist]=useState([]);
 useEffect(()=>{const un=db.collection("commissionHistory").onSnapshot(s=>setCommHist(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
+/* Load badge incentives */
+useEffect(()=>{const un=db.collection("badgeIncentives").onSnapshot(s=>{const m={};s.docs.forEach(d=>m[d.id]=d.data());setBadgeInc(m)});return()=>un()},[]);
 /* Load personal goals + bulletin */
 useEffect(()=>{const un=db.collection("personalGoals").onSnapshot(s=>setPGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 useEffect(()=>{const un=db.collection("bulletinPosts").onSnapshot(s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
@@ -540,6 +543,8 @@ const delPGoal=async(id)=>{await db.collection("personalGoals").doc(id).delete()
 const savePost=async(d)=>{try{if(!d.message){flash("Message required","error");return}d.authorId=cu.uid;d.authorName=up?.displayName||"";if(d.id){const id=d.id;delete d.id;await db.collection("bulletinPosts").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();d.likes=[];await db.collection("bulletinPosts").add(d)}flash("Posted!");setShowPost(false);setPostForm({})}catch(e){flash("Error: "+e.message,"error")}};
 const likePost=async(p)=>{const likes=p.likes||[];const has=likes.includes(cu.uid);await db.collection("bulletinPosts").doc(p.id).update({likes:has?likes.filter(u=>u!==cu.uid):[...likes,cu.uid]})};
 const delPost=async(id)=>{await db.collection("bulletinPosts").doc(id).delete();flash("Deleted")};
+const saveBadgeInc=async(bid,val)=>{await db.collection("badgeIncentives").doc(bid).set({incentive:val,updatedBy:up?.displayName||"Admin",updatedAt:td()});flash("Incentive saved!");setShowBadgeInc(null);setBadgeIncVal("")};
+const delBadgeInc=async(bid)=>{await db.collection("badgeIncentives").doc(bid).delete();flash("Incentive removed");setShowBadgeInc(null);setBadgeIncVal("")};
 
 /* Templates */
 const TEMPLATES=[
@@ -1144,22 +1149,110 @@ const myAppsThisMo=cls.filter(c=>c.agentId===cu.uid&&c.applicationDate&&c.applic
 const myWins=posts.filter(p=>p.authorId===cu.uid&&p.type==="win").length;
 const teamPosts=posts.length;
 
-/* Achievements */
-const totalClients=cls.filter(c=>c.agentId===cu.uid).length;
+/* Achievements — expanded stats */
+const myCls=cls.filter(c=>c.agentId===cu.uid);
+const totalClients=myCls.length;
+const activeCls=myCls.filter(c=>c.status==="active"||c.status==="paid");
+const paidCls=myCls.filter(c=>c.status==="paid");
+const inactiveCls=myCls.filter(c=>c.status==="inactive"||c.status==="chargedBack"||c.status==="neverInEffect");
+const retRate=totalClients>0?Math.round((totalClients-inactiveCls.length)/totalClients*100):0;
+const uniqueCarriers=[...new Set(myCls.map(c=>c.carrier).filter(Boolean))].length;
+const uniqueStates=[...new Set(myCls.map(c=>c.state).filter(Boolean))].length;
+const myCommPaid=commHist.filter(h=>h.agentId===cu.uid&&h.amount>0).reduce((s,h)=>s+h.amount,0);
+const myCommCB=commHist.filter(h=>h.agentId===cu.uid&&h.amount<0).reduce((s,h)=>s+Math.abs(h.amount),0);
+const myNetComm=myCommPaid-myCommCB;
+const myLeadsCon=leads.filter(l=>l.agentId===cu.uid&&l.stage==="applied").length;
+const myLeadsTotal=leads.filter(l=>l.agentId===cu.uid).length;
+const myTotalPosts=posts.filter(p=>p.authorId===cu.uid).length;
+const myTotalLikes=posts.filter(p=>p.authorId===cu.uid).reduce((s,p)=>(s+(p.likes||[]).length),0);
+const moApps={};myCls.forEach(c=>{if(c.applicationDate){const mo=c.applicationDate.substring(0,7);moApps[mo]=(moApps[mo]||0)+1}});
+const moVals=Object.values(moApps);
+const bestMonth=moVals.length>0?Math.max(...moVals):0;
+const monthsWithApps=moVals.filter(v=>v>0).length;
+/* HIP upsell stats */
+const hipCls=myCls.filter(c=>(c.planName||"").toLowerCase().includes("hip")||(c.planName||"").toLowerCase().includes("hospital indemnity"));
+const hipRate=totalClients>0?Math.round(hipCls.length/totalClients*100):0;
+/* Speed stats */
+const appDays={};myCls.forEach(c=>{if(c.applicationDate){appDays[c.applicationDate]=(appDays[c.applicationDate]||0)+1}});
+const bestDay=Object.values(appDays).length>0?Math.max(...Object.values(appDays)):0;
+const daysWithMultiple=Object.values(appDays).filter(v=>v>=2).length;
+/* Streak stats */
+const sortedMos=Object.keys(moApps).sort();
+let curStreak2=0,maxStreak=0,prevMo2="";
+sortedMos.forEach(mo=>{
+if(prevMo2){const py=parseInt(prevMo2.substring(0,4)),pm=parseInt(prevMo2.substring(5,7));
+const ny=parseInt(mo.substring(0,4)),nm=parseInt(mo.substring(5,7));
+const expected=pm===12?ny===py+1&&nm===1:ny===py&&nm===pm+1;
+if(expected)curStreak2++;else curStreak2=1}else curStreak2=1;
+if(curStreak2>maxStreak)maxStreak=curStreak2;prevMo2=mo});
 const BADGES=[
-{id:"first",icon:"\uD83C\uDF1F",label:"First Sale",desc:"Submit your first application",check:totalClients>=1},
-{id:"five",icon:"\u2B50",label:"High Five",desc:"5 clients on your book",check:totalClients>=5},
-{id:"ten",icon:"\uD83D\uDD25",label:"On Fire",desc:"10 clients on your book",check:totalClients>=10},
-{id:"twenty",icon:"\uD83D\uDCA5",label:"Unstoppable",desc:"20 clients on your book",check:totalClients>=20},
-{id:"fifty",icon:"\uD83D\uDE80",label:"Rocket",desc:"50 clients on your book",check:totalClients>=50},
-{id:"hundred",icon:"\uD83D\uDC8E",label:"Diamond",desc:"100 clients on your book",check:totalClients>=100},
-{id:"apps5",icon:"\u26A1",label:"Power Month",desc:"5 apps in one month",check:myAppsThisMo>=5},
-{id:"apps10",icon:"\uD83C\uDFC6",label:"Champion",desc:"10 apps in one month",check:myAppsThisMo>=10},
-{id:"apps20",icon:"\uD83D\uDC51",label:"King",desc:"20 apps in one month",check:myAppsThisMo>=20},
-{id:"goals3",icon:"\uD83C\uDFAF",label:"Goal Getter",desc:"Complete 3 personal goals",check:myGoalsDone>=3},
-{id:"goals10",icon:"\uD83C\uDF96\uFE0F",label:"Achiever",desc:"Complete 10 personal goals",check:myGoalsDone>=10},
-{id:"poster",icon:"\uD83D\uDCE3",label:"Team Player",desc:"Post your first win",check:myWins>=1}
+{id:"b1",cat:"Book Size",icon:"\uD83C\uDF1F",label:"First Sale",desc:"Submit your first application",tier:"bronze",check:totalClients>=1,reward:""},
+{id:"b2",cat:"Book Size",icon:"\u2B50",label:"High Five",desc:"5 clients on your book",tier:"bronze",check:totalClients>=5,reward:""},
+{id:"b3",cat:"Book Size",icon:"\uD83D\uDD25",label:"On Fire",desc:"10 clients on your book",tier:"silver",check:totalClients>=10,reward:"$25 gift card"},
+{id:"b4",cat:"Book Size",icon:"\uD83D\uDCA5",label:"Unstoppable",desc:"20 clients on your book",tier:"silver",check:totalClients>=20,reward:"$50 gift card"},
+{id:"b5",cat:"Book Size",icon:"\uD83D\uDE80",label:"Rocket",desc:"50 clients on your book",tier:"gold",check:totalClients>=50,reward:"$100 bonus"},
+{id:"b6",cat:"Book Size",icon:"\uD83D\uDC8E",label:"Diamond",desc:"100 clients on your book",tier:"gold",check:totalClients>=100,reward:"$250 bonus"},
+{id:"b7",cat:"Book Size",icon:"\uD83C\uDF0D",label:"Empire Builder",desc:"150 clients on your book",tier:"platinum",check:totalClients>=150,reward:"$500 bonus"},
+{id:"b8",cat:"Book Size",icon:"\uD83D\uDC51",label:"Legend",desc:"200 clients on your book",tier:"platinum",check:totalClients>=200,reward:"$750 bonus + extra PTO day"},
+{id:"b9",cat:"Book Size",icon:"\u2604\uFE0F",label:"Supernova",desc:"300 clients on your book",tier:"platinum",check:totalClients>=300,reward:"$1,000 bonus"},
+{id:"b10",cat:"Book Size",icon:"\uD83C\uDFDB\uFE0F",label:"Hall of Fame",desc:"500 clients on your book",tier:"platinum",check:totalClients>=500,reward:"$2,000 bonus + dinner for two"},
+{id:"m1",cat:"Monthly Apps",icon:"\u26A1",label:"Power Month",desc:"5 apps in one month",tier:"bronze",check:bestMonth>=5,reward:""},
+{id:"m2",cat:"Monthly Apps",icon:"\uD83C\uDFC6",label:"Champion",desc:"10 apps in one month",tier:"silver",check:bestMonth>=10,reward:"$25 gift card"},
+{id:"m3",cat:"Monthly Apps",icon:"\uD83D\uDC51",label:"King",desc:"15 apps in one month",tier:"gold",check:bestMonth>=15,reward:"$100 bonus"},
+{id:"m4",cat:"Monthly Apps",icon:"\uD83E\uDD85",label:"Dominator",desc:"20 apps in one month",tier:"gold",check:bestMonth>=20,reward:"$200 bonus"},
+{id:"m5",cat:"Monthly Apps",icon:"\uD83C\uDF0B",label:"Eruption",desc:"25 apps in one month",tier:"platinum",check:bestMonth>=25,reward:"$350 bonus"},
+{id:"m6",cat:"Monthly Apps",icon:"\uD83D\uDD2E",label:"Legendary Month",desc:"30 apps in one month",tier:"platinum",check:bestMonth>=30,reward:"$500 bonus + extra PTO day"},
+{id:"m7",cat:"Monthly Apps",icon:"\uD83D\uDCC5",label:"Consistent",desc:"Apps in 3+ different months",tier:"bronze",check:monthsWithApps>=3,reward:""},
+{id:"m8",cat:"Monthly Apps",icon:"\uD83D\uDCC8",label:"Marathon",desc:"Apps in 6+ different months",tier:"silver",check:monthsWithApps>=6,reward:"$25 gift card"},
+{id:"c1",cat:"Commissions",icon:"\uD83D\uDCB5",label:"First Check",desc:"Earn your first commission",tier:"bronze",check:myCommPaid>=1,reward:""},
+{id:"c2",cat:"Commissions",icon:"\uD83D\uDCB0",label:"$1K Club",desc:"Earn $1,000 in commissions",tier:"bronze",check:myCommPaid>=1000,reward:""},
+{id:"c3",cat:"Commissions",icon:"\uD83D\uDCB3",label:"$5K Club",desc:"Earn $5,000 in commissions",tier:"silver",check:myCommPaid>=5000,reward:"Leave early Friday"},
+{id:"c4",cat:"Commissions",icon:"\uD83E\uDD11",label:"$10K Club",desc:"Earn $10,000 in commissions",tier:"silver",check:myCommPaid>=10000,reward:"$50 gift card"},
+{id:"c5",cat:"Commissions",icon:"\uD83D\uDCB8",label:"$25K Club",desc:"Earn $25,000 in commissions",tier:"gold",check:myCommPaid>=25000,reward:"$150 bonus"},
+{id:"c6",cat:"Commissions",icon:"\uD83C\uDFB0",label:"$50K Club",desc:"Earn $50,000 in commissions",tier:"gold",check:myCommPaid>=50000,reward:"$300 bonus"},
+{id:"c7",cat:"Commissions",icon:"\uD83C\uDFE6",label:"Six Figures",desc:"Earn $100,000 in commissions",tier:"platinum",check:myCommPaid>=100000,reward:"$500 bonus + dinner out"},
+{id:"c8",cat:"Commissions",icon:"\uD83D\uDC0B",label:"Quarter Million",desc:"Earn $250,000 in commissions",tier:"platinum",check:myCommPaid>=250000,reward:"$1,000 bonus + extra PTO day"},
+{id:"r1",cat:"Retention",icon:"\uD83D\uDEE1\uFE0F",label:"Guardian",desc:"65%+ retention (10+ clients)",tier:"bronze",check:totalClients>=10&&retRate>=65,reward:""},
+{id:"r2",cat:"Retention",icon:"\uD83D\uDD12",label:"Lockdown",desc:"70%+ retention (10+ clients)",tier:"silver",check:totalClients>=10&&retRate>=70,reward:"$25 gift card"},
+{id:"r3",cat:"Retention",icon:"\uD83C\uDFF0",label:"Fortress",desc:"80%+ retention (20+ clients)",tier:"gold",check:totalClients>=20&&retRate>=80,reward:"$100 bonus"},
+{id:"r4",cat:"Retention",icon:"\uD83D\uDCAA",label:"Iron Grip",desc:"80%+ retention (50+ clients)",tier:"platinum",check:totalClients>=50&&retRate>=80,reward:"$250 bonus"},
+{id:"r5",cat:"Retention",icon:"\u2B50",label:"Perfect Book",desc:"90%+ retention (25+ clients)",tier:"platinum",check:totalClients>=25&&retRate>=90,reward:"$500 bonus + extra PTO day"},
+{id:"h1",cat:"HIP Upsells",icon:"\uD83C\uDFE5",label:"HIP Starter",desc:"10%+ of clients have HIP",tier:"bronze",check:totalClients>=5&&hipRate>=10,reward:""},
+{id:"h2",cat:"HIP Upsells",icon:"\uD83D\uDC89",label:"HIP Pro",desc:"20%+ of clients have HIP",tier:"silver",check:totalClients>=10&&hipRate>=20,reward:"$50 gift card"},
+{id:"h3",cat:"HIP Upsells",icon:"\uD83E\uDE7A",label:"HIP Master",desc:"30%+ of clients have HIP",tier:"gold",check:totalClients>=10&&hipRate>=30,reward:"$150 bonus"},
+{id:"h4",cat:"HIP Upsells",icon:"\u2695\uFE0F",label:"HIP Legend",desc:"35%+ of clients have HIP",tier:"platinum",check:totalClients>=15&&hipRate>=35,reward:"$300 bonus"},
+{id:"s1",cat:"Speed",icon:"\u23F1\uFE0F",label:"Quick Draw",desc:"2+ apps in a single day",tier:"bronze",check:bestDay>=2,reward:""},
+{id:"s2",cat:"Speed",icon:"\uD83D\uDCA8",label:"Lightning",desc:"3+ apps in a single day",tier:"silver",check:bestDay>=3,reward:"$25 gift card"},
+{id:"s3",cat:"Speed",icon:"\u26A1",label:"Blitz",desc:"5+ apps in a single day",tier:"gold",check:bestDay>=5,reward:"$100 bonus"},
+{id:"s4",cat:"Speed",icon:"\uD83C\uDF2A\uFE0F",label:"Tornado",desc:"7+ apps in a single day",tier:"platinum",check:bestDay>=7,reward:"$250 bonus + leave early"},
+{id:"s5",cat:"Speed",icon:"\uD83D\uDCC5",label:"Double Up Days",desc:"5+ days with 2+ apps",tier:"silver",check:daysWithMultiple>=5,reward:"$50 gift card"},
+{id:"k1",cat:"Streaks",icon:"\uD83D\uDD25",label:"Heating Up",desc:"2 consecutive months with apps",tier:"bronze",check:maxStreak>=2,reward:""},
+{id:"k2",cat:"Streaks",icon:"\u2744\uFE0F",label:"No Off-Season",desc:"3 consecutive months with apps",tier:"bronze",check:maxStreak>=3,reward:""},
+{id:"k3",cat:"Streaks",icon:"\uD83D\uDCC8",label:"Half Year Hustle",desc:"6 consecutive months with apps",tier:"silver",check:maxStreak>=6,reward:"$50 gift card"},
+{id:"k4",cat:"Streaks",icon:"\uD83D\uDCAA",label:"Year-Round Grinder",desc:"12 consecutive months with apps",tier:"gold",check:maxStreak>=12,reward:"$200 bonus + extra PTO day"},
+{id:"k5",cat:"Streaks",icon:"\uD83C\uDFC6",label:"Iron Streak",desc:"18 consecutive months with apps",tier:"platinum",check:maxStreak>=18,reward:"$500 bonus"},
+{id:"d1",cat:"Diversity",icon:"\uD83C\uDF10",label:"Multi-Carrier",desc:"Sell 3+ different carriers",tier:"bronze",check:uniqueCarriers>=3,reward:""},
+{id:"d2",cat:"Diversity",icon:"\uD83C\uDFAD",label:"Carrier Expert",desc:"Sell 5+ different carriers",tier:"silver",check:uniqueCarriers>=5,reward:"$25 gift card"},
+{id:"d3",cat:"Diversity",icon:"\uD83C\uDDFA\uD83C\uDDF8",label:"Multi-State",desc:"Clients in 2+ states",tier:"bronze",check:uniqueStates>=2,reward:""},
+{id:"d4",cat:"Diversity",icon:"\uD83D\uDDFA\uFE0F",label:"Coast to Coast",desc:"Clients in 5+ states",tier:"silver",check:uniqueStates>=5,reward:"$50 gift card"},
+{id:"d5",cat:"Diversity",icon:"\uD83C\uDF0E",label:"Nationwide",desc:"Clients in 10+ states",tier:"gold",check:uniqueStates>=10,reward:"$150 bonus"},
+{id:"l1",cat:"Leads",icon:"\uD83C\uDFAF",label:"Closer",desc:"Convert your first lead",tier:"bronze",check:myLeadsCon>=1,reward:""},
+{id:"l2",cat:"Leads",icon:"\uD83E\uDD1D",label:"Pipeline Pro",desc:"Convert 10 leads",tier:"silver",check:myLeadsCon>=10,reward:"$25 gift card"},
+{id:"l3",cat:"Leads",icon:"\uD83D\uDD04",label:"Lead Machine",desc:"Convert 25 leads",tier:"gold",check:myLeadsCon>=25,reward:"$100 bonus"},
+{id:"l4",cat:"Leads",icon:"\uD83C\uDFAF",label:"Conversion King",desc:"Convert 50 leads",tier:"platinum",check:myLeadsCon>=50,reward:"$300 bonus"},
+{id:"l5",cat:"Leads",icon:"\uD83D\uDCCB",label:"Prospector",desc:"Add 25+ leads to pipeline",tier:"silver",check:myLeadsTotal>=25,reward:"$25 gift card"},
+{id:"g1",cat:"Growth",icon:"\uD83C\uDFAF",label:"Goal Getter",desc:"Complete 3 personal goals",tier:"bronze",check:myGoalsDone>=3,reward:""},
+{id:"g2",cat:"Growth",icon:"\uD83C\uDF96\uFE0F",label:"Achiever",desc:"Complete 10 personal goals",tier:"silver",check:myGoalsDone>=10,reward:"Leave early Friday"},
+{id:"g3",cat:"Growth",icon:"\uD83E\uDDD8",label:"Self-Improver",desc:"Complete 25 personal goals",tier:"gold",check:myGoalsDone>=25,reward:"$75 gift card"},
+{id:"g4",cat:"Growth",icon:"\uD83C\uDF93",label:"Growth Mindset",desc:"Goals in 3+ categories",tier:"bronze",check:[...new Set(pGoals.filter(g=>g.agentId===cu.uid).map(g=>g.category))].length>=3,reward:""},
+{id:"g5",cat:"Growth",icon:"\uD83D\uDCAF",label:"Perfectionist",desc:"Complete 50 personal goals",tier:"platinum",check:myGoalsDone>=50,reward:"$200 bonus"},
+{id:"t1",cat:"Team",icon:"\uD83D\uDCE3",label:"Team Player",desc:"Post your first win",tier:"bronze",check:myWins>=1,reward:""},
+{id:"t2",cat:"Team",icon:"\uD83D\uDCAC",label:"Contributor",desc:"Make 10+ team posts",tier:"silver",check:myTotalPosts>=10,reward:"$25 gift card"},
+{id:"t3",cat:"Team",icon:"\u2764\uFE0F",label:"Fan Favorite",desc:"Receive 10+ likes on posts",tier:"gold",check:myTotalLikes>=10,reward:"Team lunch"}
 ];
+const TIER_COLORS={bronze:"#CD7F32",silver:"#94A3B8",gold:"#F59E0B",platinum:"#8B5CF6"};
+const TIER_ORDER={bronze:0,silver:1,gold:2,platinum:3};
+const CATS=[...new Set(BADGES.map(b=>b.cat))];
 const earned=BADGES.filter(b=>b.check);
 const locked=BADGES.filter(b=>!b.check);
 
@@ -1345,31 +1438,60 @@ return<div key={p.id} style={{background:t.bg,borderRadius:16,border:"1px solid 
 
 {/* ══ ACHIEVEMENTS ══ */}
 {goalSub==="badges"&&<div>
-<div style={{fontSize:16,fontWeight:800,marginBottom:6}}>Your Achievements</div>
-<div style={{fontSize:12,color:"var(--t3)",marginBottom:20}}>Unlock badges by hitting milestones</div>
 
-{earned.length>0&&<div style={{marginBottom:24}}>
-<div style={{fontSize:14,fontWeight:700,marginBottom:12,color:"#F59E0B"}}>{"\uD83C\uDFC6 Earned ("+earned.length+"/"+BADGES.length+")"}</div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(150px,100%),1fr))",gap:12}}>
-{earned.map(b=><div key={b.id} style={{background:"var(--card)",borderRadius:14,border:"2px solid #F59E0B40",padding:"20px 16px",textAlign:"center",position:"relative",overflow:"hidden"}}>
-<div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,#F59E0B08,transparent)",pointerEvents:"none"}}/>
-<div style={{fontSize:36,marginBottom:8}}>{b.icon}</div>
-<div style={{fontSize:13,fontWeight:800}}>{b.label}</div>
-<div style={{fontSize:10,color:"var(--t3)",marginTop:4}}>{b.desc}</div>
-</div>)}
-</div></div>}
+{/* Progress bar */}
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20,marginBottom:24}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={{fontSize:18,fontWeight:800}}>Your Achievements</div>
+<div style={{fontSize:14,fontWeight:700,color:"#F59E0B"}}>{earned.length+" / "+BADGES.length}</div>
+</div>
+<div style={{height:12,background:"var(--border)",borderRadius:12,overflow:"hidden",marginBottom:10}}>
+<div style={{height:"100%",background:"linear-gradient(90deg,#F59E0B,#F97316)",width:Math.round(earned.length/BADGES.length*100)+"%",borderRadius:12,transition:"width .8s"}}/>
+</div>
+<div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+{Object.entries(TIER_COLORS).map(([tier,color])=>{const cnt=earned.filter(b=>b.tier===tier).length;const tot=BADGES.filter(b=>b.tier===tier).length;return<div key={tier} style={{display:"flex",alignItems:"center",gap:6}}>
+<div style={{width:10,height:10,borderRadius:"50%",background:color}}/>
+<span style={{fontSize:11,fontWeight:600,textTransform:"capitalize"}}>{tier}</span>
+<span style={{fontSize:11,color:"var(--t3)"}}>{cnt+"/"+tot}</span>
+</div>})}
+</div>
+</div>
 
-{locked.length>0&&<div>
-<div style={{fontSize:14,fontWeight:700,marginBottom:12,color:"var(--t3)"}}>{"\uD83D\uDD12 Locked ("+locked.length+")"}</div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(150px,100%),1fr))",gap:12}}>
-{locked.map(b=><div key={b.id} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:"20px 16px",textAlign:"center",opacity:.5}}>
-<div style={{fontSize:36,marginBottom:8,filter:"grayscale(1)"}}>{b.icon}</div>
-<div style={{fontSize:13,fontWeight:800}}>{b.label}</div>
-<div style={{fontSize:10,color:"var(--t3)",marginTop:4}}>{b.desc}</div>
-</div>)}
-</div></div>}
+{/* By category */}
+{CATS.map(cat=>{
+const catBadges=BADGES.filter(b=>b.cat===cat).sort((a,b)=>TIER_ORDER[a.tier]-TIER_ORDER[b.tier]);
+const catEarned=catBadges.filter(b=>b.check).length;
+return<div key={cat} style={{marginBottom:24}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div style={{fontSize:15,fontWeight:800}}>{cat}</div>
+<span style={{fontSize:12,color:"var(--t3)"}}>{catEarned+"/"+catBadges.length+" earned"}</span>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(160px,100%),1fr))",gap:10}}>
+{catBadges.map(b=>{const tc=TIER_COLORS[b.tier]||"#94A3B8";const inc=badgeInc[b.id];return<div key={b.id} style={{background:"var(--card)",borderRadius:14,border:b.check?"2px solid "+tc+"60":"1px solid var(--border)",padding:"16px 14px",textAlign:"center",position:"relative",overflow:"hidden",opacity:b.check?1:.45,transition:"all .3s"}}>
+{b.check&&<div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+tc+"10,transparent)",pointerEvents:"none"}}/>}
+<div style={{fontSize:32,marginBottom:6,filter:b.check?"none":"grayscale(1)"}}>{b.icon}</div>
+<div style={{fontSize:12,fontWeight:800,marginBottom:2}}>{b.label}</div>
+<div style={{fontSize:10,color:"var(--t3)",marginBottom:4,lineHeight:1.3}}>{b.desc}</div>
+<div style={{display:"inline-block",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,padding:"2px 8px",borderRadius:10,background:tc+"18",color:tc}}>{b.tier}</div>
+{(inc?.incentive||b.reward)&&<div style={{marginTop:6,padding:"4px 8px",borderRadius:6,background:"#F59E0B10",border:"1px solid #F59E0B30",fontSize:10,fontWeight:600,color:"#F59E0B"}}>{"\uD83C\uDFC6 "+(inc?.incentive||b.reward)}</div>}
+{b.check&&(inc?.incentive||b.reward)&&<div style={{marginTop:4,fontSize:9,fontWeight:700,color:"#22C55E",textTransform:"uppercase",letterSpacing:.5}}>{"\u2705 EARNED!"}</div>}
+{isA&&<button onClick={()=>{setShowBadgeInc(b.id);setBadgeIncVal(inc?.incentive||b.reward||"")}} style={{marginTop:6,fontSize:9,color:"#3B8FD9",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font)",fontWeight:600}}>Set Incentive</button>}
+</div>})}
+</div></div>})}
+
+{/* Badge incentive modal */}
+{showBadgeInc&&<Mdl onClose={()=>{setShowBadgeInc(null);setBadgeIncVal("")}} title="Set Achievement Incentive">
+<div style={{padding:24}}>
+<div style={{fontSize:13,color:"var(--t3)",marginBottom:12}}>{"Badge: "+(BADGES.find(b=>b.id===showBadgeInc)?.label||showBadgeInc)}</div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Incentive / Reward</label>
+<input value={badgeIncVal} onChange={e=>setBadgeIncVal(e.target.value)} style={inp} placeholder="e.g. $50 bonus, lunch on me, extra PTO day"/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+{badgeInc[showBadgeInc]&&<button onClick={()=>delBadgeInc(showBadgeInc)} style={{...bO,color:"#EF4444",borderColor:"#EF4444"}}>Remove</button>}
+<button onClick={()=>{setShowBadgeInc(null);setBadgeIncVal("")}} style={bO}>Cancel</button>
+<button onClick={()=>saveBadgeInc(showBadgeInc,badgeIncVal)} style={bP}>Save</button>
+</div></Mdl>}
 </div>}
-
 </>})()}
 </div>}
 
