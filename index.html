@@ -1155,7 +1155,9 @@ const totalClients=myCls.length;
 const activeCls=myCls.filter(c=>c.status==="active"||c.status==="paid");
 const paidCls=myCls.filter(c=>c.status==="paid");
 const inactiveCls=myCls.filter(c=>c.status==="inactive"||c.status==="chargedBack"||c.status==="neverInEffect");
-const retRate=totalClients>0?Math.round((totalClients-inactiveCls.length)/totalClients*100):0;
+/* Cohort-based retention: check each effective month that's 4+ months old independently */
+const cohortRet=(()=>{const cohorts={};const now2=new Date();myCls.forEach(c=>{if(!c.effectiveDate)return;const em=c.effectiveDate.substring(0,7);const[ey,emo]=em.split("-").map(Number);const mAgo=(now2.getFullYear()-ey)*12+(now2.getMonth()-(emo-1));if(mAgo>=4){if(!cohorts[em])cohorts[em]=[];cohorts[em].push(c)}});let best=0,bestSz=0;Object.entries(cohorts).forEach(([mo,cls2])=>{if(cls2.length<30)return;const act=cls2.filter(c=>c.status==="active"||c.status==="paid").length;const rate=Math.round(act/cls2.length*100);if(rate>best||(rate===best&&cls2.length>bestSz)){best=rate;bestSz=cls2.length}});return{rate:best,size:bestSz}})();
+const cohortRetRate=cohortRet.rate;const cohortRetSize=cohortRet.size;
 const uniqueCarriers=[...new Set(myCls.map(c=>c.carrier).filter(Boolean))].length;
 const uniqueStates=[...new Set(myCls.map(c=>c.state).filter(Boolean))].length;
 const myCommPaid=commHist.filter(h=>h.agentId===cu.uid&&h.amount>0).reduce((s,h)=>s+h.amount,0);
@@ -1203,9 +1205,9 @@ const BADGES=[
 {id:"m5",cat:"Monthly Apps",icon:"\uD83C\uDF0B",label:"80 Club",desc:"80 apps in a single month (one-time)",tier:"platinum",check:bestMonth>=80,reward:"$500 cash bonus"},
 {id:"m6",cat:"Monthly Apps",icon:"\uD83D\uDD25",label:"90 Club",desc:"90 apps in a single month (one-time)",tier:"platinum",check:bestMonth>=90,reward:"$750 cash bonus"},
 {id:"m7",cat:"Monthly Apps",icon:"\uD83D\uDC8E",label:"100 Club",desc:"100 apps in a single month (one-time)",tier:"diamond",check:bestMonth>=100,reward:"$1,000 cash bonus"},
-{id:"r1",cat:"Retention",icon:"\uD83D\uDEE1\uFE0F",label:"Guardian",desc:"65%+ retention (10+ clients)",tier:"bronze",check:totalClients>=10&&retRate>=65,reward:"Team shoutout"},
-{id:"r2",cat:"Retention",icon:"\uD83C\uDFF0",label:"Fortress",desc:"70%+ retention (10+ clients)",tier:"gold",check:totalClients>=10&&retRate>=70,reward:"$100 cash bonus"},
-{id:"r3",cat:"Retention",icon:"\u2B50",label:"Perfect Book",desc:"75%+ retention (10+ clients)",tier:"platinum",check:totalClients>=10&&retRate>=75,reward:"$300 cash bonus"},
+{id:"r1",cat:"Retention",icon:"\uD83D\uDEE1\uFE0F",label:"Guardian",desc:"65%+ cohort retention (30+ apps, 4mo check)",tier:"bronze",check:cohortRetSize>=30&&cohortRetRate>=65,reward:"Team shoutout"},
+{id:"r2",cat:"Retention",icon:"\uD83C\uDFF0",label:"Fortress",desc:"70%+ cohort retention (30+ apps, 4mo check)",tier:"gold",check:cohortRetSize>=30&&cohortRetRate>=70,reward:"$100 cash bonus"},
+{id:"r3",cat:"Retention",icon:"\u2B50",label:"Perfect Book",desc:"75%+ cohort retention (30+ apps, 4mo check)",tier:"platinum",check:cohortRetSize>=30&&cohortRetRate>=75,reward:"$300 cash bonus"},
 {id:"h1",cat:"HIP Upsells",icon:"\uD83C\uDFE5",label:"HIP Starter",desc:"10%+ of clients have HIP",tier:"bronze",check:totalClients>=5&&hipRate>=10,reward:""},
 {id:"h2",cat:"HIP Upsells",icon:"\uD83D\uDC89",label:"HIP Pro",desc:"20%+ of clients have HIP",tier:"silver",check:totalClients>=10&&hipRate>=20,reward:"$50 gift card"},
 {id:"h3",cat:"HIP Upsells",icon:"\uD83E\uDE7A",label:"HIP Master",desc:"30%+ of clients have HIP",tier:"gold",check:totalClients>=10&&hipRate>=30,reward:"$150 bonus"},
