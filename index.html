@@ -211,6 +211,7 @@ const[posts,setPosts]=useState([]);const[showPost,setShowPost]=useState(false);c
 const[goalSub,setGoalSub]=useState("production");
 const[badgeInc,setBadgeInc]=useState({});const[showBadgeInc,setShowBadgeInc]=useState(null);const[badgeIncVal,setBadgeIncVal]=useState("");
 const[announcedBadges,setAnnouncedBadges]=useState(null);const badgeCheckRef=React.useRef(false);
+const[customTraining,setCustomTraining]=useState(null);const[showTrainEdit,setShowTrainEdit]=useState(false);const[trainForm,setTrainForm]=useState({});const[editTrainId,setEditTrainId]=useState(null);
 const[showTree,setShowTree]=useState(false);
 
 const flash=(m,t="success")=>{setToast({m,t});setTimeout(()=>setToast(null),3e3)};
@@ -241,6 +242,8 @@ const[commHist,setCommHist]=useState([]);
 useEffect(()=>{const un=db.collection("commissionHistory").onSnapshot(s=>setCommHist(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 /* Load badge incentives */
 useEffect(()=>{const un=db.collection("badgeIncentives").onSnapshot(s=>{const m={};s.docs.forEach(d=>m[d.id]=d.data());setBadgeInc(m)});return()=>un()},[]);
+/* Load custom training content */
+useEffect(()=>{const un=db.collection("trainingContent").orderBy("order").onSnapshot(s=>{setCustomTraining(s.docs.map(d=>({id:d.id,...d.data()})))},()=>{const un2=db.collection("trainingContent").onSnapshot(s=>{setCustomTraining(s.docs.map(d=>({id:d.id,...d.data()})))});return()=>un2()});return()=>un()},[]);
 /* Load announced badges for current user */
 useEffect(()=>{const un=db.collection("earnedBadges").doc(cu.uid).onSnapshot(s=>{if(s.exists)setAnnouncedBadges(s.data().badges||[]);else setAnnouncedBadges([])});return()=>un()},[]);
 /* Auto-post new badge wins */
@@ -524,7 +527,11 @@ const SCRIPTS=[
 {cat:"Compliance",title:"Recording Disclaimer",body:"I want to let you know that for quality and compliance purposes, this call may be recorded. By continuing our conversation, you're agreeing to be recorded. Is that alright with you?",tips:["Required if recording calls","Get verbal confirmation","Note the time of consent","If they decline recording, turn it off and note that in your records"]}
 ];
 
-/* Training Resources */
+const saveTrainItem=async(d)=>{try{if(d.id){const id=d.id;delete d.id;await db.collection("trainingContent").doc(id).update(d)}else{d.order=customTraining?customTraining.length:0;await db.collection("trainingContent").add(d)}flash("Training item saved!");setShowTrainEdit(false);setTrainForm({});setEditTrainId(null)}catch(e){flash("Error: "+e.message,"error")}};
+const delTrainItem=async(id)=>{if(!window.confirm("Delete this training item?"))return;await db.collection("trainingContent").doc(id).delete();flash("Deleted")};
+const seedTraining=async()=>{const b=db.batch();let order=0;TRAINING.forEach(section=>{section.items.forEach(item=>{const ref=db.collection("trainingContent").doc();b.set(ref,{cat:section.cat,title:item.title,desc:item.desc,content:item.content,order:order++})})});await b.commit();flash("Seeded "+order+" training items!")};
+/* Get training data — use Firestore if available, otherwise hardcoded */
+const getTraining=()=>{if(customTraining&&customTraining.length>0){const grouped={};customTraining.forEach(t=>{const cat=t.cat||"General";if(!grouped[cat])grouped[cat]=[];grouped[cat].push(t)});return Object.entries(grouped).map(([cat,items])=>({cat,items}))}return TRAINING};
 const TRAINING=[
 {cat:"Getting Started",items:[
 {title:"Medicare Basics 101",desc:"Understanding Parts A, B, C, D and how they work together",content:"**Medicare Parts:**\n\n**Part A (Hospital):** Covers inpatient hospital, skilled nursing, hospice. Most people don't pay a premium.\n\n**Part B (Medical):** Covers doctor visits, outpatient, preventive. Standard premium ~$185/mo (2026).\n\n**Part C (Medicare Advantage):** Private plans that bundle A+B, usually include D. Can have $0 premiums and extra benefits (dental, vision, hearing, OTC).\n\n**Part D (Prescription):** Standalone drug plans. Required if not in an MA plan with drug coverage.\n\n**Medigap/Supplement:** Fills gaps in Original Medicare. Can't have with MA plan."},
@@ -1615,23 +1622,53 @@ return<div key={key} style={{background:"var(--card)",borderRadius:12,border:"1p
 
 {/* ═══ TRAINING TAB ═══ */}
 {tab==="training"&&<div style={{animation:"slideUp .3s"}}>
-<h1 style={{fontSize:24,fontWeight:800,marginBottom:6}}>Training & Resources</h1>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap",gap:10}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Training & Resources</h1>
+{isA&&<div style={{display:"flex",gap:8}}>
+{(!customTraining||customTraining.length===0)&&<button onClick={seedTraining} style={bO}>{"\uD83C\uDF31 Seed Defaults"}</button>}
+<button onClick={()=>{setTrainForm({cat:"",title:"",desc:"",content:""});setEditTrainId(null);setShowTrainEdit(true)}} style={bP}>+ Add Topic</button>
+</div>}
+</div>
 <p style={{fontSize:13,color:"var(--t3)",marginBottom:20}}>Everything you need to know about Medicare sales. Click any topic to expand.</p>
-{TRAINING.map(section=><div key={section.cat} style={{marginBottom:28}}>
-<div style={{fontSize:18,fontWeight:800,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>{section.cat==="Getting Started"?"\uD83D\uDE80":section.cat==="Sales Process"?"\uD83D\uDCBC":"\uD83D\uDCCB"}{" "+section.cat}</div>
+{getTraining().map(section=><div key={section.cat} style={{marginBottom:28}}>
+<div style={{fontSize:18,fontWeight:800,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>{section.cat==="Getting Started"?"\uD83D\uDE80":section.cat==="Sales Process"?"\uD83D\uDCBC":section.cat==="Compliance"?"\uD83D\uDCCB":"\uD83D\uDCD6"}{" "+section.cat}</div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:12}}>
-{section.items.map((item,i)=>{const key=section.cat+"-"+i;const isExp=expandedScript===key;
+{section.items.map((item,i)=>{const key=(item.id||section.cat+"-"+i);const isExp=expandedScript===key;
 return<div key={key} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden"}}>
 <div onClick={()=>setExpandedScript(isExp?null:key)} style={{padding:18,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
 <div><div style={{fontSize:14,fontWeight:700}}>{item.title}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:4}}>{item.desc}</div></div>
 <span style={{fontSize:14,color:"var(--t3)",transform:isExp?"rotate(180deg)":"none",transition:"transform .2s",flexShrink:0,marginLeft:12}}>{"\u25BC"}</span>
 </div>
 {isExp&&<div style={{padding:"0 18px 18px",borderTop:"1px solid var(--border)"}}>
-<div style={{fontSize:13,lineHeight:1.8,color:"var(--t2)",whiteSpace:"pre-wrap",paddingTop:14}}>{item.content.replace(/\*\*(.*?)\*\*/g,"$1")}</div>
+<div style={{fontSize:13,lineHeight:1.8,color:"var(--t2)",whiteSpace:"pre-wrap",paddingTop:14}}>{(item.content||"").replace(/\*\*(.*?)\*\*/g,"$1")}</div>
+{isA&&item.id&&<div style={{display:"flex",gap:8,marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)"}}>
+<button onClick={(e)=>{e.stopPropagation();setTrainForm({cat:item.cat,title:item.title,desc:item.desc,content:item.content});setEditTrainId(item.id);setShowTrainEdit(true)}} style={{...bO,fontSize:11,padding:"4px 12px"}}>{"\u270F\uFE0F Edit"}</button>
+<button onClick={(e)=>{e.stopPropagation();delTrainItem(item.id)}} style={{...bO,fontSize:11,padding:"4px 12px",color:"#EF4444",borderColor:"#EF4444"}}>{"\uD83D\uDDD1\uFE0F Delete"}</button>
+</div>}
 </div>}
 </div>})}
 </div></div>)}
 </div>}
+
+{showTrainEdit&&<Mdl onClose={()=>{setShowTrainEdit(false);setTrainForm({});setEditTrainId(null)}} width={700} title={editTrainId?"Edit Training Topic":"Add Training Topic"}>
+<div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Category</label>
+<input value={trainForm.cat||""} onChange={e=>setTrainForm(p=>({...p,cat:e.target.value}))} style={inp} placeholder="e.g. Getting Started, Sales Process, Compliance" list="train-cats"/>
+<datalist id="train-cats">{[...new Set(getTraining().map(s=>s.cat))].map(c=><option key={c} value={c}/>)}</datalist>
+</div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Title</label>
+<input value={trainForm.title||""} onChange={e=>setTrainForm(p=>({...p,title:e.target.value}))} style={inp} placeholder="e.g. Medicare Basics 101"/></div>
+</div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Description</label>
+<input value={trainForm.desc||""} onChange={e=>setTrainForm(p=>({...p,desc:e.target.value}))} style={inp} placeholder="Brief description shown on the card"/></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Content</label>
+<textarea value={trainForm.content||""} onChange={e=>setTrainForm(p=>({...p,content:e.target.value}))} style={{...inp,minHeight:250,fontFamily:"monospace",fontSize:12,lineHeight:1.6}} placeholder={"Write the training content here.\n\nUse **bold** for headings.\nEach line break creates a new paragraph."}/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+<button onClick={()=>{setShowTrainEdit(false);setTrainForm({});setEditTrainId(null)}} style={bO}>Cancel</button>
+<button onClick={()=>{if(!trainForm.cat||!trainForm.title){flash("Category and title required","error");return}saveTrainItem({...trainForm,id:editTrainId||undefined})}} style={bP}>{editTrainId?"Save Changes":"Add Topic"}</button>
+</div></Mdl>}
 
 
 {/* ═══ REPORTS TAB ═══ */}
