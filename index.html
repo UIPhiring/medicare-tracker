@@ -187,7 +187,7 @@ const[cuErr,setCuErr]=useState("");
 const[selAgent,setSelAgent]=useState("all");
 const[editAgent,setEditAgent]=useState(null);
 const[showBulk,setShowBulk]=useState(false);const[bRaw,setBRaw]=useState("");const[bStep,setBStep]=useState(1);const[bHdr,setBHdr]=useState([]);const[bRows,setBRows]=useState([]);const[bMap,setBMap]=useState({});
-const[showQP,setShowQP]=useState(false);const[qpRaw,setQpRaw]=useState("");const[qpParsed,setQpParsed]=useState([]);const[qpStep,setQpStep]=useState(1);
+const[showQP,setShowQP]=useState(false);const[qpRaw,setQpRaw]=useState("");const[qpParsed,setQpParsed]=useState([]);const[qpStep,setQpStep]=useState(1);const[qpAgent,setQpAgent]=useState("");
 const archRef=useRef(false);
 const[showOverrides,setShowOverrides]=useState(null);
 /* Calendar */
@@ -210,6 +210,7 @@ const[pGoals,setPGoals]=useState([]);const[showPGoal,setShowPGoal]=useState(fals
 const[posts,setPosts]=useState([]);const[showPost,setShowPost]=useState(false);const[postForm,setPostForm]=useState({});
 const[goalSub,setGoalSub]=useState("production");
 const[badgeInc,setBadgeInc]=useState({});const[showBadgeInc,setShowBadgeInc]=useState(null);const[badgeIncVal,setBadgeIncVal]=useState("");
+const[announcedBadges,setAnnouncedBadges]=useState(null);const badgeCheckRef=React.useRef(false);
 const[showTree,setShowTree]=useState(false);
 
 const flash=(m,t="success")=>{setToast({m,t});setTimeout(()=>setToast(null),3e3)};
@@ -240,6 +241,10 @@ const[commHist,setCommHist]=useState([]);
 useEffect(()=>{const un=db.collection("commissionHistory").onSnapshot(s=>setCommHist(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 /* Load badge incentives */
 useEffect(()=>{const un=db.collection("badgeIncentives").onSnapshot(s=>{const m={};s.docs.forEach(d=>m[d.id]=d.data());setBadgeInc(m)});return()=>un()},[]);
+/* Load announced badges for current user */
+useEffect(()=>{const un=db.collection("earnedBadges").doc(cu.uid).onSnapshot(s=>{if(s.exists)setAnnouncedBadges(s.data().badges||[]);else setAnnouncedBadges([])});return()=>un()},[]);
+/* Auto-post new badge wins */
+const announceNewBadges=React.useCallback(async(earned)=>{if(announcedBadges===null||badgeCheckRef.current)return;const earnedIds=earned.map(b=>b.id);const newBadges=earned.filter(b=>!announcedBadges.includes(b.id));if(newBadges.length===0)return;badgeCheckRef.current=true;try{for(const b of newBadges){await db.collection("bulletinPosts").add({type:"win",message:"\uD83C\uDFC6 "+up?.displayName+" just unlocked the \""+b.label+"\" badge! "+b.icon+"\n"+b.desc+(b.reward?" \u2014 Earned: "+b.reward:""),authorId:cu.uid,authorName:up?.displayName||"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),likes:[],autoBadge:true})}await db.collection("earnedBadges").doc(cu.uid).set({badges:earnedIds},{merge:true})}catch(e){console.error("Badge announce error:",e)}badgeCheckRef.current=false},[announcedBadges]);
 /* Load personal goals + bulletin */
 useEffect(()=>{const un=db.collection("personalGoals").onSnapshot(s=>setPGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 useEffect(()=>{const un=db.collection("bulletinPosts").onSnapshot(s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
@@ -318,7 +323,7 @@ const doBulk=async()=>{const pr=buildPrev().filter(c=>c.fullName?.trim());const 
 const qpDateFix=(d)=>{if(!d||d==="N/A")return"";const m=d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return m[3]+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0");return d};
 const QP_COLS=["applicationDate","effectiveDate","fullName","phone","email","dob","mailingAddress","zipCode","city","mbiNumber","electionPeriod","medicaidNumber","medicaidLevel","state","planName","carrier","previousCarrier","sunfireCode"];
 const parseQP=()=>{const lines=qpRaw.trim().split(/\n/).filter(l=>l.trim());const parsed=[];lines.forEach(line=>{const cols=line.split("\t");if(cols.length<3)return;const c={};QP_COLS.forEach((key,i)=>{let v=(cols[i]||"").trim();if(v==="N/A"||v==="n/a")v="";if(key==="applicationDate"||key==="effectiveDate"||key==="dob")v=qpDateFix(v);c[key]=v});if(c.fullName)parsed.push(c)});if(parsed.length===0){flash("No valid rows found","error");return}setQpParsed(parsed);setQpStep(2)};
-const doQP=async()=>{const b=db.batch();qpParsed.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:cu.uid,status:"active"});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:estTS(),user:up?.displayName||"System",action:"created",detail:"Quick paste import"}];b.set(ref,nc)});await b.commit();flash("Imported "+qpParsed.length+" clients!");setShowQP(false);setQpRaw("");setQpParsed([]);setQpStep(1)};
+const doQP=async()=>{const agId=qpAgent||cu.uid;const b=db.batch();qpParsed.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:agId,status:"active"});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:estTS(),user:up?.displayName||"System",action:"created",detail:"Quick paste import"}];b.set(ref,nc)});await b.commit();const agName=qpAgent?team.find(u=>u.uid===qpAgent)?.displayName||"agent":up?.displayName;flash("Imported "+qpParsed.length+" clients for "+agName+"!");setShowQP(false);setQpRaw("");setQpParsed([]);setQpStep(1);setQpAgent("")};
 
 /* Deduplicate */
 const dedup=async()=>{const seen=new Map();const dupes=[];cls.forEach(c=>{const key=(c.fullName||"").toLowerCase()+"||"+(c.phone||"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"");if(seen.has(key))dupes.push(c.id);else seen.set(key,c.id)});if(dupes.length===0){flash("No duplicates found");return}const b=db.batch();dupes.forEach(id=>b.delete(db.collection("clients").doc(id)));await b.commit();flash("Removed "+dupes.length+" duplicates!")};
@@ -761,7 +766,7 @@ return(
 <div className="hdr-btns" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
 <button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:4}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
 <button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCCB Import"}</button>
-<button onClick={()=>{setQpRaw("");setQpParsed([]);setQpStep(1);setShowQP(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCE5 Quick Paste"}</button>
+<button onClick={()=>{setQpRaw("");setQpParsed([]);setQpStep(1);setQpAgent("");setShowQP(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCE5 Quick Paste"}</button>
 {isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83E\uDDF9 Dedup"}</button>}
 <button onClick={()=>startReview(1)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#8B5CF6",color:"#8B5CF6"}}>{"\uD83D\uDD0D MARX"}</button>
 <button onClick={()=>startReview(2)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDCB0 Payments"}</button>
@@ -1180,7 +1185,7 @@ const moVals=Object.values(moApps);
 const bestMonth=moVals.length>0?Math.max(...moVals):0;
 const monthsWithApps=moVals.filter(v=>v>0).length;
 /* HIP upsell stats */
-const hipCls=myCls.filter(c=>(c.planName||"").toLowerCase().includes("hip")||(c.planName||"").toLowerCase().includes("hospital indemnity"));
+const hipCls=myCls.filter(c=>c.hospitalIndemnity==="Yes"||(c.planName||"").toLowerCase().includes("hip")||(c.planName||"").toLowerCase().includes("hospital indemnity"));
 const hipRate=totalClients>0?Math.round(hipCls.length/totalClients*100):0;
 /* Speed stats */
 const appDays={};myCls.forEach(c=>{if(c.applicationDate){appDays[c.applicationDate]=(appDays[c.applicationDate]||0)+1}});
@@ -1228,7 +1233,7 @@ const BADGES=[
 {id:"k1",cat:"Streaks",icon:"\uD83D\uDD25",label:"Heating Up",desc:"2 consecutive months with apps",tier:"bronze",check:maxStreak>=2,reward:""},
 {id:"k2",cat:"Streaks",icon:"\u2744\uFE0F",label:"No Off-Season",desc:"3 consecutive months with apps",tier:"bronze",check:maxStreak>=3,reward:""},
 {id:"k3",cat:"Streaks",icon:"\uD83D\uDCC8",label:"Half Year Hustle",desc:"6 consecutive months with apps",tier:"silver",check:maxStreak>=6,reward:"$50 gift card"},
-{id:"k4",cat:"Streaks",icon:"\uD83D\uDCAA",label:"Year-Round Grinder",desc:"12 consecutive months with apps",tier:"gold",check:maxStreak>=12,reward:"$200 bonus + extra PTO day"},
+{id:"k4",cat:"Streaks",icon:"\uD83D\uDCAA",label:"Year-Round Grinder",desc:"12 consecutive months with apps",tier:"gold",check:maxStreak>=12,reward:"$250 cash bonus"},
 {id:"k5",cat:"Streaks",icon:"\uD83C\uDFC6",label:"Iron Streak",desc:"18 consecutive months with apps",tier:"platinum",check:maxStreak>=18,reward:"$500 bonus"},
 {id:"l1",cat:"Leads",icon:"\uD83C\uDFAF",label:"Closer",desc:"Convert your first lead",tier:"bronze",check:myLeadsCon>=1,reward:""},
 {id:"l2",cat:"Leads",icon:"\uD83E\uDD1D",label:"Pipeline Pro",desc:"Convert 10 leads",tier:"silver",check:myLeadsCon>=10,reward:"$25 gift card"},
@@ -1247,6 +1252,7 @@ const TIER_ORDER={bronze:0,silver:1,gold:2,platinum:3,diamond:4};
 const CATS=[...new Set(BADGES.map(b=>b.cat))];
 const earned=BADGES.filter(b=>b.check);
 const locked=BADGES.filter(b=>!b.check);
+if(earned.length>0&&announcedBadges!==null)setTimeout(()=>announceNewBadges(earned),0);
 
 return<>
 
@@ -1979,6 +1985,7 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 
 {showQP&&<Mdl onClose={()=>setShowQP(false)} width={900} title={"\uD83D\uDCE5 Quick Paste"} subtitle={qpStep===1?"Paste rows from your spreadsheet":"Preview "+qpParsed.length+" clients"}>
 {qpStep===1&&<div style={{padding:24}}>
+{isA&&<div style={{marginBottom:14}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Import For Agent</label><select value={qpAgent} onChange={e=>setQpAgent(e.target.value)} style={inp}><option value="">{"Myself ("+up?.displayName+")"}</option>{team.filter(u=>u.uid!==cu.uid).map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select></div>}
 <div style={{padding:"10px 14px",borderRadius:8,background:"var(--hover)",border:"1px solid var(--border)",fontSize:12,color:"var(--t3)",marginBottom:12,lineHeight:1.6}}>
 {"Copy rows directly from your spreadsheet and paste below. Expected column order:"}<br/>
 {"App Date | Effective Date | Name | Phone | Email | DOB | Address | Zip | City | MBI | Election Period | Medicaid # | Medicaid Level | State | Plan Name | Carrier | Prev Carrier | Sunfire Code"}
