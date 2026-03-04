@@ -184,6 +184,12 @@ const[editAgent,setEditAgent]=useState(null);
 const[showBulk,setShowBulk]=useState(false);const[bRaw,setBRaw]=useState("");const[bStep,setBStep]=useState(1);const[bHdr,setBHdr]=useState([]);const[bRows,setBRows]=useState([]);const[bMap,setBMap]=useState({});
 const archRef=useRef(false);
 const[showOverrides,setShowOverrides]=useState(null);
+/* Leads */
+const[leads,setLeads]=useState([]);const[showLead,setShowLead]=useState(false);const[leadForm,setLeadForm]=useState({});const[editLead,setEditLead]=useState(null);const[viewLead,setViewLead]=useState(null);const[leadNote,setLeadNote]=useState("");const[leadLogType,setLeadLogType]=useState("note");
+/* Carrier Contacts */
+const[contacts,setContacts]=useState([]);const[showContact,setShowContact]=useState(false);const[contactForm,setContactForm]=useState({});const[editContact,setEditContact]=useState(null);
+/* Goals */
+const[goals,setGoals]=useState([]);const[showGoal,setShowGoal]=useState(false);const[goalForm,setGoalForm]=useState({});
 const[showTree,setShowTree]=useState(false);
 
 const flash=(m,t="success")=>{setToast({m,t});setTimeout(()=>setToast(null),3e3)};
@@ -202,6 +208,13 @@ return()=>un();
 
 /* Load team */
 useEffect(()=>{const un=db.collection("users").onSnapshot(s=>setTeam(s.docs.map(d=>({uid:d.id,...d.data()}))));return()=>un()},[]);
+
+/* Load leads */
+useEffect(()=>{const un=db.collection("leads").onSnapshot(s=>setLeads(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
+/* Load carrier contacts */
+useEffect(()=>{const un=db.collection("carrierContacts").onSnapshot(s=>setContacts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
+/* Load goals */
+useEffect(()=>{const un=db.collection("goals").onSnapshot(s=>setGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 
 /* Auto-archive HEAP 4+ months */
 useEffect(()=>{
@@ -305,6 +318,28 @@ if(revIdx+1>=revClients.length){setRevMode(false);
 if(revPass===1){flash("MARX done! "+t.active+" on book, "+t.inactive+" left, "+t.noEnroll+" didn't enroll, "+t.diffPlan+" diff plan");
 }else{flash("Payment check done! "+t.paid+" paid, "+t.active+" not yet, "+t.skipped+" skipped")}
 }else setRevIdx(revIdx+1)};
+
+/* Lead functions */
+const LEAD_STAGES=[{id:"new",label:"New Lead",color:"#3B8FD9",icon:"\uD83C\uDD95"},{id:"contacted",label:"Contacted",color:"#8B5CF6",icon:"\uD83D\uDCDE"},{id:"appointment",label:"Appointment Set",color:"#F59E0B",icon:"\uD83D\uDCC5"},{id:"quoted",label:"Quoted",color:"#F97316",icon:"\uD83D\uDCCB"},{id:"applied",label:"Applied",color:"#22C55E",icon:"\u2705"},{id:"lost",label:"Lost",color:"#EF4444",icon:"\u274C"}];
+const saveLead=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("leads").doc(id).update(d);return id}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();d.agentId=d.agentId||cu.uid;d.stage=d.stage||"new";d.activityLog=[{ts:new Date().toISOString(),user:up?.displayName||"System",action:"created",detail:"Lead added"}];const ref=await db.collection("leads").add(d);return ref.id}};
+const convertLead=async(lead)=>{const cl={fullName:lead.fullName,phone:lead.phone||"",email:lead.email||"",dob:lead.dob||"",state:lead.state||"",mailingAddress:lead.address||"",city:lead.city||"",zipCode:lead.zip||"",mbiNumber:lead.mbi||"",carrier:"",planName:"",effectiveDate:"",applicationDate:td(),status:"active",agentId:lead.agentId||cu.uid,electionPeriod:lead.electionPeriod||"",statusNote:"Converted from lead"};const id=await save(cl);await db.collection("leads").doc(lead.id).update({stage:"applied",convertedClientId:id,convertedDate:td()});flash(lead.fullName+" converted to client!");setViewLead(null)};
+const saveContact=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("carrierContacts").doc(id).update(d)}else{await db.collection("carrierContacts").add(d)}flash("Contact saved!");setShowContact(false);setContactForm({})};
+const saveGoal=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("goals").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection("goals").add(d)}flash("Goal saved!");setShowGoal(false);setGoalForm({})};
+
+/* Templates */
+const TEMPLATES=[
+{cat:"Welcome",title:"New Client Welcome",body:"Hi {name}, welcome to your new {carrier} plan! I'm {agent}, your insurance agent. Your plan goes effective {effective}. Save my number — call me anytime you have questions about your coverage. I'm here to help!"},
+{cat:"Welcome",title:"SOA Follow-Up",body:"Hi {name}, this is {agent}. Thank you for meeting with me today. As discussed, I've submitted your enrollment for {carrier}. Your effective date will be {effective}. I'll follow up once everything is confirmed!"},
+{cat:"Birthday",title:"Birthday Wish",body:"Happy Birthday {name}! 🎂 Wishing you a wonderful year ahead. If you ever have any questions about your coverage, don't hesitate to reach out. — {agent}"},
+{cat:"Birthday",title:"Birthday + Review",body:"Happy Birthday {name}! 🎂 Since it's a new year for you, it might be a good time to review your plan and make sure everything still fits your needs. Want to schedule a quick call? — {agent}"},
+{cat:"Renewal",title:"AEP Reminder",body:"Hi {name}, it's {agent}. Open enrollment (AEP) starts October 15th! This is a great time to review your current {carrier} plan and make sure you're still getting the best coverage and value. Want to schedule a time to go over your options?"},
+{cat:"Renewal",title:"Plan Change Opportunity",body:"Hi {name}, this is {agent}. I wanted to let you know about some plan changes coming next year that could affect your coverage. I'd love to schedule a quick review to make sure you're in the best plan. When works for you?"},
+{cat:"Follow-Up",title:"After No-Show",body:"Hi {name}, this is {agent}. I missed you at our appointment today — no worries at all! I'd love to reschedule when it's convenient for you. What day works best this week?"},
+{cat:"Follow-Up",title:"Check-In (30 days)",body:"Hi {name}, it's {agent}! Just checking in — you've been on your new {carrier} plan for about a month now. How's everything going? Any questions about your benefits or coverage? I'm always here to help."},
+{cat:"Follow-Up",title:"After Application",body:"Hi {name}, this is {agent}. Just wanted to confirm your {carrier} application has been submitted! You should receive your member materials in the mail soon. Let me know if you have any questions in the meantime."},
+{cat:"Retention",title:"Re-Engage Inactive",body:"Hi {name}, this is {agent}. I noticed there may have been a change to your plan. I'd love to help you explore your options and make sure you have the coverage you need. Can we schedule a quick call?"},
+{cat:"Retention",title:"Win-Back",body:"Hi {name}, it's {agent}. I know plans change, but I wanted to reach out and let you know I'm still here to help whenever you need it. If your current coverage isn't working out, I'd be happy to explore options together."}
+];
 
 /* Mass Update */
 const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}if(muSel.size===0){flash("Select at least one client","error");return}const targets=disp.filter(c=>muSel.has(c.id));const fl=FIELDS.find(f=>f.key===mf)?.label||mf;const b=db.batch();targets.forEach(c=>{b.update(db.collection("clients").doc(c.id),{[mf]:mv,activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:"mass_update",detail:fl+": "+(c[mf]||"empty")+" \u2192 "+mv})})});await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("");setMuSel(new Set())};
@@ -448,7 +483,8 @@ return team.map(u=>{
   return{...u,tot:ac.filter(c=>c.status!=="heapArchived").length,inf,dr,arch,pc,ap}
 })},[isA,team,cls]);
 
-const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"}]:[])];
+const myLeads=leads.filter(c=>isA||c.agentId===cu.uid);
+const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"}]:[])];
 
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
 
@@ -801,7 +837,161 @@ return<>
 </div>)}
 </div>
 </div>}
+
+{/* ═══ LEADS TAB ═══ */}
+{tab==="leads"&&<div style={{animation:"slideUp .3s"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+<div><h1 style={{fontSize:24,fontWeight:800}}>Lead Pipeline</h1><p style={{fontSize:13,color:"var(--t3)"}}>{myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length+" active leads"}</p></div>
+<button onClick={()=>{setLeadForm({});setEditLead(null);setShowLead(true)}} style={bP}>+ Add Lead</button>
+</div>
+{/* Pipeline columns */}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(250px,100%),1fr))",gap:14}}>
+{LEAD_STAGES.filter(s=>s.id!=="applied").map(stage=>{const stageLds=myLeads.filter(l=>l.stage===stage.id);return<div key={stage.id} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden"}}>
+<div style={{padding:"12px 16px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>{stage.icon}</span><span style={{fontSize:13,fontWeight:700}}>{stage.label}</span></div><span style={{background:stage.color+"20",color:stage.color,padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700}}>{stageLds.length}</span></div>
+<div style={{padding:8,display:"flex",flexDirection:"column",gap:6,maxHeight:400,overflowY:"auto"}}>
+{stageLds.length===0?<div style={{padding:20,textAlign:"center",color:"var(--t3)",fontSize:12}}>No leads</div>:
+stageLds.map(l=><div key={l.id} onClick={()=>setViewLead(l)} style={{padding:"10px 12px",background:"var(--hover)",borderRadius:10,cursor:"pointer",border:"1px solid transparent",transition:"border .15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--border)"}} onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent"}}>
+<div style={{fontSize:13,fontWeight:700}}>{l.fullName}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{l.phone||l.email||"No contact"}</div>
+{l.source&&<div style={{fontSize:10,color:stage.color,marginTop:3,fontWeight:600}}>{l.source}</div>}
+</div>)}
+</div></div>})}
+</div>
+</div>}
+
+{/* ═══ TEMPLATES TAB ═══ */}
+{tab==="templates"&&<div style={{animation:"slideUp .3s"}}>
+<h1 style={{fontSize:24,fontWeight:800,marginBottom:20}}>Message Templates</h1>
+{["Welcome","Birthday","Renewal","Follow-Up","Retention"].map(cat=><div key={cat} style={{marginBottom:24}}>
+<div style={{fontSize:16,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>{cat==="Welcome"?"\uD83D\uDC4B":cat==="Birthday"?"\uD83C\uDF82":cat==="Renewal"?"\uD83D\uDD04":cat==="Follow-Up"?"\uD83D\uDD14":"\uD83D\uDEE1\uFE0F"}{" "+cat}</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(350px,100%),1fr))",gap:12}}>
+{TEMPLATES.filter(t2=>t2.cat===cat).map((t2,i)=><div key={i} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",padding:16}}>
+<div style={{fontSize:13,fontWeight:700,marginBottom:8}}>{t2.title}</div>
+<div style={{fontSize:12,color:"var(--t2)",lineHeight:1.5,marginBottom:12,whiteSpace:"pre-wrap"}}>{t2.body}</div>
+<button onClick={()=>{navigator.clipboard.writeText(t2.body);flash("Copied!")}} style={{...bO,fontSize:11,padding:"6px 12px"}}>{"\uD83D\uDCCB Copy"}</button>
+</div>)}
+</div></div>)}
+</div>}
+
+{/* ═══ CARRIER DIRECTORY TAB ═══ */}
+{tab==="directory"&&<div style={{animation:"slideUp .3s"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Carrier Directory</h1>
+{isA&&<button onClick={()=>{setContactForm({});setEditContact(null);setShowContact(true)}} style={bP}>+ Add Contact</button>}
+</div>
+{contacts.length===0?<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:50,textAlign:"center",color:"var(--t3)"}}>{isA?"No contacts yet — add your carrier reps, support lines, and key contacts.":"No carrier contacts have been added yet."}</div>:
+(()=>{const grouped={};contacts.forEach(c=>{const g=c.carrier||"Other";if(!grouped[g])grouped[g]=[];grouped[g].push(c)});
+return Object.entries(grouped).sort((a,b)=>a[0].localeCompare(b[0])).map(([carrier,cts])=><div key={carrier} style={{marginBottom:20}}>
+<div style={{fontSize:16,fontWeight:800,marginBottom:10}}>{carrier}</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(320px,100%),1fr))",gap:10}}>
+{cts.map(c=><div key={c.id} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",padding:16}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+<div><div style={{fontSize:14,fontWeight:700}}>{c.name}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{c.title||""}</div></div>
+{isA&&<button onClick={()=>{setContactForm(c);setEditContact(c.id);setShowContact(true)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#3B8FD9"}}>Edit</button>}
+</div>
+<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:4}}>
+{c.phone&&<div style={{fontSize:12}}><span style={{color:"var(--t3)"}}>{"\uD83D\uDCDE "}</span><a href={"tel:"+c.phone} style={{color:"#3B8FD9",textDecoration:"none"}}>{c.phone}</a></div>}
+{c.email&&<div style={{fontSize:12}}><span style={{color:"var(--t3)"}}>{"\uD83D\uDCE7 "}</span><a href={"mailto:"+c.email} style={{color:"#3B8FD9",textDecoration:"none"}}>{c.email}</a></div>}
+{c.notes&&<div style={{fontSize:11,color:"var(--t3)",marginTop:4,fontStyle:"italic"}}>{c.notes}</div>}
+</div></div>)}
+</div></div>)})()}
+</div>}
+
+{/* ═══ GOALS TAB ═══ */}
+{tab==="goals"&&<div style={{animation:"slideUp .3s"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Goals & KPIs</h1>
+{isA&&<button onClick={()=>{setGoalForm({month:td().substring(0,7),agentId:"all",target:""});setShowGoal(true)}} style={bP}>+ Set Goal</button>}
+</div>
+{(()=>{const curMo=td().substring(0,7);const moGoals=goals.filter(g=>g.month===curMo);
+const agents=isA?[{uid:"all",displayName:"All Team"},...team.filter(u=>u.role!=="admin")]:[{uid:cu.uid,displayName:up?.displayName}];
+return<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:14}}>
+{agents.map(ag=>{const g=moGoals.find(g2=>g2.agentId===ag.uid);const target=g?parseInt(g.target)||0:0;
+const actual=ag.uid==="all"?cls.filter(c=>c.applicationDate&&c.applicationDate.substring(0,7)===curMo&&c.status!=="heapArchived").length:cls.filter(c=>c.agentId===ag.uid&&c.applicationDate&&c.applicationDate.substring(0,7)===curMo&&c.status!=="heapArchived").length;
+const pctDone=target>0?Math.min(100,Math.round(actual/target*100)):0;
+return<div key={ag.uid} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div><div style={{fontSize:15,fontWeight:800}}>{ag.displayName}</div><div style={{fontSize:11,color:"var(--t3)"}}>{mLabel(curMo)+" Goal"}</div></div>
+{isA&&<button onClick={()=>{setGoalForm({...(g||{month:curMo,agentId:ag.uid,target:""}),id:g?.id});setShowGoal(true)}} style={{...bO,fontSize:11,padding:"4px 10px"}}>{g?"Edit":"Set"}</button>}
+</div>
+<div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:8}}>
+<span style={{fontSize:36,fontWeight:900,color:pctDone>=100?"#22C55E":pctDone>=50?"#F59E0B":"var(--text)"}}>{actual}</span>
+{target>0&&<span style={{fontSize:18,fontWeight:600,color:"var(--t3)"}}>{" / "+target}</span>}
+</div>
+{target>0&&<div style={{height:8,background:"var(--border)",borderRadius:8,overflow:"hidden"}}><div style={{height:"100%",background:pctDone>=100?"#22C55E":pctDone>=75?"#3B8FD9":pctDone>=50?"#F59E0B":"#EF4444",width:pctDone+"%",borderRadius:8,transition:"width .5s"}}/></div>}
+{target>0&&<div style={{fontSize:11,color:"var(--t3)",marginTop:4,textAlign:"right"}}>{pctDone+"%"}</div>}
+{target===0&&!isA&&<div style={{fontSize:12,color:"var(--t3)"}}>No goal set for this month</div>}
+</div>})}
+</div>})()}
+</div>}
+
 </main>
+
+{/* LEAD MODAL */}
+{showLead&&<Mdl onClose={()=>{setShowLead(false);setLeadForm({})}} title={editLead?"Edit Lead":"Add New Lead"}>
+<div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxHeight:"60vh",overflowY:"auto"}}>
+{[{k:"fullName",l:"Full Name",t:"text"},{k:"phone",l:"Phone",t:"tel"},{k:"email",l:"Email",t:"email"},{k:"dob",l:"Date of Birth",t:"date"},{k:"state",l:"State",t:"text"},{k:"address",l:"Address",t:"text"},{k:"city",l:"City",t:"text"},{k:"zip",l:"Zip",t:"text"},{k:"mbi",l:"MBI Number",t:"text"},{k:"source",l:"Lead Source",t:"select",opts:["Referral","Door Knock","Call-In","Event","Online","Transfer","Other"]},{k:"electionPeriod",l:"Election Period",t:"select",opts:["AEP","OEP","SEP","IEP","ICEP"]},{k:"stage",l:"Stage",t:"select",opts:LEAD_STAGES.map(s=>s.id)}].map(f=><div key={f.k}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{f.l}</label>
+{f.t==="select"?<select value={leadForm[f.k]||""} onChange={e=>setLeadForm(p=>({...p,[f.k]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="">Select...</option>{(f.opts||[]).map(o=><option key={typeof o==="string"?o:o} value={typeof o==="string"?o:o}>{typeof o==="string"?o:LEAD_STAGES.find(s2=>s2.id===o)?.label||o}</option>)}</select>
+:<input type={f.t} value={leadForm[f.k]||""} onChange={e=>setLeadForm(p=>({...p,[f.k]:e.target.value}))} style={inp}/>}
+</div>)}
+<div style={{gridColumn:"1/-1"}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Notes</label><textarea value={leadForm.notes||""} onChange={e=>setLeadForm(p=>({...p,notes:e.target.value}))} style={{...inp,minHeight:60}} rows={2}/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+<button onClick={()=>{setShowLead(false);setLeadForm({})}} style={bO}>Cancel</button>
+<button onClick={async()=>{if(!leadForm.fullName?.trim()){flash("Name required","error");return}await saveLead({...leadForm});flash(editLead?"Lead updated":"Lead added!");setShowLead(false);setLeadForm({})}} style={bP}>{editLead?"Update":"Add Lead"}</button>
+</div></Mdl>}
+
+{/* VIEW LEAD MODAL */}
+{viewLead&&<Mdl onClose={()=>setViewLead(null)} title={viewLead.fullName} width={640} subtitle={<div style={{display:"flex",gap:8,alignItems:"center",marginTop:6}}><Badge color={LEAD_STAGES.find(s=>s.id===viewLead.stage)?.color||"#94A3B8"}>{(LEAD_STAGES.find(s=>s.id===viewLead.stage)?.icon||"")+" "+(LEAD_STAGES.find(s=>s.id===viewLead.stage)?.label||viewLead.stage)}</Badge>{viewLead.source&&<Badge color="#94A3B8">{viewLead.source}</Badge>}</div>}>
+<div style={{padding:24}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+{[{l:"Phone",v:fmtPh(viewLead.phone)},{l:"Email",v:viewLead.email||"\u2014"},{l:"DOB",v:fmt(viewLead.dob)},{l:"State",v:viewLead.state||"\u2014"},{l:"MBI",v:viewLead.mbi||"\u2014"},{l:"Election",v:viewLead.electionPeriod||"\u2014"}].map(f=><div key={f.l} style={{padding:10,background:"var(--hover)",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5,marginBottom:3}}>{f.l}</div><div style={{fontSize:13,fontWeight:600}}>{f.v}</div></div>)}
+</div>
+{viewLead.notes&&<div style={{padding:10,background:"var(--hover)",borderRadius:8,marginBottom:16,fontSize:12,color:"var(--t2)"}}>{viewLead.notes}</div>}
+<div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+<select value={viewLead.stage} onChange={async e=>{const ns=e.target.value;await db.collection("leads").doc(viewLead.id).update({stage:ns,activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:"stage",detail:"Stage: "+(LEAD_STAGES.find(s=>s.id===viewLead.stage)?.label)+" \u2192 "+(LEAD_STAGES.find(s=>s.id===ns)?.label)})});setViewLead(p=>({...p,stage:ns}));flash("Stage updated")}} style={{...inp,width:"auto",minWidth:160,cursor:"pointer"}}>{LEAD_STAGES.map(s=><option key={s.id} value={s.id}>{s.icon+" "+s.label}</option>)}</select>
+<button onClick={()=>{setLeadForm(viewLead);setEditLead(viewLead.id);setShowLead(true);setViewLead(null)}} style={{...bO,fontSize:12}}>{"\u270F\uFE0F Edit"}</button>
+{viewLead.stage!=="applied"&&<button onClick={()=>convertLead(viewLead)} style={{...bP,fontSize:12,background:"#22C55E"}}>{"\u2705 Convert to Client"}</button>}
+{viewLead.stage!=="applied"&&viewLead.stage!=="lost"&&<button onClick={async()=>{await db.collection("leads").doc(viewLead.id).update({stage:"lost"});setViewLead(p=>({...p,stage:"lost"}));flash("Marked as lost")}} style={{...bO,fontSize:12,borderColor:"#EF4444",color:"#EF4444"}}>{"\u274C Lost"}</button>}
+</div>
+{/* Lead Activity Log */}
+<div style={{borderTop:"1px solid var(--border)",paddingTop:16}}>
+<div style={{fontSize:13,fontWeight:700,marginBottom:10}}>{"\uD83D\uDCDD Activity Log"}</div>
+<div style={{display:"flex",gap:8,marginBottom:10}}>
+<select value={leadLogType||"note"} onChange={e=>setLeadLogType(e.target.value)} style={{...inp,width:120,fontSize:11,cursor:"pointer"}}><option value="note">\uD83D\uDCDD Note</option><option value="call_out">\uD83D\uDCDE Called</option><option value="call_in">\uD83D\uDCF2 Received</option><option value="email">\uD83D\uDCE7 Email</option><option value="meeting">\uD83E\uDD1D Meeting</option></select>
+<input value={leadNote} onChange={e=>setLeadNote(e.target.value)} placeholder="Details..." onKeyDown={async e=>{if(e.key==="Enter"&&leadNote.trim()){const tp=leadLogType||"note";await db.collection("leads").doc(viewLead.id).update({activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:tp,detail:leadNote.trim()})});setViewLead(p=>({...p,activityLog:[...(p.activityLog||[]),{ts:new Date().toISOString(),user:up?.displayName||"System",action:tp,detail:leadNote.trim()}]}));setLeadNote("");setLeadLogType("note")}}} style={{...inp,flex:1,fontSize:12}}/>
+</div>
+{viewLead.activityLog&&viewLead.activityLog.length>0&&<div style={{maxHeight:200,overflowY:"auto"}}>{[].concat(viewLead.activityLog).reverse().map((al,ai)=><div key={ai} style={{display:"flex",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)"}}><div style={{fontSize:13,width:20,textAlign:"center"}}>{al.action==="created"?"\uD83C\uDD95":al.action==="stage"?"\uD83D\uDD04":al.action==="call_out"?"\uD83D\uDCDE":al.action==="call_in"?"\uD83D\uDCF2":al.action==="email"?"\uD83D\uDCE7":al.action==="meeting"?"\uD83E\uDD1D":"\uD83D\uDCDD"}</div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{al.detail}</div><div style={{fontSize:10,color:"var(--t3)",marginTop:1}}>{fmtTs(al.ts)}{al.user?" \u00B7 "+al.user:""}</div></div></div>)}</div>}
+</div>
+</div></Mdl>}
+
+{/* CARRIER CONTACT MODAL */}
+{showContact&&<Mdl onClose={()=>{setShowContact(false);setContactForm({})}} title={editContact?"Edit Contact":"Add Carrier Contact"}>
+<div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+{[{k:"carrier",l:"Carrier",t:"select",opts:["Humana","CarePlus","UnitedHealthcare","Aetna","Devoted","Freedom","Wellcare","Cigna","BCBS","Other"]},{k:"name",l:"Contact Name",t:"text"},{k:"title",l:"Title / Role",t:"text"},{k:"phone",l:"Phone",t:"tel"},{k:"email",l:"Email",t:"email"}].map(f=><div key={f.k}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>{f.l}</label>
+{f.t==="select"?<select value={contactForm[f.k]||""} onChange={e=>setContactForm(p=>({...p,[f.k]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="">Select...</option>{f.opts.map(o=><option key={o} value={o}>{o}</option>)}</select>
+:<input type={f.t} value={contactForm[f.k]||""} onChange={e=>setContactForm(p=>({...p,[f.k]:e.target.value}))} style={inp}/>}
+</div>)}
+<div style={{gridColumn:"1/-1"}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Notes</label><textarea value={contactForm.notes||""} onChange={e=>setContactForm(p=>({...p,notes:e.target.value}))} style={{...inp,minHeight:60}} rows={2}/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
+<div>{editContact&&<button onClick={async()=>{await db.collection("carrierContacts").doc(editContact).delete();flash("Deleted");setShowContact(false);setContactForm({})}} style={{...bO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>Delete</button>}</div>
+<div style={{display:"flex",gap:10}}><button onClick={()=>{setShowContact(false);setContactForm({})}} style={bO}>Cancel</button>
+<button onClick={()=>saveContact({...contactForm,id:editContact||undefined})} style={bP}>Save</button></div>
+</div></Mdl>}
+
+{/* GOAL MODAL */}
+{showGoal&&<Mdl onClose={()=>{setShowGoal(false);setGoalForm({})}} title="Set Monthly Goal">
+<div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Month</label><input type="month" value={goalForm.month||""} onChange={e=>setGoalForm(p=>({...p,month:e.target.value}))} style={inp}/></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Agent</label><select value={goalForm.agentId||""} onChange={e=>setGoalForm(p=>({...p,agentId:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="all">All Team</option>{team.filter(u=>u.role!=="admin").map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Target (# of apps)</label><input type="number" value={goalForm.target||""} onChange={e=>setGoalForm(p=>({...p,target:e.target.value}))} style={inp} placeholder="e.g. 15"/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+<button onClick={()=>{setShowGoal(false);setGoalForm({})}} style={bO}>Cancel</button>
+<button onClick={()=>saveGoal({...goalForm})} style={bP}>Save Goal</button>
+</div></Mdl>}
+
 
 {/* MODALS */}
 {showAdd&&<Mdl onClose={()=>{setShowAdd(false);resetF()}} title={editId?"Edit Client":"Add New Client"}>
