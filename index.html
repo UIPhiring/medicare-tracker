@@ -188,6 +188,10 @@ const[showOverrides,setShowOverrides]=useState(null);
 const[calMonth,setCalMonth]=useState(()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),1)});
 const[calView,setCalView]=useState("month");
 const[showEvent,setShowEvent]=useState(false);const[eventForm,setEventForm]=useState({});const[events,setEvents]=useState([]);const[editEvent,setEditEvent]=useState(null);
+/* Reports */
+const[rptMonth,setRptMonth]=useState(()=>td().substring(0,7));const[rptAgent,setRptAgent]=useState("all");
+/* Reconciliation */
+const[reconRaw,setReconRaw]=useState("");const[reconParsed,setReconParsed]=useState([]);const[reconStep,setReconStep]=useState(1);const[reconCarrier,setReconCarrier]=useState("");const[reconHdr,setReconHdr]=useState([]);const[reconRows,setReconRows]=useState([]);const[reconMap,setReconMap]=useState({});const[reconMatches,setReconMatches]=useState([]);
 /* Scripts expand state */
 const[expandedScript,setExpandedScript]=useState(null);
 /* Leads */
@@ -326,6 +330,80 @@ if(revIdx+1>=revClients.length){setRevMode(false);
 if(revPass===1){flash("MARX done! "+t.active+" on book, "+t.inactive+" left, "+t.noEnroll+" didn't enroll, "+t.diffPlan+" diff plan");
 }else{flash("Payment check done! "+t.paid+" paid, "+t.active+" not yet, "+t.skipped+" skipped")}
 }else setRevIdx(revIdx+1)};
+
+/* Report generation */
+const genReport=(month,agentId)=>{
+const moLabel=new Date(month+"-01T00:00:00").toLocaleDateString("en-US",{month:"long",year:"numeric"});
+const aCl=agentId==="all"?cls:cls.filter(c=>c.agentId===agentId);
+const agentName=agentId==="all"?"All Agents":(team.find(u=>u.uid===agentId)?.displayName||"Unknown");
+const inForce=aCl.filter(c=>c.status==="active"||c.status==="paid");
+const newApps=aCl.filter(c=>c.applicationDate&&c.applicationDate.substring(0,7)===month);
+const inactive=aCl.filter(c=>c.status==="inactive"&&c.inactiveDate&&c.inactiveDate.substring(0,7)===month);
+const cb=aCl.filter(c=>c.status==="chargedBack"&&c.chargebackDate&&c.chargebackDate.substring(0,7)===month);
+const paid=aCl.filter(c=>c.status==="paid"&&c.paidDate&&c.paidDate.substring(0,7)===month);
+const totalComm=inForce.reduce((s,c)=>s+getComm(c),0);
+const paidComm=paid.reduce((s,c)=>s+getComm(c),0);
+const carBreak={};inForce.forEach(c=>{const cr=c.carrier||"Unknown";if(!carBreak[cr])carBreak[cr]={count:0,comm:0};carBreak[cr].count++;carBreak[cr].comm+=getComm(c)});
+const stBreak={};inForce.forEach(c=>{if(c.state)stBreak[c.state]=(stBreak[c.state]||0)+1});
+return{moLabel,agentName,total:aCl.filter(c=>c.status!=="heapArchived").length,inForce:inForce.length,newApps:newApps.length,lostCount:inactive.length,cbCount:cb.length,paidCount:paid.length,totalComm,paidComm,retention:inForce.length+inactive.length>0?((inForce.length/(inForce.length+inactive.length))*100).toFixed(1)+"%":"—",carBreak,stBreak,newAppsList:newApps,paidList:paid,lostList:inactive}
+};
+const printReport=(rpt)=>{
+const w=window.open("","_blank","width=800,height=600");
+const rows=(list,cols)=>list.map(c=>"<tr>"+cols.map(col=>"<td style='padding:6px 10px;border-bottom:1px solid #E2E8F0;font-size:12px'>"+col.fn(c)+"</td>").join("")+"</tr>").join("");
+const carRows=Object.entries(rpt.carBreak).sort((a,b)=>b[1].count-a[1].count).map(([cr,d])=>"<tr><td style='padding:6px 10px;border-bottom:1px solid #E2E8F0;font-size:12px;font-weight:600'>"+cr+"</td><td style='padding:6px 10px;border-bottom:1px solid #E2E8F0;font-size:12px'>"+d.count+"</td><td style='padding:6px 10px;border-bottom:1px solid #E2E8F0;font-size:12px;color:#22C55E'>$"+d.comm.toLocaleString()+"</td></tr>").join("");
+w.document.write(`<!DOCTYPE html><html><head><title>UIP Report - ${rpt.moLabel}</title><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',Arial,sans-serif}body{padding:40px;color:#0F172A}h1{font-size:24px;margin-bottom:4px}h2{font-size:16px;margin:24px 0 12px;color:#3B8FD9}table{width:100%;border-collapse:collapse;margin-bottom:16px}th{text-align:left;padding:8px 10px;background:#F1F5F9;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748B;border-bottom:2px solid #E2E8F0}.stat{display:inline-block;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px 20px;margin:4px;min-width:140px}.stat-val{font-size:24px;font-weight:800}.stat-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#64748B;margin-top:4px}@media print{body{padding:20px}}</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px"><div><h1>UIP Monthly Report</h1><div style="color:#64748B;font-size:14px">${rpt.moLabel} — ${rpt.agentName}</div></div><div style="text-align:right;font-size:11px;color:#94A3B8">Generated ${new Date().toLocaleDateString()}<br>United Insurance Professionals</div></div>
+<div style="margin-bottom:24px">
+<div class="stat"><div class="stat-val">${rpt.total}</div><div class="stat-lbl">Total Clients</div></div>
+<div class="stat"><div class="stat-val" style="color:#22C55E">${rpt.inForce}</div><div class="stat-lbl">In Force</div></div>
+<div class="stat"><div class="stat-val" style="color:#3B8FD9">${rpt.newApps}</div><div class="stat-lbl">New This Month</div></div>
+<div class="stat"><div class="stat-val" style="color:#3B8FD9">${rpt.paidCount}</div><div class="stat-lbl">Paid This Month</div></div>
+<div class="stat"><div class="stat-val" style="color:#EF4444">${rpt.lostCount}</div><div class="stat-lbl">Lost</div></div>
+<div class="stat"><div class="stat-val" style="color:#22C55E">$${rpt.totalComm.toLocaleString()}</div><div class="stat-lbl">Total Commission</div></div>
+<div class="stat"><div class="stat-val" style="color:#3B8FD9">$${rpt.paidComm.toLocaleString()}</div><div class="stat-lbl">Paid Commission</div></div>
+<div class="stat"><div class="stat-val">${rpt.retention}</div><div class="stat-lbl">Retention</div></div>
+</div>
+<h2>Carrier Breakdown</h2><table><tr><th>Carrier</th><th>Clients</th><th>Commission</th></tr>${carRows}</table>
+${rpt.newAppsList.length>0?`<h2>New Applications (${rpt.newApps})</h2><table><tr><th>Name</th><th>Carrier</th><th>Effective</th><th>Commission</th></tr>${rows(rpt.newAppsList,[{fn:c=>c.fullName},{fn:c=>c.carrier||"—"},{fn:c=>c.effectiveDate||"—"},{fn:c=>"$"+getComm(c).toLocaleString()}])}</table>`:""}
+${rpt.paidList.length>0?`<h2>Paid This Month (${rpt.paidCount})</h2><table><tr><th>Name</th><th>Carrier</th><th>Amount</th></tr>${rows(rpt.paidList,[{fn:c=>c.fullName},{fn:c=>c.carrier||"—"},{fn:c=>"$"+getComm(c).toLocaleString()}])}</table>`:""}
+${rpt.lostList.length>0?`<h2>Lost This Month (${rpt.lostCount})</h2><table><tr><th>Name</th><th>Carrier</th><th>Effective</th></tr>${rows(rpt.lostList,[{fn:c=>c.fullName},{fn:c=>c.carrier||"—"},{fn:c=>c.effectiveDate||"—"}])}</table>`:""}
+<div style="margin-top:40px;padding-top:16px;border-top:2px solid #E2E8F0;font-size:10px;color:#94A3B8;text-align:center">United Insurance Professionals — Confidential</div>
+</body></html>`);
+w.document.close();
+setTimeout(()=>w.print(),500);
+};
+
+/* Reconciliation */
+const parseRecon=()=>{
+const lines=reconRaw.trim().split("\n");if(lines.length<2){flash("Need header + data rows","error");return}
+const hdr=lines[0].split(/[,\t]/).map(h=>h.replace(/"/g,"").trim());
+const rows2=lines.slice(1).map(l=>{const vals=[];let cur="",inQ=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"')inQ=!inQ;else if((ch===","||ch==="\t")&&!inQ){vals.push(cur.trim());cur=""}else cur+=ch}vals.push(cur.trim());return vals});
+setReconHdr(hdr);setReconRows(rows2);const autoMap={};
+hdr.forEach((h,i)=>{const hl=h.toLowerCase();if(hl.includes("name")||hl.includes("member")||hl.includes("beneficiary"))autoMap[i]="name";else if(hl.includes("amount")||hl.includes("commission")||hl.includes("payment")||hl.includes("comp"))autoMap[i]="amount";else if(hl.includes("mbi")||hl.includes("hicn")||hl.includes("member id"))autoMap[i]="mbi";else if(hl.includes("effective")||hl.includes("eff date"))autoMap[i]="effectiveDate";else if(hl.includes("plan")||hl.includes("product"))autoMap[i]="plan"});
+setReconMap(autoMap);setReconStep(2);flash("Parsed "+rows2.length+" rows")
+};
+const matchRecon=()=>{
+const nameIdx=Object.entries(reconMap).find(([k,v])=>v==="name")?.[0];
+const amtIdx=Object.entries(reconMap).find(([k,v])=>v==="amount")?.[0];
+const mbiIdx=Object.entries(reconMap).find(([k,v])=>v==="mbi")?.[0];
+if(!nameIdx&&!mbiIdx){flash("Map at least Name or MBI","error");return}
+const matches=reconRows.map(row=>{const rName=(nameIdx!=null?row[nameIdx]:"").toLowerCase().replace(/[^a-z ]/g,"").trim();
+const rMbi=(mbiIdx!=null?row[mbiIdx]:"").replace(/[^A-Za-z0-9]/g,"").toUpperCase();
+const rAmt=amtIdx!=null?parseFloat(row[amtIdx].replace(/[^0-9.-]/g,""))||0:0;
+let match=null;let conf="none";
+if(rMbi){match=cls.find(c=>(c.mbiNumber||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase()===rMbi);if(match)conf="mbi"}
+if(!match&&rName){match=cls.find(c=>(c.fullName||"").toLowerCase().replace(/[^a-z ]/g,"").trim()===rName);if(match)conf="name"}
+if(!match&&rName){match=cls.find(c=>{const cn=(c.fullName||"").toLowerCase().replace(/[^a-z ]/g,"").trim().split(" ");const rn=rName.split(" ");return rn.length>=2&&cn.length>=2&&((cn[0]===rn[0]&&cn[cn.length-1]===rn[rn.length-1])||(cn[0]===rn[rn.length-1]&&cn[cn.length-1]===rn[0]))});if(match)conf="fuzzy"}
+const expected=match?getComm(match):0;const diff=match?rAmt-expected:0;
+return{row,rName:nameIdx!=null?row[nameIdx]:"—",rAmt,rMbi:mbiIdx!=null?row[mbiIdx]:"",match,conf,expected,diff}
+});
+setReconMatches(matches);setReconStep(3);
+const matched=matches.filter(m=>m.match).length;const unmatched=matches.length-matched;
+flash("Matched "+matched+", unmatched "+unmatched)
+};
+const applyRecon=async()=>{const toMark=reconMatches.filter(m=>m.match&&m.rAmt>0&&m.match.status==="active");
+const b=db.batch();toMark.forEach(m=>{b.update(db.collection("clients").doc(m.match.id),{status:"paid",paidDate:td(),commissionAmount:String(m.rAmt),activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:"status",detail:"Reconciled: paid $"+m.rAmt+" ("+reconCarrier+")"})})});
+await b.commit();flash("Marked "+toMark.length+" clients as paid!");setReconStep(1);setReconRaw("");setReconParsed([]);setReconMatches([])};
 
 /* Event functions */
 const saveEvent=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("events").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();d.agentId=d.agentId||cu.uid;await db.collection("events").add(d)}flash("Event saved!");setShowEvent(false);setEventForm({})};
@@ -532,7 +610,7 @@ return team.map(u=>{
 })},[isA,team,cls]);
 
 const myLeads=leads.filter(c=>isA||c.agentId===cu.uid);
-const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"}]:[])];
+const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"},...(isA?[{id:"reports",label:"Reports",ic:"\uD83D\uDCC4"},{id:"reconcile",label:"Reconcile",ic:"\uD83D\uDD04"}]:[]),...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"}]:[])];
 
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
 
@@ -1076,6 +1154,130 @@ return<div key={key} style={{background:"var(--card)",borderRadius:14,border:"1p
 </div>}
 </div>})}
 </div></div>)}
+</div>}
+
+
+{/* ═══ REPORTS TAB ═══ */}
+{tab==="reports"&&isA&&<div style={{animation:"slideUp .3s"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Monthly Reports</h1>
+<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+<input type="month" value={rptMonth} onChange={e=>setRptMonth(e.target.value)} style={{...inp,width:"auto"}}/>
+<select value={rptAgent} onChange={e=>setRptAgent(e.target.value)} style={{...inp,width:"auto",minWidth:160,cursor:"pointer"}}><option value="all">All Agents</option>{team.filter(u=>u.role!=="admin").map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}</select>
+<button onClick={()=>{const rpt=genReport(rptMonth,rptAgent);printReport(rpt)}} style={{...bP,display:"flex",alignItems:"center",gap:6}}>{"\uD83D\uDDA8\uFE0F Print / Save PDF"}</button>
+</div></div>
+
+{(()=>{const rpt=genReport(rptMonth,rptAgent);return<>
+<div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<Stat icon={"\uD83D\uDCCB"} value={rpt.total} label="Total Clients" s/>
+<Stat icon={"\u2705"} value={rpt.inForce} label="In Force" color="#22C55E" s/>
+<Stat icon={"\uD83C\uDD95"} value={rpt.newApps} label={"New in "+rpt.moLabel.split(" ")[0]} color="#3B8FD9" s/>
+<Stat icon={"\uD83D\uDCB0"} value={rpt.paidCount} label="Paid This Month" color="#3B8FD9" s/>
+<Stat icon={"\u274C"} value={rpt.lostCount} label="Lost" color="#EF4444" s/>
+<Stat icon={"\uD83D\uDCB5"} value={money(rpt.totalComm)} label="Total Commission" color="#22C55E" s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(rpt.paidComm)} label="Paid Commission" color="#3B8FD9" s/>
+<Stat icon={"\uD83D\uDCC8"} value={rpt.retention} label="Retention" s/>
+</div>
+
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
+<Crd title={"\uD83C\uDFE2 Carrier Breakdown"}><MT headers={["Carrier","Clients","Commission"]} rows={Object.entries(rpt.carBreak).sort((a,b)=>b[1].count-a[1].count).map(([cr,d])=>[<strong>{cr}</strong>,d.count,<strong style={{color:"#22C55E"}}>{money(d.comm)}</strong>])}/></Crd>
+<Crd title={"\uD83D\uDDFA\uFE0F State Breakdown"}>{Object.keys(rpt.stBreak).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(rpt.stBreak).sort((a,b)=>b[1]-a[1]).map(([s,n])=>[s,n])} color="#60A5FA"/>}</Crd>
+</div>
+
+{rpt.newAppsList.length>0&&<div style={{marginBottom:18}}><Crd title={"\uD83C\uDD95 New Applications ("+rpt.newApps+")"}><MT headers={["Name","Carrier","Plan","Effective","Commission"]} rows={rpt.newAppsList.map(c=>[<strong>{c.fullName}</strong>,c.carrier||"—",c.planName||"—",fmt(c.effectiveDate),<strong style={{color:"#22C55E"}}>{money(getComm(c))}</strong>])}/></Crd></div>}
+
+{rpt.paidList.length>0&&<div style={{marginBottom:18}}><Crd title={"\uD83D\uDCB0 Paid This Month ("+rpt.paidCount+")"}><MT headers={["Name","Carrier","Amount"]} rows={rpt.paidList.map(c=>[<strong>{c.fullName}</strong>,c.carrier||"—",<strong style={{color:"#22C55E"}}>{money(getComm(c))}</strong>])}/></Crd></div>}
+
+{rpt.lostList.length>0&&<div style={{marginBottom:18}}><Crd title={"\u274C Lost This Month ("+rpt.lostCount+")"}><MT headers={["Name","Carrier","Effective"]} rows={rpt.lostList.map(c=>[<strong>{c.fullName}</strong>,c.carrier||"—",fmt(c.effectiveDate)])}/></Crd></div>}
+</>})()}
+</div>}
+
+{/* ═══ RECONCILIATION TAB ═══ */}
+{tab==="reconcile"&&isA&&<div style={{animation:"slideUp .3s"}}>
+<div style={{marginBottom:20}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Commission Reconciliation</h1>
+<p style={{fontSize:13,color:"var(--t3)",marginTop:4}}>Upload a carrier commission statement (CSV) to match payments against your clients</p>
+</div>
+
+{reconStep===1&&<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:24}}>
+<div style={{marginBottom:16}}>
+<label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Carrier</label>
+<select value={reconCarrier} onChange={e=>setReconCarrier(e.target.value)} style={{...inp,width:"auto",minWidth:200,cursor:"pointer"}}><option value="">Select carrier...</option><option value="Humana">Humana</option><option value="CarePlus">CarePlus</option><option value="UnitedHealthcare">UnitedHealthcare</option><option value="Aetna">Aetna</option><option value="Devoted">Devoted</option><option value="Freedom">Freedom</option><option value="Wellcare">Wellcare</option><option value="Other">Other</option></select>
+</div>
+<div style={{marginBottom:16}}>
+<label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Paste CSV Data or Upload</label>
+<textarea value={reconRaw} onChange={e=>setReconRaw(e.target.value)} style={{...inp,minHeight:160,fontFamily:"monospace",fontSize:12}} placeholder={"Paste CSV data here...\n\nOr drag a .csv file onto this box\n\nExpected columns: Member Name, MBI/HICN, Commission Amount, Effective Date, Plan Name"}/>
+</div>
+<div style={{display:"flex",gap:10,alignItems:"center"}}>
+<input type="file" accept=".csv,.tsv,.txt" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{setReconRaw(ev.target.result)};r.readAsText(f)}} style={{fontSize:12}}/>
+<button onClick={parseRecon} disabled={!reconRaw.trim()||!reconCarrier} style={{...bP,opacity:reconRaw.trim()&&reconCarrier?1:.4}}>{"Parse \u2192"}</button>
+</div>
+</div>}
+
+{reconStep===2&&<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:24}}>
+<div style={{fontSize:16,fontWeight:800,marginBottom:16}}>{"Step 2: Map Columns ("+reconRows.length+" rows)"}</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10,marginBottom:20}}>
+{reconHdr.map((h,i)=><div key={i} style={{padding:12,background:"var(--hover)",borderRadius:10}}>
+<div style={{fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4}}>{h}</div>
+<select value={reconMap[i]||""} onChange={e=>{const nm={...reconMap};if(e.target.value)nm[i]=e.target.value;else delete nm[i];setReconMap(nm)}} style={{...inp,fontSize:12,cursor:"pointer"}}>
+<option value="">Skip</option>
+<option value="name">Member Name</option>
+<option value="mbi">MBI / HICN</option>
+<option value="amount">Commission Amount</option>
+<option value="effectiveDate">Effective Date</option>
+<option value="plan">Plan Name</option>
+</select>
+<div style={{fontSize:10,color:"var(--t3)",marginTop:4}}>{"e.g. "+reconRows[0]?.[i]}</div>
+</div>)}
+</div>
+<div style={{display:"flex",justifyContent:"space-between"}}>
+<button onClick={()=>{setReconStep(1)}} style={bO}>{"\u2190 Back"}</button>
+<button onClick={matchRecon} style={bP}>{"Match Clients \u2192"}</button>
+</div>
+</div>}
+
+{reconStep===3&&<div>
+<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<Stat icon={"\uD83D\uDCCB"} value={reconMatches.length} label="Statement Rows" s/>
+<Stat icon={"\u2705"} value={reconMatches.filter(m=>m.match).length} label="Matched" color="#22C55E" s/>
+<Stat icon={"\u274C"} value={reconMatches.filter(m=>!m.match).length} label="Unmatched" color="#EF4444" s/>
+<Stat icon={"\uD83D\uDCB5"} value={money(reconMatches.reduce((s,m)=>s+m.rAmt,0))} label="Statement Total" color="#3B8FD9" s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(reconMatches.filter(m=>m.match).reduce((s,m)=>s+m.rAmt,0))} label="Matched Total" color="#22C55E" s/>
+</div>
+
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden",marginBottom:18}}>
+<div style={{padding:"14px 18px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div style={{fontSize:15,fontWeight:800}}>{reconCarrier+" Reconciliation"}</div>
+<div style={{display:"flex",gap:8}}>
+<button onClick={()=>{setReconStep(1);setReconMatches([])}} style={{...bO,fontSize:12}}>{"\u2190 Start Over"}</button>
+<button onClick={applyRecon} style={{...bP,fontSize:12,background:"#22C55E"}}>{"\u2705 Mark "+reconMatches.filter(m=>m.match&&m.rAmt>0&&m.match.status==="active").length+" as Paid"}</button>
+</div>
+</div>
+<div style={{overflowX:"auto"}}>
+<table style={{width:"100%",borderCollapse:"collapse"}}>
+<thead><tr style={{background:"var(--hover)"}}>
+<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Status</th>
+<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Statement Name</th>
+<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Amount</th>
+<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Matched Client</th>
+<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Expected</th>
+<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Diff</th>
+<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Match Type</th>
+</tr></thead>
+<tbody>
+{reconMatches.map((m,i)=><tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
+<td style={{padding:"8px 12px"}}>{m.match?<span style={{color:"#22C55E",fontWeight:700}}>{"\u2705"}</span>:<span style={{color:"#EF4444",fontWeight:700}}>{"\u274C"}</span>}</td>
+<td style={{padding:"8px 12px",fontSize:13,fontWeight:600}}>{m.rName}</td>
+<td style={{padding:"8px 12px",fontSize:13,fontWeight:700,color:"#22C55E"}}>{money(m.rAmt)}</td>
+<td style={{padding:"8px 12px",fontSize:13}}>{m.match?<span style={{fontWeight:600}}>{m.match.fullName}</span>:<span style={{color:"var(--t3)",fontStyle:"italic"}}>No match</span>}</td>
+<td style={{padding:"8px 12px",fontSize:13}}>{m.match?money(m.expected):"—"}</td>
+<td style={{padding:"8px 12px",fontSize:13,fontWeight:700,color:m.diff>0?"#22C55E":m.diff<0?"#EF4444":"var(--t3)"}}>{m.match?(m.diff>0?"+":"")+money(m.diff):"—"}</td>
+<td style={{padding:"8px 12px"}}>{m.conf==="mbi"?<Badge color="#22C55E">MBI</Badge>:m.conf==="name"?<Badge color="#3B8FD9">Name</Badge>:m.conf==="fuzzy"?<Badge color="#F59E0B">Fuzzy</Badge>:<Badge color="#94A3B8">None</Badge>}</td>
+</tr>)}
+</tbody></table>
+</div>
+</div>
+</div>}
 </div>}
 
 </main>
