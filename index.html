@@ -156,6 +156,7 @@ const isA=isMaster;
 const canManage=canCreateRole(up?.role);
 
 const[dark,setDark]=useState(false);
+useEffect(()=>{if(dark)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");document.body.style.background="var(--bg)";document.body.style.color="var(--text)"},[dark]);
 const[sideOpen,setSideOpen]=useState(false);
 const[tab,setTab]=useState("dashboard");
 const[cls,setCls]=useState([]);
