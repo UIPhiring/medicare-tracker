@@ -191,7 +191,7 @@ const[showEvent,setShowEvent]=useState(false);const[eventForm,setEventForm]=useS
 /* Reports */
 const[rptMonth,setRptMonth]=useState(()=>td().substring(0,7));const[rptAgent,setRptAgent]=useState("all");
 /* Reconciliation */
-const[reconRaw,setReconRaw]=useState("");const[reconParsed,setReconParsed]=useState([]);const[reconStep,setReconStep]=useState(1);const[reconCarrier,setReconCarrier]=useState("");const[reconHdr,setReconHdr]=useState([]);const[reconRows,setReconRows]=useState([]);const[reconMap,setReconMap]=useState({});const[reconMatches,setReconMatches]=useState([]);
+const[reconRaw,setReconRaw]=useState("");const[reconStep,setReconStep]=useState(1);const[reconCarrier,setReconCarrier]=useState("");const[reconHdr,setReconHdr]=useState([]);const[reconRows,setReconRows]=useState([]);const[reconMap,setReconMap]=useState({});const[reconMatches,setReconMatches]=useState([]);const[reconSel,setReconSel]=useState(new Set());
 /* Scripts expand state */
 const[expandedScript,setExpandedScript]=useState(null);
 /* Leads */
@@ -373,37 +373,79 @@ w.document.close();
 setTimeout(()=>w.print(),500);
 };
 
-/* Reconciliation */
+/* Carrier Commissions */
 const parseRecon=()=>{
 const lines=reconRaw.trim().split("\n");if(lines.length<2){flash("Need header + data rows","error");return}
 const hdr=lines[0].split(/[,\t]/).map(h=>h.replace(/"/g,"").trim());
-const rows2=lines.slice(1).map(l=>{const vals=[];let cur="",inQ=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"')inQ=!inQ;else if((ch===","||ch==="\t")&&!inQ){vals.push(cur.trim());cur=""}else cur+=ch}vals.push(cur.trim());return vals});
+const rows2=lines.slice(1).map(l=>{const vals=[];let cur="",inQ=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"')inQ=!inQ;else if((ch===","||ch==="\t")&&!inQ){vals.push(cur.trim());cur=""}else cur+=ch}vals.push(cur.trim());return vals}).filter(r=>r.some(v=>v));
 setReconHdr(hdr);setReconRows(rows2);const autoMap={};
-hdr.forEach((h,i)=>{const hl=h.toLowerCase();if(hl.includes("name")||hl.includes("member")||hl.includes("beneficiary"))autoMap[i]="name";else if(hl.includes("amount")||hl.includes("commission")||hl.includes("payment")||hl.includes("comp"))autoMap[i]="amount";else if(hl.includes("mbi")||hl.includes("hicn")||hl.includes("member id"))autoMap[i]="mbi";else if(hl.includes("effective")||hl.includes("eff date"))autoMap[i]="effectiveDate";else if(hl.includes("plan")||hl.includes("product"))autoMap[i]="plan"});
+hdr.forEach((h,i)=>{const hl=h.toLowerCase();if(hl.includes("name")||hl.includes("member")||hl.includes("beneficiary")||hl.includes("insured"))autoMap[i]="name";else if(hl.includes("amount")||hl.includes("commission")||hl.includes("payment")||hl.includes("comp")||hl.includes("paid"))autoMap[i]="amount";else if(hl.includes("mbi")||hl.includes("hicn")||hl.includes("member id")||hl.includes("medicare"))autoMap[i]="mbi";else if(hl.includes("effective")||hl.includes("eff date"))autoMap[i]="effectiveDate";else if(hl.includes("plan")||hl.includes("product"))autoMap[i]="plan";else if(hl.includes("type")||hl.includes("transaction")||hl.includes("action"))autoMap[i]="txType"});
 setReconMap(autoMap);setReconStep(2);flash("Parsed "+rows2.length+" rows")
 };
+
 const matchRecon=()=>{
 const nameIdx=Object.entries(reconMap).find(([k,v])=>v==="name")?.[0];
 const amtIdx=Object.entries(reconMap).find(([k,v])=>v==="amount")?.[0];
 const mbiIdx=Object.entries(reconMap).find(([k,v])=>v==="mbi")?.[0];
+const txIdx=Object.entries(reconMap).find(([k,v])=>v==="txType")?.[0];
 if(!nameIdx&&!mbiIdx){flash("Map at least Name or MBI","error");return}
-const matches=reconRows.map(row=>{const rName=(nameIdx!=null?row[nameIdx]:"").toLowerCase().replace(/[^a-z ]/g,"").trim();
+/* Only match against my clients for this carrier */
+const myCls=cls.filter(c=>(!reconCarrier||!c.carrier||(c.carrier||"").toLowerCase().includes(reconCarrier.toLowerCase()))&&(isA||c.agentId===cu.uid));
+const matches=reconRows.map(row=>{
+const rName=(nameIdx!=null?row[nameIdx]:"").toLowerCase().replace(/[^a-z ]/g,"").trim();
 const rMbi=(mbiIdx!=null?row[mbiIdx]:"").replace(/[^A-Za-z0-9]/g,"").toUpperCase();
-const rAmt=amtIdx!=null?parseFloat(row[amtIdx].replace(/[^0-9.-]/g,""))||0:0;
+const rAmt=amtIdx!=null?parseFloat(row[amtIdx].replace(/[^0-9.\-]/g,""))||0:0;
+const rTx=(txIdx!=null?row[txIdx]:"").toLowerCase();
+/* Detect chargeback */
+const isCB=rAmt<0||rTx.includes("chargeback")||rTx.includes("clawback")||rTx.includes("reversal")||rTx.includes("recoup")||rTx.includes("refund");
+/* Match by MBI first, then exact name, then fuzzy name */
 let match=null;let conf="none";
-if(rMbi){match=cls.find(c=>(c.mbiNumber||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase()===rMbi);if(match)conf="mbi"}
-if(!match&&rName){match=cls.find(c=>(c.fullName||"").toLowerCase().replace(/[^a-z ]/g,"").trim()===rName);if(match)conf="name"}
-if(!match&&rName){match=cls.find(c=>{const cn=(c.fullName||"").toLowerCase().replace(/[^a-z ]/g,"").trim().split(" ");const rn=rName.split(" ");return rn.length>=2&&cn.length>=2&&((cn[0]===rn[0]&&cn[cn.length-1]===rn[rn.length-1])||(cn[0]===rn[rn.length-1]&&cn[cn.length-1]===rn[0]))});if(match)conf="fuzzy"}
-const expected=match?getComm(match):0;const diff=match?rAmt-expected:0;
-return{row,rName:nameIdx!=null?row[nameIdx]:"—",rAmt,rMbi:mbiIdx!=null?row[mbiIdx]:"",match,conf,expected,diff}
+if(rMbi){match=myCls.find(c=>(c.mbiNumber||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase()===rMbi);if(match)conf="mbi"}
+if(!match&&rName){match=myCls.find(c=>(c.fullName||"").toLowerCase().replace(/[^a-z ]/g,"").trim()===rName);if(match)conf="name"}
+if(!match&&rName){match=myCls.find(c=>{const cn=(c.fullName||"").toLowerCase().replace(/[^a-z ]/g,"").trim().split(" ");const rn=rName.split(" ");return rn.length>=2&&cn.length>=2&&((cn[0]===rn[0]&&cn[cn.length-1]===rn[rn.length-1])||(cn[0]===rn[rn.length-1]&&cn[cn.length-1]===rn[0]))});if(match)conf="fuzzy"}
+const expected=match?getComm(match):0;
+const absAmt=Math.abs(rAmt);
+let payType="unknown";
+if(isCB)payType="chargeback";
+else if(match&&absAmt>0&&Math.abs(absAmt-expected)<=1)payType="full";
+else if(match&&absAmt>0&&absAmt<expected)payType="partial";
+else if(match&&absAmt>0&&absAmt>expected)payType="overpay";
+else if(match&&absAmt>0)payType="full";
+else if(!match&&absAmt>0)payType="unmatched";
+return{row,rName:nameIdx!=null?row[nameIdx]:"—",rAmt,rMbi:mbiIdx!=null?row[mbiIdx]:"",match,conf,expected,payType,isCB,absAmt}
 });
+/* Find clients with this carrier NOT on statement (missing payments) */
+const matchedIds=new Set(matches.filter(m=>m.match).map(m=>m.match.id));
+const missing=myCls.filter(c=>(c.status==="active")&&!matchedIds.has(c.id));
 setReconMatches(matches);setReconStep(3);
-const matched=matches.filter(m=>m.match).length;const unmatched=matches.length-matched;
-flash("Matched "+matched+", unmatched "+unmatched)
+/* Auto-select full-payment matches */
+const autoSel=new Set();matches.forEach((m,i)=>{if(m.match&&(m.payType==="full"||m.payType==="partial"||m.payType==="overpay")&&!m.isCB)autoSel.add(i)});
+setReconSel(autoSel);
+const matched=matches.filter(m=>m.match).length;
+flash("Found "+matched+" matches, "+missing.length+" missing from statement")
 };
-const applyRecon=async()=>{const toMark=reconMatches.filter(m=>m.match&&m.rAmt>0&&m.match.status==="active");
-const b=db.batch();toMark.forEach(m=>{b.update(db.collection("clients").doc(m.match.id),{status:"paid",paidDate:td(),commissionAmount:String(m.rAmt),activityLog:firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:"status",detail:"Reconciled: paid $"+m.rAmt+" ("+reconCarrier+")"})})});
-await b.commit();flash("Marked "+toMark.length+" clients as paid!");setReconStep(1);setReconRaw("");setReconParsed([]);setReconMatches([])};
+
+const applyRecon=async()=>{
+const selected=reconMatches.filter((m,i)=>reconSel.has(i)&&m.match);
+if(selected.length===0){flash("Select at least one row","error");return}
+const b=db.batch();
+selected.forEach(m=>{
+const updates={};const logDetail=[];
+if(m.isCB){
+updates.status="chargedBack";updates.chargebackDate=td();updates.chargebackAmount=String(m.absAmt);
+logDetail.push("Chargeback: -$"+m.absAmt+" ("+reconCarrier+")");
+}else{
+updates.status="paid";updates.paidDate=td();updates.commissionAmount=String(m.absAmt);
+if(m.payType==="partial")logDetail.push("Paid by carrier (partial): $"+m.absAmt+" of $"+m.expected+" expected ("+reconCarrier+")");
+else if(m.payType==="overpay")logDetail.push("Paid by carrier: $"+m.absAmt+" (expected $"+m.expected+") ("+reconCarrier+")");
+else logDetail.push("Paid by carrier: $"+m.absAmt+" ("+reconCarrier+")");
+}
+updates.activityLog=firebase.firestore.FieldValue.arrayUnion({ts:new Date().toISOString(),user:up?.displayName||"System",action:"status",detail:logDetail[0]});
+b.update(db.collection("clients").doc(m.match.id),updates);
+});
+await b.commit();
+flash("Applied "+selected.length+" changes!");setReconStep(1);setReconRaw("");setReconMatches([]);setReconSel(new Set())
+};
 
 /* Event functions */
 const saveEvent=async(d)=>{if(d.id){const id=d.id;delete d.id;await db.collection("events").doc(id).update(d)}else{d.createdAt=firebase.firestore.FieldValue.serverTimestamp();d.agentId=d.agentId||cu.uid;await db.collection("events").add(d)}flash("Event saved!");setShowEvent(false);setEventForm({})};
@@ -610,7 +652,7 @@ return team.map(u=>{
 })},[isA,team,cls]);
 
 const myLeads=leads.filter(c=>isA||c.agentId===cu.uid);
-const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"},{id:"reports",label:"Reports",ic:"\uD83D\uDCC4"},{id:"reconcile",label:"Reconcile",ic:"\uD83D\uDD04"}]:[]),{sep:true},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"}];
+const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"},{id:"reports",label:"Reports",ic:"\uD83D\uDCC4"}]:[]),...(up?.role!=="heap"?[{id:"commissions",label:"Carrier Commissions",ic:"\uD83D\uDCB3"}]:[]),{sep:true},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"}];
 
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
 
@@ -1193,90 +1235,112 @@ return<div key={key} style={{background:"var(--card)",borderRadius:14,border:"1p
 </div>}
 
 {/* ═══ RECONCILIATION TAB ═══ */}
-{tab==="reconcile"&&isA&&<div style={{animation:"slideUp .3s"}}>
+{tab==="commissions"&&up?.role!=="heap"&&<div style={{animation:"slideUp .3s"}}>
 <div style={{marginBottom:20}}>
-<h1 style={{fontSize:24,fontWeight:800}}>Commission Reconciliation</h1>
-<p style={{fontSize:13,color:"var(--t3)",marginTop:4}}>Upload a carrier commission statement (CSV) to match payments against your clients</p>
+<h1 style={{fontSize:24,fontWeight:800}}>Carrier Commissions</h1>
+<p style={{fontSize:13,color:"var(--t3)",marginTop:4}}>Upload a carrier commission statement to verify payments, catch chargebacks, and flag discrepancies</p>
 </div>
 
 {reconStep===1&&<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:24}}>
 <div style={{marginBottom:16}}>
 <label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Carrier</label>
-<select value={reconCarrier} onChange={e=>setReconCarrier(e.target.value)} style={{...inp,width:"auto",minWidth:200,cursor:"pointer"}}><option value="">Select carrier...</option><option value="Humana">Humana</option><option value="CarePlus">CarePlus</option><option value="UnitedHealthcare">UnitedHealthcare</option><option value="Aetna">Aetna</option><option value="Devoted">Devoted</option><option value="Freedom">Freedom</option><option value="Wellcare">Wellcare</option><option value="Other">Other</option></select>
+<select value={reconCarrier} onChange={e=>setReconCarrier(e.target.value)} style={{...inp,width:"auto",minWidth:200,cursor:"pointer"}}><option value="">Select carrier...</option>{[...new Set(cls.filter(c=>c.carrier&&(isA||c.agentId===cu.uid)).map(c=>c.carrier))].sort().map(cr=><option key={cr} value={cr}>{cr}</option>)}</select>
 </div>
 <div style={{marginBottom:16}}>
-<label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Paste CSV Data or Upload</label>
-<textarea value={reconRaw} onChange={e=>setReconRaw(e.target.value)} style={{...inp,minHeight:160,fontFamily:"monospace",fontSize:12}} placeholder={"Paste CSV data here...\n\nOr drag a .csv file onto this box\n\nExpected columns: Member Name, MBI/HICN, Commission Amount, Effective Date, Plan Name"}/>
+<label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Paste CSV / Commission Statement</label>
+<textarea value={reconRaw} onChange={e=>setReconRaw(e.target.value)} style={{...inp,minHeight:160,fontFamily:"monospace",fontSize:12}} placeholder={"Paste your carrier commission statement here (CSV format)\n\nExpected columns: Member Name, MBI/HICN, Commission Amount\nOptional: Transaction Type, Effective Date, Plan Name\n\nYou can also upload a .csv file below"}/>
 </div>
-<div style={{display:"flex",gap:10,alignItems:"center"}}>
+<div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
 <input type="file" accept=".csv,.tsv,.txt" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{setReconRaw(ev.target.result)};r.readAsText(f)}} style={{fontSize:12}}/>
-<button onClick={parseRecon} disabled={!reconRaw.trim()||!reconCarrier} style={{...bP,opacity:reconRaw.trim()&&reconCarrier?1:.4}}>{"Parse \u2192"}</button>
+<div style={{flex:1}}/>
+<button onClick={parseRecon} disabled={!reconRaw.trim()||!reconCarrier} style={{...bP,opacity:reconRaw.trim()&&reconCarrier?1:.4}}>{"Parse Statement \u2192"}</button>
 </div>
 </div>}
 
 {reconStep===2&&<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:24}}>
-<div style={{fontSize:16,fontWeight:800,marginBottom:16}}>{"Step 2: Map Columns ("+reconRows.length+" rows)"}</div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10,marginBottom:20}}>
+<div style={{fontSize:16,fontWeight:800,marginBottom:4}}>Map Columns</div>
+<div style={{fontSize:12,color:"var(--t3)",marginBottom:16}}>{"Found "+reconRows.length+" rows. Map the columns so we know what\u2019s what."}</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:20}}>
 {reconHdr.map((h,i)=><div key={i} style={{padding:12,background:"var(--hover)",borderRadius:10}}>
-<div style={{fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4}}>{h}</div>
+<div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:4}}>{h}</div>
 <select value={reconMap[i]||""} onChange={e=>{const nm={...reconMap};if(e.target.value)nm[i]=e.target.value;else delete nm[i];setReconMap(nm)}} style={{...inp,fontSize:12,cursor:"pointer"}}>
 <option value="">Skip</option>
 <option value="name">Member Name</option>
 <option value="mbi">MBI / HICN</option>
 <option value="amount">Commission Amount</option>
+<option value="txType">Transaction Type</option>
 <option value="effectiveDate">Effective Date</option>
 <option value="plan">Plan Name</option>
 </select>
-<div style={{fontSize:10,color:"var(--t3)",marginTop:4}}>{"e.g. "+reconRows[0]?.[i]}</div>
+{reconRows[0]?.[i]&&<div style={{fontSize:10,color:"var(--t3)",marginTop:4,fontStyle:"italic"}}>{"e.g. \""+reconRows[0][i]+"\""}</div>}
 </div>)}
 </div>
 <div style={{display:"flex",justifyContent:"space-between"}}>
-<button onClick={()=>{setReconStep(1)}} style={bO}>{"\u2190 Back"}</button>
-<button onClick={matchRecon} style={bP}>{"Match Clients \u2192"}</button>
+<button onClick={()=>setReconStep(1)} style={bO}>{"\u2190 Back"}</button>
+<button onClick={matchRecon} style={bP}>{"Match to Clients \u2192"}</button>
 </div>
 </div>}
 
 {reconStep===3&&<div>
-<div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+{/* Summary stats */}
+<div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 <Stat icon={"\uD83D\uDCCB"} value={reconMatches.length} label="Statement Rows" s/>
-<Stat icon={"\u2705"} value={reconMatches.filter(m=>m.match).length} label="Matched" color="#22C55E" s/>
-<Stat icon={"\u274C"} value={reconMatches.filter(m=>!m.match).length} label="Unmatched" color="#EF4444" s/>
-<Stat icon={"\uD83D\uDCB5"} value={money(reconMatches.reduce((s,m)=>s+m.rAmt,0))} label="Statement Total" color="#3B8FD9" s/>
-<Stat icon={"\uD83D\uDCB0"} value={money(reconMatches.filter(m=>m.match).reduce((s,m)=>s+m.rAmt,0))} label="Matched Total" color="#22C55E" s/>
+<Stat icon={"\u2705"} value={reconMatches.filter(m=>m.match&&!m.isCB).length} label="Payments Matched" color="#22C55E" s/>
+<Stat icon={"\uD83D\uDD34"} value={reconMatches.filter(m=>m.isCB).length} label="Chargebacks" color="#EF4444" s/>
+<Stat icon={"\u2753"} value={reconMatches.filter(m=>!m.match).length} label="Unmatched" color="#F59E0B" s/>
+<Stat icon={"\uD83D\uDCB5"} value={money(reconMatches.filter(m=>!m.isCB).reduce((s,m)=>s+m.absAmt,0))} label="Total Payments" color="#22C55E" s/>
+<Stat icon={"\uD83D\uDCB8"} value={money(reconMatches.filter(m=>m.isCB).reduce((s,m)=>s+m.absAmt,0))} label="Total Chargebacks" color="#EF4444" s/>
+<Stat icon={"\u26A0\uFE0F"} value={reconMatches.filter(m=>m.payType==="partial").length} label="Partial Payments" color="#F59E0B" s/>
 </div>
 
-<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden",marginBottom:18}}>
-<div style={{padding:"14px 18px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-<div style={{fontSize:15,fontWeight:800}}>{reconCarrier+" Reconciliation"}</div>
+{/* Action bar */}
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:"14px 18px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+<div style={{display:"flex",alignItems:"center",gap:12}}>
+<span style={{fontSize:14,fontWeight:700}}>{reconSel.size+" of "+reconMatches.length+" selected"}</span>
+<button onClick={()=>{const all=new Set();reconMatches.forEach((m,i)=>{if(m.match)all.add(i)});setReconSel(all)}} style={{...bO,fontSize:11,padding:"4px 10px"}}>Select All Matched</button>
+<button onClick={()=>setReconSel(new Set())} style={{...bO,fontSize:11,padding:"4px 10px"}}>Deselect All</button>
+</div>
 <div style={{display:"flex",gap:8}}>
-<button onClick={()=>{setReconStep(1);setReconMatches([])}} style={{...bO,fontSize:12}}>{"\u2190 Start Over"}</button>
-<button onClick={applyRecon} style={{...bP,fontSize:12,background:"#22C55E"}}>{"\u2705 Mark "+reconMatches.filter(m=>m.match&&m.rAmt>0&&m.match.status==="active").length+" as Paid"}</button>
+<button onClick={()=>{setReconStep(1);setReconMatches([]);setReconSel(new Set())}} style={{...bO,fontSize:12}}>{"\u2190 Start Over"}</button>
+<button onClick={applyRecon} disabled={reconSel.size===0} style={{...bP,fontSize:12,background:"#22C55E",opacity:reconSel.size>0?1:.4}}>{"Apply "+reconSel.size+" Changes"}</button>
 </div>
 </div>
+
+{/* Results table */}
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden"}}>
 <div style={{overflowX:"auto"}}>
 <table style={{width:"100%",borderCollapse:"collapse"}}>
 <thead><tr style={{background:"var(--hover)"}}>
-<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Status</th>
-<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Statement Name</th>
-<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Amount</th>
-<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Matched Client</th>
-<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Expected</th>
-<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Diff</th>
-<th style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"var(--t3)",textTransform:"uppercase"}}>Match Type</th>
+<th style={{padding:"10px 8px",width:36}}><input type="checkbox" checked={reconSel.size===reconMatches.filter(m=>m.match).length&&reconSel.size>0} onChange={e=>{if(e.target.checked){const all=new Set();reconMatches.forEach((m,i)=>{if(m.match)all.add(i)});setReconSel(all)}else setReconSel(new Set())}}/></th>
+{["Status","Statement Name","Amount","Matched Client","Expected","Diff","Result","Match"].map(h=><th key={h} style={{padding:"10px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>)}
 </tr></thead>
 <tbody>
-{reconMatches.map((m,i)=><tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
-<td style={{padding:"8px 12px"}}>{m.match?<span style={{color:"#22C55E",fontWeight:700}}>{"\u2705"}</span>:<span style={{color:"#EF4444",fontWeight:700}}>{"\u274C"}</span>}</td>
-<td style={{padding:"8px 12px",fontSize:13,fontWeight:600}}>{m.rName}</td>
-<td style={{padding:"8px 12px",fontSize:13,fontWeight:700,color:"#22C55E"}}>{money(m.rAmt)}</td>
-<td style={{padding:"8px 12px",fontSize:13}}>{m.match?<span style={{fontWeight:600}}>{m.match.fullName}</span>:<span style={{color:"var(--t3)",fontStyle:"italic"}}>No match</span>}</td>
-<td style={{padding:"8px 12px",fontSize:13}}>{m.match?money(m.expected):"—"}</td>
-<td style={{padding:"8px 12px",fontSize:13,fontWeight:700,color:m.diff>0?"#22C55E":m.diff<0?"#EF4444":"var(--t3)"}}>{m.match?(m.diff>0?"+":"")+money(m.diff):"—"}</td>
-<td style={{padding:"8px 12px"}}>{m.conf==="mbi"?<Badge color="#22C55E">MBI</Badge>:m.conf==="name"?<Badge color="#3B8FD9">Name</Badge>:m.conf==="fuzzy"?<Badge color="#F59E0B">Fuzzy</Badge>:<Badge color="#94A3B8">None</Badge>}</td>
-</tr>)}
+{reconMatches.map((m,i)=>{
+const statusIcon=m.isCB?"\uD83D\uDD34":m.payType==="full"?"\u2705":m.payType==="partial"?"\u26A0\uFE0F":m.payType==="overpay"?"\uD83D\uDFE2":!m.match?"\u2753":"\u2754";
+const resultLabel=m.isCB?"Chargeback":m.payType==="full"?"Paid in Full":m.payType==="partial"?"Partial Payment":m.payType==="overpay"?"Overpayment":!m.match?"No Match":"Payment";
+const resultColor=m.isCB?"#EF4444":m.payType==="full"?"#22C55E":m.payType==="partial"?"#F59E0B":m.payType==="overpay"?"#3B8FD9":!m.match?"#94A3B8":"#22C55E";
+const diff=m.match&&!m.isCB?m.absAmt-m.expected:0;
+return<tr key={i} style={{borderBottom:"1px solid var(--border)",background:reconSel.has(i)?"#EFF6FF22":"transparent"}}>
+<td style={{padding:"8px",textAlign:"center"}}>{m.match?<input type="checkbox" checked={reconSel.has(i)} onChange={e=>{const ns=new Set(reconSel);if(e.target.checked)ns.add(i);else ns.delete(i);setReconSel(ns)}}/>:<span style={{color:"var(--t3)"}}>—</span>}</td>
+<td style={{padding:"8px 10px",fontSize:16,textAlign:"center"}}>{statusIcon}</td>
+<td style={{padding:"8px 10px",fontSize:13,fontWeight:600}}>{m.rName}</td>
+<td style={{padding:"8px 10px",fontSize:13,fontWeight:700,color:m.isCB?"#EF4444":"#22C55E"}}>{m.isCB?"-":""}{money(m.absAmt)}</td>
+<td style={{padding:"8px 10px",fontSize:13}}>{m.match?<span style={{fontWeight:600}}>{m.match.fullName}</span>:<span style={{color:"var(--t3)",fontStyle:"italic"}}>—</span>}</td>
+<td style={{padding:"8px 10px",fontSize:13}}>{m.match&&!m.isCB?money(m.expected):"—"}</td>
+<td style={{padding:"8px 10px",fontSize:13,fontWeight:700,color:diff>1?"#22C55E":diff<-1?"#EF4444":"var(--t3)"}}>{m.match&&!m.isCB?(diff>0?"+":"")+money(diff):"—"}</td>
+<td style={{padding:"8px 10px"}}><span style={{fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:6,background:resultColor+"18",color:resultColor}}>{resultLabel}{m.payType==="partial"?" ($"+m.absAmt+" of $"+m.expected+")":""}</span></td>
+<td style={{padding:"8px 10px"}}>{m.conf==="mbi"?<Badge color="#22C55E">MBI</Badge>:m.conf==="name"?<Badge color="#3B8FD9">Exact</Badge>:m.conf==="fuzzy"?<Badge color="#F59E0B">Fuzzy</Badge>:<Badge color="#94A3B8">None</Badge>}</td>
+</tr>})}
 </tbody></table>
-</div>
-</div>
+</div></div>
+
+{/* Missing from statement */}
+{(()=>{const matchedIds=new Set(reconMatches.filter(m=>m.match).map(m=>m.match.id));
+const myCls2=cls.filter(c=>c.status==="active"&&(!reconCarrier||!c.carrier||(c.carrier||"").toLowerCase().includes(reconCarrier.toLowerCase()))&&(isA||c.agentId===cu.uid));
+const missing=myCls2.filter(c=>!matchedIds.has(c.id));
+return missing.length>0?<div style={{marginTop:18}}><Crd title={"\uD83D\uDD73\uFE0F Missing from Statement ("+missing.length+")"} subtitle="Your active clients with this carrier who did NOT appear on the statement">
+<MT headers={["Name","MBI","Effective","Expected Commission"]} rows={missing.map(c=>[<strong>{c.fullName}</strong>,c.mbiNumber||"—",fmt(c.effectiveDate),<strong style={{color:"#F59E0B"}}>{money(getComm(c))}</strong>])}/>
+</Crd></div>:null})()}
 </div>}
 </div>}
 
