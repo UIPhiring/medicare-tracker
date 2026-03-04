@@ -316,7 +316,7 @@ const doBulk=async()=>{const pr=buildPrev().filter(c=>c.fullName?.trim());const 
 
 /* Quick Paste - auto-mapped sheet import */
 const qpDateFix=(d)=>{if(!d||d==="N/A")return"";const m=d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return m[3]+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0");return d};
-const QP_COLS=["applicationDate","effectiveDate","fullName","phone","dob","mailingAddress","zipCode","city","mbiNumber","electionPeriod","medicaidNumber","medicaidLevel","state","planName","carrier","previousCarrier","sunfireCode"];
+const QP_COLS=["applicationDate","effectiveDate","fullName","phone","email","dob","mailingAddress","zipCode","city","mbiNumber","electionPeriod","medicaidNumber","medicaidLevel","state","planName","carrier","previousCarrier","sunfireCode"];
 const parseQP=()=>{const lines=qpRaw.trim().split(/\n/).filter(l=>l.trim());const parsed=[];lines.forEach(line=>{const cols=line.split("\t");if(cols.length<3)return;const c={};QP_COLS.forEach((key,i)=>{let v=(cols[i]||"").trim();if(v==="N/A"||v==="n/a")v="";if(key==="applicationDate"||key==="effectiveDate"||key==="dob")v=qpDateFix(v);c[key]=v});if(c.fullName)parsed.push(c)});if(parsed.length===0){flash("No valid rows found","error");return}setQpParsed(parsed);setQpStep(2)};
 const doQP=async()=>{const b=db.batch();qpParsed.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:cu.uid,status:"active"});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:estTS(),user:up?.displayName||"System",action:"created",detail:"Quick paste import"}];b.set(ref,nc)});await b.commit();flash("Imported "+qpParsed.length+" clients!");setShowQP(false);setQpRaw("");setQpParsed([]);setQpStep(1)};
 
@@ -1981,9 +1981,9 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 {qpStep===1&&<div style={{padding:24}}>
 <div style={{padding:"10px 14px",borderRadius:8,background:"var(--hover)",border:"1px solid var(--border)",fontSize:12,color:"var(--t3)",marginBottom:12,lineHeight:1.6}}>
 {"Copy rows directly from your spreadsheet and paste below. Expected column order:"}<br/>
-{"App Date | Effective Date | Name | Phone | DOB | Address | Zip | City | MBI | Election Period | Medicaid # | Medicaid Level | State | Plan Name | Carrier | Prev Carrier | Sunfire Code"}
+{"App Date | Effective Date | Name | Phone | Email | DOB | Address | Zip | City | MBI | Election Period | Medicaid # | Medicaid Level | State | Plan Name | Carrier | Prev Carrier | Sunfire Code"}
 </div>
-<textarea value={qpRaw} onChange={e=>setQpRaw(e.target.value)} placeholder={"Paste rows here (no headers needed)...\n\nExample:\n03/04/2026\t03/01/2026\tLarry Grigsby\t615-574-1240\t12/02/1948\t4708 VOLUNTEER DR\t37013\tAntioch\t8VH7JM0QT49\tOEP\tN/A\tN/A\tTN\tHumana Total Complete\tHumana\tN/A\tsc3406xk"} style={{...inp,height:220,resize:"vertical",fontFamily:"monospace",fontSize:11,whiteSpace:"pre"}}/>
+<textarea value={qpRaw} onChange={e=>setQpRaw(e.target.value)} placeholder={"Paste rows here (no headers needed)...\n\nExample:\n03/04/2026\t03/01/2026\tLarry Grigsby\t615-574-1240\t\t12/02/1948\t4708 VOLUNTEER DR\t37013\tAntioch\t8VH7JM0QT49\tOEP\tN/A\tN/A\tTN\tHumana Total Complete\tHumana\tN/A\tsc3406xk"} style={{...inp,height:220,resize:"vertical",fontFamily:"monospace",fontSize:11,whiteSpace:"pre"}}/>
 </div>}
 {qpStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}>
 <div style={{padding:"10px 14px",borderRadius:8,background:"var(--alertGBg)",border:"1px solid var(--alertGBdr)",fontSize:13,marginBottom:14}}><strong style={{color:"#22C55E"}}>{qpParsed.length}</strong>{" clients parsed and ready to import"}</div>
@@ -2004,7 +2004,7 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 </div>}
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}>
 <button onClick={()=>{if(qpStep===1){setShowQP(false)}else setQpStep(1)}} style={bO}>{qpStep===1?"Cancel":"\u2190 Back"}</button>
-{qpStep===1&&<button onClick={parseQP} disabled={!qpRaw.trim()} style={{...bP,opacity:qpRaw.trim()?1:.4}}>{"Parse \u2192"}</button>}
+{qpStep===1&&<button onClick={parseQP} disabled={!qpRaw.trim()} style={{...bP,opacity:qpRaw.trim()?1:.4}}>{"Paste \u2192"}</button>}
 {qpStep===2&&<button onClick={doQP} style={bP}>{"Import "+qpParsed.length+" Clients"}</button>}
 </div>
 </Mdl>}
