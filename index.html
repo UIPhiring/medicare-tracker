@@ -156,6 +156,8 @@ const isA=isMaster;
 const canManage=canCreateRole(up?.role);
 
 const[dark,setDark]=useState(false);
+/* Session timeout - 30 min inactivity */
+useEffect(()=>{let timer;const reset=()=>{clearTimeout(timer);timer=setTimeout(()=>{auth.signOut();},30*60*1000)};const evts=["mousedown","keydown","scroll","touchstart","mousemove"];evts.forEach(e=>window.addEventListener(e,reset));reset();return()=>{clearTimeout(timer);evts.forEach(e=>window.removeEventListener(e,reset))}},[]);
 useEffect(()=>{if(dark)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");document.body.style.background="var(--bg)";document.body.style.color="var(--text)"},[dark]);
 const[sideOpen,setSideOpen]=useState(false);
 const[tab,setTab]=useState("dashboard");
@@ -228,6 +230,9 @@ useEffect(()=>{const un=db.collection("leads").onSnapshot(s=>setLeads(s.docs.map
 useEffect(()=>{const un=db.collection("carrierContacts").onSnapshot(s=>setContacts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 /* Load events */
 useEffect(()=>{const un=db.collection("events").onSnapshot(s=>setEvents(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
+/* Commission history */
+const[commHist,setCommHist]=useState([]);
+useEffect(()=>{const un=db.collection("commissionHistory").onSnapshot(s=>setCommHist(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 /* Load goals */
 useEffect(()=>{const un=db.collection("goals").onSnapshot(s=>setGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 
@@ -439,7 +444,7 @@ updates.status="chargedBack";updates.chargebackDate=td();updates.chargebackAmoun
 logDetail.push("Chargeback: -$"+m.absAmt+" ("+reconCarrier+")");
 }else{
 updates.status="paid";updates.paidDate=td();updates.commissionAmount=String(m.absAmt);
-if(m.payType==="partial")logDetail.push("Paid by carrier (partial): $"+m.absAmt+" of $"+m.expected+" expected ("+reconCarrier+")");
+if(m.payType==="partial")logDetail.push("Paid by carrier: $"+m.absAmt+" (expected $"+m.expected+") ("+reconCarrier+")");
 else if(m.payType==="overpay")logDetail.push("Paid by carrier: $"+m.absAmt+" (expected $"+m.expected+") ("+reconCarrier+")");
 else logDetail.push("Paid by carrier: $"+m.absAmt+" ("+reconCarrier+")");
 }
@@ -447,7 +452,34 @@ updates.activityLog=firebase.firestore.FieldValue.arrayUnion({ts:estTS(),user:up
 b.update(db.collection("clients").doc(m.match.id),updates);
 });
 await b.commit();
+/* Write commission history records */
+const hBatch=db.batch();
+selected.forEach(m=>{
+const ag=team.find(u=>u.uid===m.match.agentId);
+const agRole=ag?.role||"broker";
+const isHeap=agRole==="heap";
+if(m.isCB){
+/* Chargeback - same for broker and heap */
+hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:agRole,amount:-m.absAmt,type:"chargeback",expected:m.expected,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+}else if(isHeap){
+/* HEAP: write front-end payment at their FE rate */
+const feAmt=Number(ag?.heapFrontEnd)||0;
+const beAmt=Number(ag?.heapBackEnd)||0;
+hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:"heap",amount:feAmt,type:"heap_fe",heapBE:beAmt,effectiveDate:m.match.effectiveDate||"",expected:feAmt+beAmt,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+}else{
+/* Broker: paid in full */
+hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:"broker",amount:m.absAmt,type:"payment",expected:m.expected,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+}
+});
+await hBatch.commit();
 flash("Applied "+selected.length+" changes!");setReconStep(1);setReconRaw("");setReconMatches([]);setReconSel(new Set())
+};
+
+/* Pay HEAP backend */
+const payHeapBE=async(rec)=>{
+await db.collection("commissionHistory").doc(rec.id).update({type:"heap_full",bePaidDate:td()});
+await db.collection("commissionHistory").add({date:td(),carrier:rec.carrier,clientName:rec.clientName,clientId:rec.clientId,agentId:rec.agentId,agentRole:"heap",amount:rec.heapBE||0,type:"heap_be",expected:rec.expected,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+flash("Backend paid: $"+(rec.heapBE||0)+" for "+rec.clientName)
 };
 
 /* Event functions */
@@ -655,7 +687,7 @@ return team.map(u=>{
 })},[isA,team,cls]);
 
 const myLeads=leads.filter(c=>isA||c.agentId===cu.uid);
-const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"},{id:"reports",label:"Reports",ic:"\uD83D\uDCC4"}]:[]),...(up?.role!=="heap"?[{id:"commissions",label:"Carrier Commissions",ic:"\uD83D\uDCB3"}]:[]),{sep:true},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"}];
+const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"},{id:"reports",label:"Reports",ic:"\uD83D\uDCC4"}]:[]),...(up?.role!=="heap"?[{id:"commissions",label:"Carrier Commissions",ic:"\uD83D\uDCB3"}]:[]),...(up?.role!=="heap"?[{id:"mycommissions",label:"My Commissions",ic:"\uD83D\uDCB0"}]:[]),{sep:true},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"}];
 
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
 
@@ -1293,7 +1325,7 @@ return<div key={key} style={{background:"var(--card)",borderRadius:14,border:"1p
 <Stat icon={"\u2753"} value={reconMatches.filter(m=>!m.match).length} label="Unmatched" color="#F59E0B" s/>
 <Stat icon={"\uD83D\uDCB5"} value={money(reconMatches.filter(m=>!m.isCB).reduce((s,m)=>s+m.absAmt,0))} label="Total Payments" color="#22C55E" s/>
 <Stat icon={"\uD83D\uDCB8"} value={money(reconMatches.filter(m=>m.isCB).reduce((s,m)=>s+m.absAmt,0))} label="Total Chargebacks" color="#EF4444" s/>
-<Stat icon={"\u26A0\uFE0F"} value={reconMatches.filter(m=>m.payType==="partial").length} label="Partial Payments" color="#F59E0B" s/>
+<Stat icon={"\u26A0\uFE0F"} value={reconMatches.filter(m=>m.payType==="partial"||m.payType==="overpay").length} label="Amount Diff" color="#F59E0B" s/>
 </div>
 
 {/* Action bar */}
@@ -1319,9 +1351,9 @@ return<div key={key} style={{background:"var(--card)",borderRadius:14,border:"1p
 </tr></thead>
 <tbody>
 {reconMatches.map((m,i)=>{
-const statusIcon=m.isCB?"\uD83D\uDD34":m.payType==="full"?"\u2705":m.payType==="partial"?"\u26A0\uFE0F":m.payType==="overpay"?"\uD83D\uDFE2":!m.match?"\u2753":"\u2754";
-const resultLabel=m.isCB?"Chargeback":m.payType==="full"?"Paid in Full":m.payType==="partial"?"Partial Payment":m.payType==="overpay"?"Overpayment":!m.match?"No Match":"Payment";
-const resultColor=m.isCB?"#EF4444":m.payType==="full"?"#22C55E":m.payType==="partial"?"#F59E0B":m.payType==="overpay"?"#3B8FD9":!m.match?"#94A3B8":"#22C55E";
+const statusIcon=m.isCB?"\uD83D\uDD34":m.payType==="full"?"\u2705":m.payType==="partial"?"\u2705":m.payType==="overpay"?"\u2705":!m.match?"\u2753":"\u2705";
+const resultLabel=m.isCB?"Chargeback":m.payType==="full"?"Paid in Full":m.payType==="partial"?"Paid in Full":m.payType==="overpay"?"Paid in Full":!m.match?"No Match":"Paid in Full";
+const resultColor=m.isCB?"#EF4444":!m.match?"#94A3B8":"#22C55E";
 const diff=m.match&&!m.isCB?m.absAmt-m.expected:0;
 return<tr key={i} style={{borderBottom:"1px solid var(--border)",background:reconSel.has(i)?"var(--tabBg)":"transparent"}}>
 <td style={{padding:"8px",textAlign:"center"}}>{m.match?<input type="checkbox" checked={reconSel.has(i)} onChange={e=>{const ns=new Set(reconSel);if(e.target.checked)ns.add(i);else ns.delete(i);setReconSel(ns)}}/>:<span style={{color:"var(--t3)"}}>—</span>}</td>
@@ -1331,7 +1363,7 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)",background:reco
 <td style={{padding:"8px 10px",fontSize:13}}>{m.match?<span style={{fontWeight:600}}>{m.match.fullName}</span>:<span style={{color:"var(--t3)",fontStyle:"italic"}}>—</span>}</td>
 <td style={{padding:"8px 10px",fontSize:13}}>{m.match&&!m.isCB?money(m.expected):"—"}</td>
 <td style={{padding:"8px 10px",fontSize:13,fontWeight:700,color:diff>1?"#22C55E":diff<-1?"#EF4444":"var(--t3)"}}>{m.match&&!m.isCB?(diff>0?"+":"")+money(diff):"—"}</td>
-<td style={{padding:"8px 10px"}}><span style={{fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:6,background:resultColor+"18",color:resultColor}}>{resultLabel}{m.payType==="partial"?" ($"+m.absAmt+" of $"+m.expected+")":""}</span></td>
+<td style={{padding:"8px 10px"}}><span style={{fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:6,background:resultColor+"18",color:resultColor}}>{resultLabel}{"":""}</span></td>
 <td style={{padding:"8px 10px"}}>{m.conf==="mbi"?<Badge color="#22C55E">MBI</Badge>:m.conf==="name"?<Badge color="#3B8FD9">Exact</Badge>:m.conf==="fuzzy"?<Badge color="#F59E0B">Fuzzy</Badge>:<Badge color="#94A3B8">None</Badge>}</td>
 </tr>})}
 </tbody></table>
@@ -1345,6 +1377,68 @@ return missing.length>0?<div style={{marginTop:18}}><Crd title={"\uD83D\uDD73\uF
 <MT headers={["Name","MBI","Effective","Expected Commission"]} rows={missing.map(c=>[<strong>{c.fullName}</strong>,c.mbiNumber||"—",fmt(c.effectiveDate),<strong style={{color:"#F59E0B"}}>{money(getComm(c))}</strong>])}/>
 </Crd></div>:null})()}
 </div>}
+</div>}
+
+{/* ═══ MY COMMISSIONS TAB ═══ */}
+{tab==="mycommissions"&&<div style={{animation:"slideUp .3s"}}>
+<h1 style={{fontSize:24,fontWeight:800,marginBottom:6}}>My Commissions</h1>
+<p style={{fontSize:13,color:"var(--t3)",marginBottom:20}}>Your commission payments and chargebacks from carrier statements</p>
+
+{(()=>{
+const myHist=commHist.filter(h=>isA||h.agentId===cu.uid).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+const totalPaid=myHist.filter(h=>h.amount>0).reduce((s,h)=>s+h.amount,0);
+const totalCB=myHist.filter(h=>h.amount<0).reduce((s,h)=>s+Math.abs(h.amount),0);
+const netPay=totalPaid-totalCB;
+const pendingBE=myHist.filter(h=>h.type==="heap_fe").length;
+/* Group by date */
+const byDate={};myHist.forEach(h=>{const d=h.date||"Unknown";if(!byDate[d])byDate[d]=[];byDate[d].push(h)});
+
+return<>
+<div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<Stat icon={"\uD83D\uDCB5"} value={money(totalPaid)} label="Total Paid" color="#22C55E" s/>
+<Stat icon={"\uD83D\uDCB8"} value={money(totalCB)} label="Chargebacks" color="#EF4444" s/>
+<Stat icon={"\uD83D\uDCB0"} value={money(netPay)} label="Net Commission" color={netPay>=0?"#22C55E":"#EF4444"} s/>
+<Stat icon={"\uD83D\uDCCB"} value={myHist.length} label="Total Entries" s/>
+{pendingBE>0&&<Stat icon={"\u23F3"} value={pendingBE} label="Backend Pending" color="#F59E0B" s/>}
+</div>
+
+{myHist.length===0?<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:50,textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>{"\uD83D\uDCB3"}</div><div style={{fontSize:16,fontWeight:700,marginBottom:4}}>No commission records yet</div><div style={{fontSize:13,color:"var(--t3)"}}>Records appear here after your admin reconciles carrier commission statements</div></div>:
+
+<div style={{display:"flex",flexDirection:"column",gap:18}}>
+{Object.entries(byDate).map(([date,entries])=>{
+const datePaid=entries.filter(h=>h.amount>0).reduce((s,h)=>s+h.amount,0);
+const dateCB=entries.filter(h=>h.amount<0).reduce((s,h)=>s+Math.abs(h.amount),0);
+return<div key={date} style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",overflow:"hidden"}}>
+<div style={{padding:"14px 20px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+<div><div style={{fontSize:14,fontWeight:800}}>{fmt(date)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{entries.length+" entries"}</div></div>
+<div style={{display:"flex",gap:14,fontSize:12}}>
+{datePaid>0&&<span style={{fontWeight:700,color:"#22C55E"}}>{"+"+money(datePaid)}</span>}
+{dateCB>0&&<span style={{fontWeight:700,color:"#EF4444"}}>{"-"+money(dateCB)}</span>}
+</div>
+</div>
+<div style={{overflowX:"auto"}}>
+<table style={{width:"100%",borderCollapse:"collapse"}}>
+<thead><tr style={{background:"var(--hover)"}}>
+{["Carrier","Client","Type","Amount","Status",...(isA?["Action"]:[])].map(h=><th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.5}}>{h}</th>)}
+</tr></thead>
+<tbody>
+{entries.map((h,i)=>{
+const typeBadge=h.type==="chargeback"?<Badge color="#EF4444">Chargeback</Badge>:h.type==="heap_fe"?<Badge color="#F59E0B">Front End</Badge>:h.type==="heap_be"?<Badge color="#8B5CF6">Back End</Badge>:h.type==="heap_full"?<Badge color="#22C55E">Paid in Full</Badge>:<Badge color="#22C55E">Payment</Badge>;
+const statusLabel=h.type==="chargeback"?<span style={{fontSize:11,color:"#EF4444",fontWeight:600}}>Chargeback</span>:h.type==="heap_fe"?<span style={{fontSize:11,color:"#F59E0B",fontWeight:600}}>{"Paid FE \u2022 Backend Pending ($"+(h.heapBE||0)+")"}</span>:h.type==="heap_be"?<span style={{fontSize:11,color:"#8B5CF6",fontWeight:600}}>Backend Payment</span>:h.type==="heap_full"?<span style={{fontSize:11,color:"#22C55E",fontWeight:600}}>Paid in Full (FE+BE)</span>:<span style={{fontSize:11,color:"#22C55E",fontWeight:600}}>Paid in Full</span>;
+/* Check if HEAP BE is due (4+ months from effective) */
+const beDue=h.type==="heap_fe"&&h.effectiveDate&&heapMoPast(h.effectiveDate)>=4;
+return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
+<td style={{padding:"10px 14px",fontSize:13,fontWeight:600}}>{h.carrier||"\u2014"}</td>
+<td style={{padding:"10px 14px",fontSize:13}}>{h.clientName||"\u2014"}</td>
+<td style={{padding:"10px 14px"}}>{typeBadge}</td>
+<td style={{padding:"10px 14px",fontSize:14,fontWeight:700,color:h.amount<0?"#EF4444":"#22C55E"}}>{h.amount<0?"-":""}{money(Math.abs(h.amount))}</td>
+<td style={{padding:"10px 14px"}}>{statusLabel}</td>
+{isA&&<td style={{padding:"10px 14px"}}>{beDue&&<button onClick={()=>payHeapBE(h)} style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:"1px solid #8B5CF6",background:"#8B5CF610",color:"#8B5CF6",cursor:"pointer",fontWeight:700,fontFamily:"var(--font)"}}>{"Pay BE $"+(h.heapBE||0)}</button>}</td>}
+</tr>})}
+</tbody></table>
+</div></div>})}
+</div>}
+</>})()}
 </div>}
 
 </main>
