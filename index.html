@@ -1484,7 +1484,7 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)",background:reco
 <td style={{padding:"8px 10px",fontSize:13}}>{m.match?<span style={{fontWeight:600}}>{m.match.fullName}</span>:<span style={{color:"var(--t3)",fontStyle:"italic"}}>—</span>}</td>
 <td style={{padding:"8px 10px",fontSize:13}}>{m.match&&!m.isCB?money(m.expected):"—"}</td>
 <td style={{padding:"8px 10px",fontSize:13,fontWeight:700,color:diff>1?"#22C55E":diff<-1?"#EF4444":"var(--t3)"}}>{m.match&&!m.isCB?(diff>0?"+":"")+money(diff):"—"}</td>
-<td style={{padding:"8px 10px"}}><span style={{fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:6,background:resultColor+"18",color:resultColor}}>{resultLabel}{"":""}</span></td>
+<td style={{padding:"8px 10px"}}><span style={{fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:6,background:resultColor+"18",color:resultColor}}>{resultLabel}</span></td>
 <td style={{padding:"8px 10px"}}>{m.conf==="mbi"?<Badge color="#22C55E">MBI</Badge>:m.conf==="name"?<Badge color="#3B8FD9">Exact</Badge>:m.conf==="fuzzy"?<Badge color="#F59E0B">Fuzzy</Badge>:<Badge color="#94A3B8">None</Badge>}</td>
 </tr>})}
 </tbody></table>
