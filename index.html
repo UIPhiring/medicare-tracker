@@ -570,7 +570,7 @@ const totalProfit=myProdComm+admHP+admBrkProfit;
 /* All-site totals */
 const allClientsCount=cl.filter(c=>c.status!=="heapArchived").length;
 const today2=new Date();const todayStr=td();
-const bdays=cl.filter(c=>c.dob&&(c.status==="active"||c.status==="paid")).map(c=>{const d=new Date(c.dob+"T00:00:00");const bday=new Date(today2.getFullYear(),d.getMonth(),d.getDate());const diff=Math.floor((bday-today2)/(1000*60*60*24));const adj=diff<-14?diff+365:diff;return{...c,daysUntil:adj,bday:bday}}).filter(c=>c.daysUntil>=-1&&c.daysUntil<=30).sort((a,b)=>a.daysUntil-b.daysUntil);
+const bdays=cl.filter(c=>c.dob&&(c.status==="active"||c.status==="paid")).map(c=>{const d=new Date(c.dob+"T00:00:00");const bday=new Date(today2.getFullYear(),d.getMonth(),d.getDate());const todayMid=new Date(today2.getFullYear(),today2.getMonth(),today2.getDate());const diff=Math.round((bday-todayMid)/(1000*60*60*24));const adj=diff<-14?diff+365:diff;return{...c,daysUntil:adj,bday:bday}}).filter(c=>c.daysUntil>=-1&&c.daysUntil<=30).sort((a,b)=>a.daysUntil-b.daysUntil);
 const needsVerify=cl.filter(c=>(c.status==="active"||c.status==="paid")&&(!c.lastVerified||daysBtwn(c.lastVerified,todayStr)>=28)).length;
 const recentInactive=cl.filter(c=>c.status==="inactive"&&c.inactiveDate&&daysBtwn(c.inactiveDate,todayStr)<=14);
 const followUps=cl.filter(c=>(c.status==="active"||c.status==="paid"||c.status==="neverInEffect")&&c.activityLog&&c.activityLog.some(a=>a.action==="followup")).map(c=>{const last=c.activityLog.filter(a=>a.action==="followup").pop();return{...c,lastFollowUp:last?.ts,followNote:last?.detail}}).sort((a,b)=>(a.lastFollowUp||"").localeCompare(b.lastFollowUp||""));
