@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
@@ -238,7 +238,7 @@ const[commHist,setCommHist]=useState([]);
 useEffect(()=>{const un=db.collection("commissionHistory").onSnapshot(s=>setCommHist(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 /* Load personal goals + bulletin */
 useEffect(()=>{const un=db.collection("personalGoals").onSnapshot(s=>setPGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
-useEffect(()=>{const un=db.collection("bulletinPosts").orderBy("createdAt","desc").onSnapshot(s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))),e=>{const un2=db.collection("bulletinPosts").onSnapshot(s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un2()});return()=>un()},[]);
+useEffect(()=>{const un=db.collection("bulletinPosts").onSnapshot(s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 /* Load goals */
 useEffect(()=>{const un=db.collection("goals").onSnapshot(s=>setGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 
