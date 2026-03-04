@@ -572,7 +572,7 @@ const TEMPLATES=[
 const doMU=async()=>{if(!mf||!mv){flash("Select field and value","error");return}if(muSel.size===0){flash("Select at least one client","error");return}const targets=disp.filter(c=>muSel.has(c.id));const fl=FIELDS.find(f=>f.key===mf)?.label||mf;const b=db.batch();targets.forEach(c=>{b.update(db.collection("clients").doc(c.id),{[mf]:mv,activityLog:firebase.firestore.FieldValue.arrayUnion({ts:estTS(),user:up?.displayName||"System",action:"mass_update",detail:fl+": "+(c[mf]||"empty")+" \u2192 "+mv})})});await b.commit();flash("Updated "+targets.length+" clients!");setShowMU(false);setMf("");setMv("");setMuSel(new Set())};
 
 /* Reorder by pasted names */
-const parseReorder=()=>{const names=reoRaw.split("\n").map(n=>n.trim()).filter(Boolean);const matches=names.map(n=>{const found=disp.find(c=>c.fullName?.toLowerCase()===n.toLowerCase());return{name:n,matched:!!found,id:found?.id}});setReoMatches(matches);setReoStep(2)};
+const parseReorder=()=>{const mbis=reoRaw.split("\n").map(n=>n.trim()).filter(Boolean);const matches=mbis.map(m=>{const found=disp.find(c=>c.mbiNumber?.toLowerCase()===m.toLowerCase());return{name:found?.fullName||m,mbi:m,matched:!!found,id:found?.id}});setReoMatches(matches);setReoStep(2)};
 const applyReorder=async()=>{const matched=reoMatches.filter(m=>m.matched);const matchedIds=new Set(matched.map(m=>m.id));const ordered=[...matched.map(m=>disp.find(c=>c.id===m.id)),...disp.filter(c=>!matchedIds.has(c.id))];const b=db.batch();ordered.forEach((c,i)=>{if(c)b.update(db.collection("clients").doc(c.id),{sortOrder:i})});await b.commit();flash("Reordered "+matched.length+" clients!");setShowReorder(false);setReoRaw("");setReoStep(1)};
 
 /* Filters */
@@ -2135,7 +2135,7 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 
 {/* REORDER MODAL */}
 {showReorder&&<Mdl onClose={()=>setShowReorder(false)} width={600} title={"\uD83D\uDD00 Reorder Clients"} subtitle={"Step "+reoStep+" of 2"}>
-{reoStep===1&&<div style={{padding:24}}><div style={{fontSize:13,color:"var(--t2)",marginBottom:12}}>Paste a column of client names from your spreadsheet. Matched clients will be reordered to this sequence.</div><textarea value={reoRaw} onChange={e=>setReoRaw(e.target.value)} placeholder={"John Smith\nJane Doe\nBob Wilson\n..."} style={{...inp,height:200,resize:"vertical",fontFamily:"monospace",fontSize:12}}/></div>}
+{reoStep===1&&<div style={{padding:24}}><div style={{fontSize:13,color:"var(--t2)",marginBottom:12}}>Paste a column of MBI numbers from your spreadsheet. Matched clients will be reordered to this sequence.</div><textarea value={reoRaw} onChange={e=>setReoRaw(e.target.value)} placeholder={"8VH7JM0QT49\n4RK2NP8WX61\n7BM3HA9YZ22\n..."} style={{...inp,height:200,resize:"vertical",fontFamily:"monospace",fontSize:12}}/></div>}
 {reoStep===2&&<div style={{padding:24,maxHeight:"55vh",overflowY:"auto"}}>
 <div style={{display:"flex",gap:10,marginBottom:16}}>
 <div style={{padding:"8px 14px",borderRadius:8,background:"var(--alertGBg)",border:"1px solid var(--alertGBdr)",fontSize:13}}><strong style={{color:"#22C55E"}}>{reoMatches.filter(m=>m.matched).length}</strong>{" matched"}</div>
@@ -2143,7 +2143,8 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 </div>
 {reoMatches.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,background:m.matched?"var(--alertGBg)":"var(--alertRBg)",border:"1px solid "+(m.matched?"var(--alertGBdr)":"var(--alertRBdr)"),marginBottom:4}}>
 <span style={{fontSize:12,fontWeight:700,color:"var(--t3)",width:24}}>{i+1}</span>
-<span style={{fontSize:13,fontWeight:600,flex:1}}>{m.name}</span>
+<span style={{fontSize:12,fontFamily:"monospace",width:120}}>{m.mbi}</span>
+<span style={{fontSize:13,fontWeight:600,flex:1}}>{m.matched?m.name:"—"}</span>
 <span style={{fontSize:11,fontWeight:700,color:m.matched?"#22C55E":"#EF4444"}}>{m.matched?"\u2713 Matched":"\u2717 Not found"}</span>
 </div>)}
 </div>}
