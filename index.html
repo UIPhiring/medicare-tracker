@@ -31,6 +31,12 @@ input,select,textarea{font-family:var(--font)}
   .col-hide-mob{display:none!important}
 }
 @media(max-width:480px){.stat-card{min-width:100%!important}main{padding:8px!important}}
+
+@media(max-width:600px){
+.stat-grid{gap:8px !important}
+h1{font-size:22px !important}
+[style*="gridTemplateColumns"]{grid-template-columns:1fr !important}
+}
 </style>
 </head>
 <body>
@@ -212,6 +218,8 @@ const[goalSub,setGoalSub]=useState("production");
 const[badgeInc,setBadgeInc]=useState({});const[showBadgeInc,setShowBadgeInc]=useState(null);const[badgeIncVal,setBadgeIncVal]=useState("");
 const[announcedBadges,setAnnouncedBadges]=useState(null);const badgeCheckRef=React.useRef(false);
 const[customTraining,setCustomTraining]=useState(null);const[showTrainEdit,setShowTrainEdit]=useState(false);const[trainForm,setTrainForm]=useState({});const[editTrainId,setEditTrainId]=useState(null);
+const[customScripts,setCustomScripts]=useState(null);const[showScriptEdit,setShowScriptEdit]=useState(false);const[scriptForm,setScriptForm]=useState({});const[editScriptId,setEditScriptId]=useState(null);
+const[customTemplates,setCustomTemplates]=useState(null);const[showTmplEdit,setShowTmplEdit]=useState(false);const[tmplForm,setTmplForm]=useState({});const[editTmplId,setEditTmplId]=useState(null);
 const[showTree,setShowTree]=useState(false);
 
 const flash=(m,t="success")=>{setToast({m,t});setTimeout(()=>setToast(null),3e3)};
@@ -244,6 +252,10 @@ useEffect(()=>{const un=db.collection("commissionHistory").onSnapshot(s=>setComm
 useEffect(()=>{const un=db.collection("badgeIncentives").onSnapshot(s=>{const m={};s.docs.forEach(d=>m[d.id]=d.data());setBadgeInc(m)});return()=>un()},[]);
 /* Load custom training content */
 useEffect(()=>{const un=db.collection("trainingContent").orderBy("order").onSnapshot(s=>{setCustomTraining(s.docs.map(d=>({id:d.id,...d.data()})))},()=>{const un2=db.collection("trainingContent").onSnapshot(s=>{setCustomTraining(s.docs.map(d=>({id:d.id,...d.data()})))});return()=>un2()});return()=>un()},[]);
+/* Load custom templates */
+useEffect(()=>{const un=db.collection("templateContent").orderBy("order").onSnapshot(s=>{setCustomTemplates(s.docs.map(d=>({id:d.id,...d.data()})))},()=>{const un2=db.collection("templateContent").onSnapshot(s=>{setCustomTemplates(s.docs.map(d=>({id:d.id,...d.data()})))});return()=>un2()});return()=>un()},[]);
+/* Load custom scripts */
+useEffect(()=>{const un=db.collection("scriptContent").orderBy("order").onSnapshot(s=>{setCustomScripts(s.docs.map(d=>({id:d.id,...d.data()})))},()=>{const un2=db.collection("scriptContent").onSnapshot(s=>{setCustomScripts(s.docs.map(d=>({id:d.id,...d.data()})))});return()=>un2()});return()=>un()},[]);
 /* Load announced badges for current user */
 useEffect(()=>{const un=db.collection("earnedBadges").doc(cu.uid).onSnapshot(s=>{if(s.exists)setAnnouncedBadges(s.data().badges||[]);else setAnnouncedBadges([])});return()=>un()},[]);
 /* Auto-post new badge wins */
@@ -326,7 +338,12 @@ const doBulk=async()=>{const pr=buildPrev().filter(c=>c.fullName?.trim());const 
 const qpDateFix=(d)=>{if(!d||d==="N/A")return"";const m=d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return m[3]+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0");return d};
 const QP_COLS=["applicationDate","effectiveDate","fullName","phone","email","dob","mailingAddress","zipCode","city","mbiNumber","electionPeriod","medicaidNumber","medicaidLevel","state","planName","carrier","previousCarrier","sunfireCode"];
 const parseQP=()=>{const lines=qpRaw.trim().split(/\n/).filter(l=>l.trim());const parsed=[];lines.forEach(line=>{const cols=line.split("\t");if(cols.length<3)return;const c={};QP_COLS.forEach((key,i)=>{let v=(cols[i]||"").trim();if(v==="N/A"||v==="n/a")v="";if(key==="applicationDate"||key==="effectiveDate"||key==="dob")v=qpDateFix(v);c[key]=v});if(c.fullName)parsed.push(c)});if(parsed.length===0){flash("No valid rows found","error");return}setQpParsed(parsed);setQpStep(2)};
-const doQP=async()=>{const agId=qpAgent||cu.uid;const b=db.batch();qpParsed.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:agId,status:"active"});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:estTS(),user:up?.displayName||"System",action:"created",detail:"Quick paste import"}];b.set(ref,nc)});await b.commit();const agName=qpAgent?team.find(u=>u.uid===qpAgent)?.displayName||"agent":up?.displayName;flash("Imported "+qpParsed.length+" clients for "+agName+"!");setShowQP(false);setQpRaw("");setQpParsed([]);setQpStep(1);setQpAgent("")};
+const doQP=async()=>{const agId=qpAgent||cu.uid;
+/* Check for duplicate MBIs */
+const existingMBIs=new Set(cls.map(c=>(c.mbiNumber||"").toLowerCase()).filter(Boolean));
+const dupes=qpParsed.filter(c=>c.mbiNumber&&existingMBIs.has(c.mbiNumber.toLowerCase()));
+if(dupes.length>0){const names=dupes.map(c=>c.fullName).join(", ");if(!window.confirm(dupes.length+" duplicate MBI(s) found: "+names+". Import anyway?")){return}}
+const b=db.batch();qpParsed.forEach(c=>{const ref=db.collection("clients").doc();const nc=normClient({...c,agentId:agId,status:"active"});if(!nc.commissionAmount&&nc.effectiveDate&&up?.role!=="heap")nc.commissionAmount=String(calcInit(nc.effectiveDate,nc.electionPeriod));nc.createdAt=firebase.firestore.FieldValue.serverTimestamp();nc.activityLog=[{ts:estTS(),user:up?.displayName||"System",action:"created",detail:"Quick paste import"}];b.set(ref,nc)});await b.commit();const agName=qpAgent?team.find(u=>u.uid===qpAgent)?.displayName||"agent":up?.displayName;flash("Imported "+qpParsed.length+" clients for "+agName+"!");setShowQP(false);setQpRaw("");setQpParsed([]);setQpStep(1);setQpAgent("")};
 
 /* Deduplicate */
 const dedup=async()=>{const seen=new Map();const dupes=[];cls.forEach(c=>{const key=(c.fullName||"").toLowerCase()+"||"+(c.phone||"")+"||"+(c.effectiveDate||"")+"||"+(c.state||"")+"||"+(c.carrier||"");if(seen.has(key))dupes.push(c.id);else seen.set(key,c.id)});if(dupes.length===0){flash("No duplicates found");return}const b=db.batch();dupes.forEach(id=>b.delete(db.collection("clients").doc(id)));await b.commit();flash("Removed "+dupes.length+" duplicates!")};
@@ -532,6 +549,16 @@ const delTrainItem=async(id)=>{if(!window.confirm("Delete this training item?"))
 const seedTraining=async()=>{const b=db.batch();let order=0;TRAINING.forEach(section=>{section.items.forEach(item=>{const ref=db.collection("trainingContent").doc();b.set(ref,{cat:section.cat,title:item.title,desc:item.desc,content:item.content,order:order++})})});await b.commit();flash("Seeded "+order+" training items!")};
 /* Get training data — use Firestore if available, otherwise hardcoded */
 const getTraining=()=>{if(customTraining&&customTraining.length>0){const grouped={};customTraining.forEach(t=>{const cat=t.cat||"General";if(!grouped[cat])grouped[cat]=[];grouped[cat].push(t)});return Object.entries(grouped).map(([cat,items])=>({cat,items}))}return TRAINING};
+const saveScriptItem=async(d)=>{try{if(d.id){const id=d.id;delete d.id;await db.collection("scriptContent").doc(id).update(d)}else{d.order=customScripts?customScripts.length:0;await db.collection("scriptContent").add(d)}flash("Script saved!");setShowScriptEdit(false);setScriptForm({});setEditScriptId(null)}catch(e){flash("Error: "+e.message,"error")}};
+const delScriptItem=async(id)=>{if(!window.confirm("Delete this script?"))return;await db.collection("scriptContent").doc(id).delete();flash("Deleted")};
+const seedScripts=async()=>{const b=db.batch();let order=0;SCRIPTS.forEach(s=>{const ref=db.collection("scriptContent").doc();b.set(ref,{cat:s.cat,title:s.title,body:s.body,tips:s.tips||[],order:order++})});await b.commit();flash("Seeded "+order+" scripts!")};
+const getScripts=()=>{if(customScripts&&customScripts.length>0)return customScripts;return SCRIPTS};
+const getScriptCats=()=>[...new Set(getScripts().map(s=>s.cat))];
+const saveTmplItem=async(d)=>{try{if(d.id){const id=d.id;delete d.id;await db.collection("templateContent").doc(id).update(d)}else{d.order=customTemplates?customTemplates.length:0;await db.collection("templateContent").add(d)}flash("Template saved!");setShowTmplEdit(false);setTmplForm({});setEditTmplId(null)}catch(e){flash("Error: "+e.message,"error")}};
+const delTmplItem=async(id)=>{if(!window.confirm("Delete this template?"))return;await db.collection("templateContent").doc(id).delete();flash("Deleted")};
+const seedTemplates=async()=>{const b=db.batch();let order=0;TEMPLATES.forEach(t=>{const ref=db.collection("templateContent").doc();b.set(ref,{cat:t.cat,title:t.title,body:t.body,order:order++})});await b.commit();flash("Seeded "+order+" templates!")};
+const getTemplates=()=>{if(customTemplates&&customTemplates.length>0)return customTemplates;return TEMPLATES};
+const getTmplCats=()=>[...new Set(getTemplates().map(t=>t.cat))];
 const TRAINING=[
 {cat:"Getting Started",items:[
 {title:"Medicare Basics 101",desc:"Understanding Parts A, B, C, D and how they work together",content:"**Medicare Parts:**\n\n**Part A (Hospital):** Covers inpatient hospital, skilled nursing, hospice. Most people don't pay a premium.\n\n**Part B (Medical):** Covers doctor visits, outpatient, preventive. Standard premium ~$185/mo (2026).\n\n**Part C (Medicare Advantage):** Private plans that bundle A+B, usually include D. Can have $0 premiums and extra benefits (dental, vision, hearing, OTC).\n\n**Part D (Prescription):** Standalone drug plans. Required if not in an MA plan with drug coverage.\n\n**Medigap/Supplement:** Fills gaps in Original Medicare. Can't have with MA plan."},
@@ -867,7 +894,12 @@ return(
 {ana.recentInactive.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--alertRBg)",borderRadius:10,border:"1px solid var(--alertRBdr)"}}><span style={{fontSize:18}}>{"\u26A0\uFE0F"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"var(--alertRTxt)"}}>{ana.recentInactive.length+" clients recently went inactive"}</div><div style={{fontSize:11,color:"var(--alertRSub)"}}>In the last 14 days</div></div></div>}
 {ana.followUps.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--alertBBg)",borderRadius:10,border:"1px solid var(--alertBBdr)"}}><span style={{fontSize:18}}>{"\uD83D\uDD14"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"var(--alertBTxt)"}}>{ana.followUps.length+" follow-ups tagged"}</div><div style={{fontSize:11,color:"var(--alertBSub)"}}>Clients with pending follow-up notes</div></div></div>}
 {ana.bdays.length>0&&<div style={{padding:"10px 14px",background:"var(--alertGBg)",borderRadius:10,border:"1px solid var(--alertGBdr)"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:18}}>{"\uD83C\uDF82"}</span><div style={{fontSize:13,fontWeight:700,color:"var(--alertGTxt)"}}>{"Upcoming Birthdays ("+ana.bdays.length+")"}</div></div>
-<div style={{display:"flex",flexDirection:"column",gap:4}}>{ana.bdays.slice(0,5).map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12}}><span style={{fontWeight:600}}>{c.fullName}</span><span style={{color:c.daysUntil<=0?"#22C55E":c.daysUntil<=7?"#F59E0B":"var(--t3)",fontWeight:700}}>{c.daysUntil<=0?"Today!":c.daysUntil===1?"Tomorrow":c.daysUntil+" days"}</span></div>)}{ana.bdays.length>5&&<div style={{fontSize:11,color:"var(--t3)",marginTop:4}}>{"+"+(ana.bdays.length-5)+" more..."}</div>}</div></div>}
+<div style={{display:"flex",flexDirection:"column",gap:6}}>{ana.bdays.slice(0,8).map(c=>{const bd=c.dob?new Date(c.dob+"T12:00:00"):null;const bdStr=bd?((bd.getMonth()+1)+"/"+bd.getDate()):"";return<div key={c.id} style={{display:"flex",alignItems:"center",gap:10,fontSize:12,padding:"6px 10px",borderRadius:8,background:c.daysUntil<=0?"#22C55E10":c.daysUntil<=3?"#F59E0B10":"transparent"}}>
+<span style={{fontWeight:700,minWidth:50,color:c.daysUntil<=0?"#22C55E":c.daysUntil<=7?"#F59E0B":"var(--t3)"}}>{c.daysUntil<=0?"Today!":c.daysUntil===1?"Tmrw":c.daysUntil+"d"}</span>
+<span style={{fontWeight:600,flex:1}}>{c.fullName}</span>
+<span style={{color:"var(--t3)",fontSize:11}}>{bdStr}</span>
+<button onClick={()=>{const msg="Happy Birthday "+c.fullName+"! \uD83C\uDF82 Wishing you a wonderful year ahead. If you ever have questions about your coverage, don\u2019t hesitate to reach out!";navigator.clipboard.writeText(msg);flash("Birthday msg copied!")}} style={{background:"none",border:"1px solid var(--border)",borderRadius:6,cursor:"pointer",fontSize:10,padding:"3px 8px",color:"var(--t3)",fontFamily:"var(--font)"}}>{"\uD83D\uDCCB Msg"}</button>
+</div>})}{ana.bdays.length>8&&<div style={{fontSize:11,color:"var(--t3)",marginTop:4}}>{"+"+(ana.bdays.length-8)+" more..."}</div>}</div></div>}
 </div></div>}
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(340px,100%),1fr))",gap:18}}>
 <Crd title={"\uD83C\uDFE2 Carrier Production"}>{Object.keys(ana.carS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(ana.carS).sort((a,b)=>b[1].total-a[1].total).map(([c2,s])=>[c2,s.total])}/>}</Crd>
@@ -1137,17 +1169,44 @@ stageLds.map(l=><div key={l.id} onClick={()=>setViewLead(l)} style={{padding:"10
 
 {/* ═══ TEMPLATES TAB ═══ */}
 {tab==="templates"&&<div style={{animation:"slideUp .3s"}}>
-<h1 style={{fontSize:24,fontWeight:800,marginBottom:20}}>Message Templates</h1>
-{["Welcome","Birthday","Renewal","Follow-Up","Retention"].map(cat=><div key={cat} style={{marginBottom:24}}>
-<div style={{fontSize:16,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>{cat==="Welcome"?"\uD83D\uDC4B":cat==="Birthday"?"\uD83C\uDF82":cat==="Renewal"?"\uD83D\uDD04":cat==="Follow-Up"?"\uD83D\uDD14":"\uD83D\uDEE1\uFE0F"}{" "+cat}</div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Message Templates</h1>
+{isA&&<div style={{display:"flex",gap:8}}>
+{(!customTemplates||customTemplates.length===0)&&<button onClick={seedTemplates} style={bO}>{"\uD83C\uDF31 Seed Defaults"}</button>}
+<button onClick={()=>{setTmplForm({cat:"",title:"",body:""});setEditTmplId(null);setShowTmplEdit(true)}} style={bP}>+ Add Template</button>
+</div>}
+</div>
+{getTmplCats().map(cat=><div key={cat} style={{marginBottom:24}}>
+<div style={{fontSize:16,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>{cat==="Welcome"?"\uD83D\uDC4B":cat==="Birthday"?"\uD83C\uDF82":cat==="Renewal"?"\uD83D\uDD04":cat==="Follow-Up"?"\uD83D\uDD14":cat==="Retention"?"\uD83D\uDEE1\uFE0F":"\uD83D\uDCE8"}{" "+cat}</div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(350px,100%),1fr))",gap:12}}>
-{TEMPLATES.filter(t2=>t2.cat===cat).map((t2,i)=><div key={i} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",padding:16}}>
+{getTemplates().filter(t2=>t2.cat===cat).map((t2,i)=><div key={t2.id||i} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",padding:16}}>
 <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>{t2.title}</div>
 <div style={{fontSize:12,color:"var(--t2)",lineHeight:1.5,marginBottom:12,whiteSpace:"pre-wrap"}}>{t2.body}</div>
+<div style={{display:"flex",gap:8}}>
 <button onClick={()=>{navigator.clipboard.writeText(t2.body);flash("Copied!")}} style={{...bO,fontSize:11,padding:"6px 12px"}}>{"\uD83D\uDCCB Copy"}</button>
+{isA&&t2.id&&<button onClick={()=>{setTmplForm({cat:t2.cat,title:t2.title,body:t2.body});setEditTmplId(t2.id);setShowTmplEdit(true)}} style={{...bO,fontSize:11,padding:"6px 12px"}}>{"\u270F\uFE0F Edit"}</button>}
+{isA&&t2.id&&<button onClick={()=>delTmplItem(t2.id)} style={{...bO,fontSize:11,padding:"6px 12px",color:"#EF4444",borderColor:"#EF4444"}}>{"\uD83D\uDDD1\uFE0F"}</button>}
+</div>
 </div>)}
 </div></div>)}
 </div>}
+
+{showTmplEdit&&<Mdl onClose={()=>{setShowTmplEdit(false);setTmplForm({});setEditTmplId(null)}} width={600} title={editTmplId?"Edit Template":"Add Template"}>
+<div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Category</label>
+<input value={tmplForm.cat||""} onChange={e=>setTmplForm(p=>({...p,cat:e.target.value}))} style={inp} placeholder="e.g. Welcome, Birthday, Follow-Up" list="tmpl-cats"/>
+<datalist id="tmpl-cats">{getTmplCats().map(c=><option key={c} value={c}/>)}</datalist></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Title</label>
+<input value={tmplForm.title||""} onChange={e=>setTmplForm(p=>({...p,title:e.target.value}))} style={inp} placeholder="e.g. New Client Welcome"/></div>
+</div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Message Body</label>
+<textarea value={tmplForm.body||""} onChange={e=>setTmplForm(p=>({...p,body:e.target.value}))} style={{...inp,minHeight:180,fontSize:12,lineHeight:1.6}} placeholder="Use {name}, {agent}, {carrier}, {effective} as placeholders"/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+<button onClick={()=>{setShowTmplEdit(false);setTmplForm({});setEditTmplId(null)}} style={bO}>Cancel</button>
+<button onClick={()=>{if(!tmplForm.cat||!tmplForm.title){flash("Category and title required","error");return}saveTmplItem({...tmplForm,id:editTmplId||undefined})}} style={bP}>{editTmplId?"Save Changes":"Add Template"}</button>
+</div></Mdl>}
 
 {/* ═══ CARRIER DIRECTORY TAB ═══ */}
 {tab==="directory"&&<div style={{animation:"slideUp .3s"}}>
@@ -1594,12 +1653,18 @@ return<div style={{background:"var(--card)",borderRadius:14,border:"1px solid va
 
 {/* ═══ SCRIPTS TAB ═══ */}
 {tab==="scripts"&&<div style={{animation:"slideUp .3s"}}>
-<h1 style={{fontSize:24,fontWeight:800,marginBottom:6}}>Scripts & Objection Handlers</h1>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap",gap:10}}>
+<h1 style={{fontSize:24,fontWeight:800}}>Scripts & Objection Handlers</h1>
+{isA&&<div style={{display:"flex",gap:8}}>
+{(!customScripts||customScripts.length===0)&&<button onClick={seedScripts} style={bO}>{"\uD83C\uDF31 Seed Defaults"}</button>}
+<button onClick={()=>{setScriptForm({cat:"",title:"",body:"",tips:[]});setEditScriptId(null);setShowScriptEdit(true)}} style={bP}>+ Add Script</button>
+</div>}
+</div>
 <p style={{fontSize:13,color:"var(--t3)",marginBottom:20}}>Tap any script to expand. Customize with your name and details.</p>
-{["Opening","Needs Analysis","Closing","Objection","Compliance"].map(cat=><div key={cat} style={{marginBottom:24}}>
-<div style={{fontSize:16,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>{cat==="Opening"?"\uD83D\uDCDE":cat==="Needs Analysis"?"\uD83D\uDD0D":cat==="Closing"?"\u2705":cat==="Objection"?"\uD83D\uDEE1\uFE0F":"\uD83D\uDCCB"}{" "+cat}</div>
+{getScriptCats().map(cat=><div key={cat} style={{marginBottom:24}}>
+<div style={{fontSize:16,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>{cat==="Opening"?"\uD83D\uDCDE":cat==="Needs Analysis"?"\uD83D\uDD0D":cat==="Closing"?"\u2705":cat==="Objection"?"\uD83D\uDEE1\uFE0F":cat==="Compliance"?"\uD83D\uDCCB":"\uD83D\uDCDC"}{" "+cat}</div>
 <div style={{display:"flex",flexDirection:"column",gap:10}}>
-{SCRIPTS.filter(s=>s.cat===cat).map((s,i)=>{const key=cat+"-"+i;const isExp=expandedScript===key;
+{getScripts().filter(s=>s.cat===cat).map((s,i)=>{const key=(s.id||cat+"-"+i);const isExp=expandedScript===key;
 return<div key={key} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",overflow:"hidden",transition:"all .2s"}}>
 <div onClick={()=>setExpandedScript(isExp?null:key)} style={{padding:"14px 18px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
 <div style={{fontSize:14,fontWeight:700}}>{s.title}</div>
@@ -1612,13 +1677,35 @@ return<div key={key} style={{background:"var(--card)",borderRadius:12,border:"1p
 {s.tips.map((tip,ti)=><div key={ti} style={{fontSize:12,color:"var(--t2)",padding:"4px 0",paddingLeft:16,position:"relative"}}>
 <span style={{position:"absolute",left:0,color:"#22C55E"}}>{"•"}</span>{tip}</div>)}
 </div>}
-<div style={{marginTop:12}}>
+<div style={{marginTop:12,display:"flex",gap:8}}>
 <button onClick={()=>{navigator.clipboard.writeText(s.body);flash("Script copied!")}} style={{...bO,fontSize:11,padding:"6px 12px"}}>{"\uD83D\uDCCB Copy Script"}</button>
+{isA&&s.id&&<button onClick={(e)=>{e.stopPropagation();setScriptForm({cat:s.cat,title:s.title,body:s.body,tips:s.tips||[]});setEditScriptId(s.id);setShowScriptEdit(true)}} style={{...bO,fontSize:11,padding:"6px 12px"}}>{"\u270F\uFE0F Edit"}</button>}
+{isA&&s.id&&<button onClick={(e)=>{e.stopPropagation();delScriptItem(s.id)}} style={{...bO,fontSize:11,padding:"6px 12px",color:"#EF4444",borderColor:"#EF4444"}}>{"\uD83D\uDDD1\uFE0F Delete"}</button>}
 </div>
 </div>}
 </div>})}
 </div></div>)}
 </div>}
+
+{showScriptEdit&&<Mdl onClose={()=>{setShowScriptEdit(false);setScriptForm({});setEditScriptId(null)}} width={700} title={editScriptId?"Edit Script":"Add Script"}>
+<div style={{padding:24,display:"flex",flexDirection:"column",gap:14}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Category</label>
+<input value={scriptForm.cat||""} onChange={e=>setScriptForm(p=>({...p,cat:e.target.value}))} style={inp} placeholder="e.g. Opening, Closing, Objection" list="script-cats"/>
+<datalist id="script-cats">{getScriptCats().map(c=><option key={c} value={c}/>)}</datalist>
+</div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Title</label>
+<input value={scriptForm.title||""} onChange={e=>setScriptForm(p=>({...p,title:e.target.value}))} style={inp} placeholder="e.g. Cold Call Opener"/></div>
+</div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Script Body</label>
+<textarea value={scriptForm.body||""} onChange={e=>setScriptForm(p=>({...p,body:e.target.value}))} style={{...inp,minHeight:200,fontFamily:"monospace",fontSize:12,lineHeight:1.6}} placeholder="Write the full script here. Use {agent}, {name}, {carrier}, {effective} as placeholders."/></div>
+<div><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase"}}>Tips (one per line)</label>
+<textarea value={(scriptForm.tips||[]).join("\n")} onChange={e=>setScriptForm(p=>({...p,tips:e.target.value.split("\n")}))} style={{...inp,minHeight:100,fontSize:12,lineHeight:1.6}} placeholder={"Sound natural, not scripted\nPause after asking\nLeave a business card"}/></div>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+<button onClick={()=>{setShowScriptEdit(false);setScriptForm({});setEditScriptId(null)}} style={bO}>Cancel</button>
+<button onClick={()=>{if(!scriptForm.cat||!scriptForm.title){flash("Category and title required","error");return}saveScriptItem({...scriptForm,tips:(scriptForm.tips||[]).filter(t=>t.trim()),id:editScriptId||undefined})}} style={bP}>{editScriptId?"Save Changes":"Add Script"}</button>
+</div></Mdl>}
 
 {/* ═══ TRAINING TAB ═══ */}
 {tab==="training"&&<div style={{animation:"slideUp .3s"}}>
