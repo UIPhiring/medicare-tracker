@@ -165,7 +165,7 @@ const[dark,setDark]=useState(false);
 /* Session timeout - 30 min inactivity */
 useEffect(()=>{let timer;const reset=()=>{clearTimeout(timer);timer=setTimeout(()=>{auth.signOut();},30*60*1000)};const evts=["mousedown","keydown","scroll","touchstart","mousemove"];evts.forEach(e=>window.addEventListener(e,reset));reset();return()=>{clearTimeout(timer);evts.forEach(e=>window.removeEventListener(e,reset))}},[]);
 useEffect(()=>{if(dark)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");document.body.style.background="var(--bg)";document.body.style.color="var(--text)"},[dark]);
-const[sideOpen,setSideOpen]=useState(false);
+const[sideOpen,setSideOpen]=useState(false);const[showAddMenu,setShowAddMenu]=useState(false);
 const[tab,setTab]=useState("dashboard");
 const[cls,setCls]=useState([]);
 const[team,setTeam]=useState([]);
@@ -842,14 +842,15 @@ return(
 </div>
 <div className="hdr-btns" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
 <button onClick={()=>setDark(!dark)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:4}}>{dark?"\u2600\uFE0F":"\uD83C\uDF19"}</button>
-<button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCCB Import"}</button>
-<button onClick={()=>{setQpRaw("");setQpParsed([]);setQpStep(1);setQpAgent("");setShowQP(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDCE5 Quick Paste"}</button>
-{isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83E\uDDF9 Dedup"}</button>}
-<button onClick={()=>startReview(1)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#8B5CF6",color:"#8B5CF6"}}>{"\uD83D\uDD0D MARX"}</button>
-<button onClick={()=>startReview(2)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDCB0 Payments"}</button>
-<button onClick={()=>{setMuSel(new Set(disp.map(c=>c.id)));setMf("");setMv("");setShowMU(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\u26A1"}</button>
-<button onClick={()=>{setReoRaw("");setReoStep(1);setShowReorder(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDD00"}</button>
-<button onClick={()=>{resetF();setShowAdd(true)}} style={{...bP,fontSize:12,padding:"8px 14px"}}>+ Add</button>
+<button onClick={()=>startReview(1)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:ana.needsVerify>0?"#EF4444":"#8B5CF6",color:ana.needsVerify>0?"#EF4444":"#8B5CF6",position:"relative"}}>{"\uD83D\uDD0D Month Check"}{ana.needsVerify>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#EF4444",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"50%",width:16,height:16,display:"flex",alignItems:"center",justifyContent:"center"}}>{ana.needsVerify>9?"!":ana.needsVerify}</span>}</button>
+<div style={{position:"relative"}}>
+<button onClick={()=>setShowAddMenu(!showAddMenu)} style={{...bP,fontSize:12,padding:"8px 14px"}}>+ Add</button>
+{showAddMenu&&<div style={{position:"absolute",top:"100%",right:0,marginTop:4,background:"var(--card)",borderRadius:10,border:"1px solid var(--border)",boxShadow:"0 8px 24px rgba(0,0,0,.15)",zIndex:100,minWidth:180,overflow:"hidden"}}>
+<button onClick={()=>{resetF();setShowAdd(true);setShowAddMenu(false)}} style={{display:"block",width:"100%",padding:"12px 16px",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:600,textAlign:"left",color:"var(--text)"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>{"\uD83D\uDC64 Add Client"}</button>
+<button onClick={()=>{setQpRaw("");setQpParsed([]);setQpStep(1);setQpAgent("");setShowQP(true);setShowAddMenu(false)}} style={{display:"block",width:"100%",padding:"12px 16px",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:600,textAlign:"left",color:"var(--text)"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>{"\uD83D\uDCE5 Quick Paste"}</button>
+<button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true);setShowAddMenu(false)}} style={{display:"block",width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:600,textAlign:"left",color:"var(--text)"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>{"\uD83D\uDCCB Import"}</button>
+</div>}
+</div>
 </div></header>
 
 {/* SIDEBAR */}
@@ -897,7 +898,7 @@ return(
 <div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:18,marginBottom:20}}>
 <div style={{fontSize:15,fontWeight:800,marginBottom:14}}>{"\uD83D\uDD14 Reminders & Alerts"}</div>
 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-{ana.needsVerify>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--alertYBg)",borderRadius:10,border:"1px solid var(--alertYBdr)"}}><span style={{fontSize:18}}>{"\uD83D\uDD0D"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"var(--alertYTxt)"}}>{ana.needsVerify+" clients need MARX verification"}</div><div style={{fontSize:11,color:"var(--alertYSub)"}}>Last checked 28+ days ago</div></div><button onClick={()=>startReview(1)} style={{...bO,fontSize:11,padding:"6px 12px",borderColor:"var(--alertYTxt)",color:"var(--alertYTxt)"}}>Start MARX</button></div>}
+{ana.needsVerify>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--alertYBg)",borderRadius:10,border:"1px solid var(--alertYBdr)"}}><span style={{fontSize:18}}>{"\uD83D\uDD0D"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"var(--alertYTxt)"}}>{ana.needsVerify+" clients need monthly verification"}</div><div style={{fontSize:11,color:"var(--alertYSub)"}}>Last checked 28+ days ago</div></div><button onClick={()=>startReview(1)} style={{...bO,fontSize:11,padding:"6px 12px",borderColor:"var(--alertYTxt)",color:"var(--alertYTxt)"}}>Start Check</button></div>}
 {ana.recentInactive.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--alertRBg)",borderRadius:10,border:"1px solid var(--alertRBdr)"}}><span style={{fontSize:18}}>{"\u26A0\uFE0F"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"var(--alertRTxt)"}}>{ana.recentInactive.length+" clients recently went inactive"}</div><div style={{fontSize:11,color:"var(--alertRSub)"}}>In the last 14 days</div></div></div>}
 {ana.followUps.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--alertBBg)",borderRadius:10,border:"1px solid var(--alertBBdr)"}}><span style={{fontSize:18}}>{"\uD83D\uDD14"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"var(--alertBTxt)"}}>{ana.followUps.length+" follow-ups tagged"}</div><div style={{fontSize:11,color:"var(--alertBSub)"}}>Clients with pending follow-up notes</div></div></div>}
 {ana.bdays.length>0&&<div style={{padding:"10px 14px",background:"var(--alertGBg)",borderRadius:10,border:"1px solid var(--alertGBdr)"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:18}}>{"\uD83C\uDF82"}</span><div style={{fontSize:13,fontWeight:700,color:"var(--alertGTxt)"}}>{"Upcoming Birthdays ("+ana.bdays.length+")"}</div></div>
@@ -918,7 +919,7 @@ return(
 <div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
 <div><h1 style={{fontSize:24,fontWeight:800}}>Book of Business</h1><p style={{fontSize:13,color:"var(--t3)"}}>{book.length+" active clients"}</p></div>
 <div style={{display:"flex",gap:8}}>
-<button onClick={()=>startReview(1)} style={{padding:"10px 18px",borderRadius:10,border:"2px solid #8B5CF6",background:"#8B5CF610",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:700,color:"#8B5CF6"}}>{"\uD83D\uDD0D Step 1: MARX Check"}</button>
+<button onClick={()=>startReview(1)} style={{padding:"10px 18px",borderRadius:10,border:"2px solid #8B5CF6",background:"#8B5CF610",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:700,color:"#8B5CF6"}}>{"\uD83D\uDD0D Step 1: Month Check"}</button>
 <button onClick={()=>startReview(2)} style={{padding:"10px 18px",borderRadius:10,border:"2px solid #3B8FD9",background:"#3B8FD910",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:700,color:"#3B8FD9"}}>{"\uD83D\uDCB0 Step 2: Payment Check"}</button>
 </div>
 </div>
@@ -2311,7 +2312,7 @@ return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:
 {/* Progress bar */}
 <div style={{height:4,background:"var(--border)"}}><div style={{height:"100%",background:revPass===1?"#8B5CF6":"#3B8FD9",width:pct2+"%",transition:"width .3s"}}/></div>
 <div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-<div><div style={{fontSize:18,fontWeight:800}}>{revPass===1?"\uD83D\uDD0D MARX Check":"\uD83D\uDCB0 Payment Check"}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{(revIdx+1)+" of "+revClients.length}</div></div>
+<div><div style={{fontSize:18,fontWeight:800}}>{revPass===1?"\uD83D\uDD0D Month Check":"\uD83D\uDCB0 Payment Check"}</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{(revIdx+1)+" of "+revClients.length}</div></div>
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
 <div style={{display:"flex",gap:6,fontSize:11}}>
 {revPass===1?<>
