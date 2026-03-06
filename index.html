@@ -176,6 +176,7 @@ const[ld,setLd]=useState(true);
 const[toast,setToast]=useState(null);
 const[form,setForm]=useState({});
 const[showAdd,setShowAdd]=useState(false);
+const[showEnrollPaste,setShowEnrollPaste]=useState(false);const[enrollRaw,setEnrollRaw]=useState("");
 const[editId,setEditId]=useState(null);
 const[vc,setVc]=useState(null);const[vcNote,setVcNote]=useState("");const[vcLogType,setVcLogType]=useState("note");
 const[search,setSearch]=useState("");
@@ -329,6 +330,55 @@ const upd=async(id,u)=>db.collection("clients").doc(id).update(u);
 const logAct=async(id,action,detail)=>{await db.collection("clients").doc(id).update({activityLog:firebase.firestore.FieldValue.arrayUnion({ts:estTS(),user:up?.displayName||"System",action,detail:detail||""})})};
 const fmtTs=ts=>{if(!ts)return"";const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})};
 const resetF=()=>{setForm({});setEditId(null)};
+
+/* Parse Enrollment Confirmation Paste */
+const parseEnrollment=(txt)=>{
+const g=(pattern,flags)=>{const m=txt.match(new RegExp(pattern,flags||"i"));return m?m[1]?.trim():""};
+const gl=(label)=>{const m=txt.match(new RegExp(label+"\\s*\\n([^\\n]+)","i"));return m?m[1]?.trim():""};
+const firstName=gl("First name")||"";
+const lastName=gl("Last name")||"";
+const fullName=(firstName+" "+lastName).trim();
+const dob=gl("Date of birth")||"";
+const phone=gl("Phone")||gl("Phone number")||"";
+const mbi=gl("Medicare number")||gl("MBI")||"";
+/* Address parsing */
+const addrM=txt.match(/Residential Address\s*\n([^\n]+)/i);
+let mailingAddress="",city="",state="",zipCode="";
+if(addrM){const raw=addrM[1].trim();const parts=raw.split(",").map(s=>s.trim());
+const lastP=parts[parts.length-1];const szM=lastP.match(/([A-Z]{2})\s+(\d{5})/);
+if(szM){state=szM[1];zipCode=szM[2]}
+if(parts.length>=3){mailingAddress=parts[0];city=parts[1]}
+else if(parts.length===2){mailingAddress=parts[0]}
+else{mailingAddress=raw}}
+/* Plan & carrier */
+const planM=txt.match(/Plan[:\s]*([^\n]+(?:HMO|PPO|PFFS|SNP|PDP)[^\n]*)/i);
+const planName=planM?planM[1].trim().replace(/^Plan[:\s]*/i,""):"";
+const carriers=["Humana","UnitedHealthcare","Aetna","WellCare","Cigna","Devoted Health","Freedom Health","CarePlus","Molina","CareSource","Zing Health","Anthem","Blue Cross Blue Shield","Clover Health","Oscar Health","Centene","Alignment Health","Kaiser Permanente","Optimum HealthCare","Peoples Health"];
+let carrier="";for(const c of carriers){if(txt.toLowerCase().includes(c.toLowerCase())){carrier=c;break}}
+/* Dates */
+const effM=txt.match(/Proposed effective date\s*\n([^\n]+)/i)||txt.match(/effective date[:\s]*([^\n]+)/i);
+const effectiveDate=effM?effM[1].trim():"";
+const appDateM=txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
+const applicationDate=appDateM?appDateM[1]:"";
+/* Election period */
+const epM=txt.match(/Election period\s*\n([^\n]+)/i);
+const electionPeriod=epM?epM[1].trim().toUpperCase():"";
+/* Sunfire/enrollment code */
+const codeM=txt.match(/Enrollment code[:\s]*([A-Za-z0-9]+)/i);
+const sunfireCode=codeM?codeM[1]:"";
+/* Medicaid */
+const medicaidM=txt.match(/enrolled in your state Medicaid[^\n]*\n(Yes|No)/i);
+const hasMedicaid=medicaidM&&medicaidM[1].toLowerCase()==="yes";
+/* Plan type detection */
+let planType="";const pnl=planName.toLowerCase();
+if(pnl.includes("d-snp")||pnl.includes("dsnp"))planType="DSNP";
+else if(pnl.includes("c-snp")||pnl.includes("csnp"))planType="CSNP";
+else if(pnl.includes("pdp"))planType="PDP";
+else if(pnl.includes("hmo")||pnl.includes("ppo")||pnl.includes("pffs"))planType="MAPD";
+/* Date formatting helper */
+const fmtD=(d)=>{if(!d)return"";const m=d.match(/(\d{2})\/(\d{2})\/(\d{4})/);return m?m[3]+"-"+m[1]+"-"+m[2]:d};
+return{fullName,phone,email:"",dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,carrier,planName,planType,sunfireCode,medicaidLevel:hasMedicaid?"QMB":"N/A",medicaidNumber:"",hospitalIndemnity:"",previousCarrier:""}
+};
 const openEd=c=>{setForm({...c});setEditId(c.id);setShowAdd(true)};
 const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);if(editId){logAct(editId,"edited","Client details updated")}flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
 
@@ -861,6 +911,7 @@ return(
 <button onClick={()=>setShowAddMenu(!showAddMenu)} style={{...bP,fontSize:12,padding:"8px 14px"}}>+ Add</button>
 {showAddMenu&&<div style={{position:"absolute",top:"100%",right:0,marginTop:4,background:"var(--card)",borderRadius:10,border:"1px solid var(--border)",boxShadow:"0 8px 24px rgba(0,0,0,.15)",zIndex:100,minWidth:180,overflow:"hidden"}}>
 <button onClick={()=>{resetF();setShowAdd(true);setShowAddMenu(false)}} style={{display:"block",width:"100%",padding:"12px 16px",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:600,textAlign:"left",color:"var(--text)"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>{"\uD83D\uDC64 Add Client"}</button>
+<button onClick={()=>{setEnrollRaw("");setShowEnrollPaste(true);setShowAddMenu(false)}} style={{display:"block",width:"100%",padding:"12px 16px",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:600,textAlign:"left",color:"var(--text)"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>{"\uD83D\uDCCB Paste Enrollment"}</button>
 <button onClick={()=>{setQpRaw("");setQpParsed([]);setQpStep(1);setQpAgent("");setShowQP(true);setShowAddMenu(false)}} style={{display:"block",width:"100%",padding:"12px 16px",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:600,textAlign:"left",color:"var(--text)"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>{"\uD83D\uDCE5 Quick Paste"}</button>
 <button onClick={()=>{setBRaw("");setBStep(1);setShowBulk(true);setShowAddMenu(false)}} style={{display:"block",width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font)",fontSize:13,fontWeight:600,textAlign:"left",color:"var(--text)"}} onMouseEnter={e=>{e.currentTarget.style.background="var(--hover)"}} onMouseLeave={e=>{e.currentTarget.style.background="none"}}>{"\uD83D\uDCCB Import"}</button>
 </div>}
@@ -2274,6 +2325,15 @@ else{return[{l:"Initial Commission",v:money(getComm(vc)),c:"#22C55E"},{l:"Residu
 {bStep===3&&<div style={{padding:24}}><div style={{padding:"8px 14px",borderRadius:8,background:"var(--alertGBg)",border:"1px solid var(--alertGBdr)",fontSize:13}}><strong style={{color:"#22C55E"}}>{buildPrev().filter(c=>c.fullName?.trim()).length}</strong>{" ready to import"}</div></div>}
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}><button onClick={()=>{if(bStep===1)setShowBulk(false);else setBStep(s=>s-1)}} style={bO}>{bStep===1?"Cancel":"\u2190 Back"}</button>{bStep===1&&<button onClick={parseBulk} disabled={!bRaw.trim()} style={{...bP,opacity:bRaw.trim()?1:.4}}>{"Parse \u2192"}</button>}{bStep===2&&<button onClick={()=>{if(!Object.values(bMap).includes("fullName")){flash("Map Full Name","error");return}setBStep(3)}} style={bP}>{"Preview \u2192"}</button>}{bStep===3&&<button onClick={doBulk} style={bP}>{"Import "+buildPrev().filter(c=>c.fullName?.trim()).length}</button>}</div>
 </Mdl>}
+
+{showEnrollPaste&&<Mdl onClose={()=>setShowEnrollPaste(false)} width={800} title={"\uD83D\uDCCB Paste Enrollment"} subtitle="Paste a Sunfire or carrier enrollment confirmation">
+<div style={{padding:24}}>
+<textarea value={enrollRaw} onChange={e=>setEnrollRaw(e.target.value)} placeholder={"Paste the full enrollment confirmation here...\n\nSupports Sunfire, EnrollHere, and most carrier enrollment confirmations.\nThe system will auto-detect: Name, DOB, Phone, Address, MBI, Plan, Carrier, Effective Date, Election Period, Sunfire Code, and more."} style={{...inp,minHeight:240,fontFamily:"monospace",fontSize:11,resize:"vertical",whiteSpace:"pre-wrap"}}/>
+</div>
+<div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
+<button onClick={()=>setShowEnrollPaste(false)} style={bO}>Cancel</button>
+<button onClick={()=>{if(!enrollRaw.trim()){flash("Paste enrollment first","error");return}const parsed=parseEnrollment(enrollRaw);if(!parsed.fullName){flash("Couldn't find a name in the text","error");return}setForm(parsed);setEditId(null);setShowEnrollPaste(false);setShowAdd(true);flash("Parsed! Review the fields and save.")}} disabled={!enrollRaw.trim()} style={{...bP,opacity:enrollRaw.trim()?1:.4}}>{"Parse & Fill Form \u2192"}</button>
+</div></Mdl>}
 
 {showQP&&<Mdl onClose={()=>setShowQP(false)} width={900} title={"\uD83D\uDCE5 Quick Paste"} subtitle={qpStep===1?"Paste rows from your spreadsheet":"Preview "+qpParsed.length+" clients"}>
 {qpStep===1&&<div style={{padding:24}}>
