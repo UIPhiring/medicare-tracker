@@ -1062,7 +1062,7 @@ return<>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
 <div><h1 style={{fontSize:24,fontWeight:800}}>Team Management</h1><p style={{fontSize:13,color:"var(--t3)"}}>{team.length+" members"}</p></div>
 <div style={{display:"flex",gap:10}}>
-{(()=>{const ow=team.find(u=>u.isOwner);const adminCount=cls.filter(c=>c.agentId===cu.uid).length;return ow&&adminCount>0?<button onClick={()=>setConfirm2({title:"Transfer Clients",msg:"Move all "+adminCount+" clients from your Admin account to "+ow.displayName+"? Commission still shows on your admin dashboard.",fn:()=>transferClients(ow.uid),lbl:"Transfer "+adminCount+" Clients"})} style={{...bO,fontSize:12,borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDD00 Transfer "+adminCount+" to "+ow.displayName}</button>:null})()}
+{(()=>{const ow=team.find(u=>u.isOwner);const adminCount=cls.filter(c=>c.agentId===cu.uid).length;return ow&&adminCount>0?<button onClick={()=>setConfirm2({title:"Transfer Clients",msg:"Move all "+adminCount+" clients from your Admin account to "+ow.displayName+"? Commission still shows on your admin dashboard.",fn:async()=>{await transferClients(cu.uid,ow.uid);setConfirm2(null)},lbl:"Transfer "+adminCount+" Clients"})} style={{...bO,fontSize:12,borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDD00 Transfer "+adminCount+" to "+ow.displayName}</button>:null})()}
 <button onClick={()=>{setNu({email:"",password:"",displayName:"",role:"broker",heapFrontEnd:"",heapBackEnd:""});setCuErr("");setShowCU(true)}} style={bP}>+ Add Agent</button>
 </div>
 </div>
