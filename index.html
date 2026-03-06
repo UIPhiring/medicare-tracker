@@ -11,6 +11,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--font:'Inter',sans-serif;--bg:#F5F7FA;--card:#fff;--text:#0F172A;--t2:#475569;--t3:#94A3B8;--border:#E2E8F0;--accent:#3B8FD9;--bar:#F1F5F9;--cs:0 1px 3px rgba(0,0,0,.04);--hover:#F8FAFC;--tabBg:#EFF6FF;--alertYBg:#FEF3C7;--alertYBdr:#FCD34D;--alertYTxt:#92400E;--alertYSub:#B45309;--alertRBg:#FEE2E2;--alertRBdr:#FECACA;--alertRTxt:#991B1B;--alertRSub:#B91C1C;--alertBBg:#EFF6FF;--alertBBdr:#BFDBFE;--alertBTxt:#1E40AF;--alertBSub:#3B82F6;--alertGBg:#F0FDF4;--alertGBdr:#BBF7D0;--alertGTxt:#166534;--alertGSub:#22C55E}
@@ -218,6 +221,7 @@ const[goalSub,setGoalSub]=useState("production");
 const[badgeInc,setBadgeInc]=useState({});const[showBadgeInc,setShowBadgeInc]=useState(null);const[badgeIncVal,setBadgeIncVal]=useState("");
 const[announcedBadges,setAnnouncedBadges]=useState(null);const badgeCheckRef=React.useRef(false);
 const[badgeViewUid,setBadgeViewUid]=useState("");const[badgePayouts,setBadgePayouts]=useState({});
+const[statements,setStatements]=useState([]);
 const[customTraining,setCustomTraining]=useState(null);const[showTrainEdit,setShowTrainEdit]=useState(false);const[trainForm,setTrainForm]=useState({});const[editTrainId,setEditTrainId]=useState(null);
 const[customScripts,setCustomScripts]=useState(null);const[showScriptEdit,setShowScriptEdit]=useState(false);const[scriptForm,setScriptForm]=useState({});const[editScriptId,setEditScriptId]=useState(null);
 const[customTemplates,setCustomTemplates]=useState(null);const[showTmplEdit,setShowTmplEdit]=useState(false);const[tmplForm,setTmplForm]=useState({});const[editTmplId,setEditTmplId]=useState(null);
@@ -262,6 +266,8 @@ useEffect(()=>{const un=db.collection("templateContent").orderBy("order").onSnap
 useEffect(()=>{const un=db.collection("scriptContent").orderBy("order").onSnapshot(s=>{setCustomScripts(s.docs.map(d=>({id:d.id,...d.data()})))},()=>{const un2=db.collection("scriptContent").onSnapshot(s=>{setCustomScripts(s.docs.map(d=>({id:d.id,...d.data()})))});return()=>un2()});return()=>un()},[]);
 /* Load badge payouts */
 useEffect(()=>{const un=db.collection("badgePayouts").onSnapshot(s=>{const m={};s.docs.forEach(d=>m[d.id]=d.data());setBadgePayouts(m)});return()=>un()},[]);
+/* Load statements */
+useEffect(()=>{const un=db.collection("statements").orderBy("createdAt","desc").onSnapshot(s=>{setStatements(s.docs.map(d=>({id:d.id,...d.data()})))},()=>{const un2=db.collection("statements").onSnapshot(s=>{setStatements(s.docs.map(d=>({id:d.id,...d.data()})))});return()=>un2()});return()=>un()},[]);
 /* Load announced badges for current user */
 useEffect(()=>{const un=db.collection("earnedBadges").doc(cu.uid).onSnapshot(s=>{if(s.exists)setAnnouncedBadges(s.data().badges||[]);else setAnnouncedBadges([])});return()=>un()},[]);
 /* Auto-post new badge wins */
@@ -434,7 +440,7 @@ const lines=reconRaw.trim().split("\n");if(lines.length<2){flash("Need header + 
 const hdr=lines[0].split(/[,\t]/).map(h=>h.replace(/"/g,"").trim());
 const rows2=lines.slice(1).map(l=>{const vals=[];let cur="",inQ=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"')inQ=!inQ;else if((ch===","||ch==="\t")&&!inQ){vals.push(cur.trim());cur=""}else cur+=ch}vals.push(cur.trim());return vals}).filter(r=>r.some(v=>v));
 setReconHdr(hdr);setReconRows(rows2);const autoMap={};
-hdr.forEach((h,i)=>{const hl=h.toLowerCase();if(hl.includes("name")||hl.includes("member")||hl.includes("beneficiary")||hl.includes("insured"))autoMap[i]="name";else if(hl.includes("amount")||hl.includes("commission")||hl.includes("payment")||hl.includes("comp")||hl.includes("paid"))autoMap[i]="amount";else if(hl.includes("mbi")||hl.includes("hicn")||hl.includes("member id")||hl.includes("medicare"))autoMap[i]="mbi";else if(hl.includes("effective")||hl.includes("eff date"))autoMap[i]="effectiveDate";else if(hl.includes("plan")||hl.includes("product"))autoMap[i]="plan";else if(hl.includes("type")||hl.includes("transaction")||hl.includes("action"))autoMap[i]="txType"});
+hdr.forEach((h,i)=>{const hl=h.toLowerCase();if(hl.includes("name")||hl.includes("member")||hl.includes("beneficiary")||hl.includes("insured"))autoMap[i]="name";else if(hl.includes("amount")||hl.includes("commission")||hl.includes("payment")||hl.includes("comp")||hl.includes("paid"))autoMap[i]="amount";else if(hl.includes("mbi")||hl.includes("hicn")||hl.includes("member id")||hl.includes("medicare"))autoMap[i]="mbi";else if(hl.includes("effective")||hl.includes("eff date"))autoMap[i]="effectiveDate";else if(hl.includes("plan")||hl.includes("product"))autoMap[i]="plan";else if(hl.includes("type")||hl.includes("transaction")||hl.includes("action")||hl.includes("fe")||hl.includes("be")||hl.includes("front")||hl.includes("back"))autoMap[i]="txType"});
 setReconMap(autoMap);setReconStep(2);flash("Parsed "+rows2.length+" rows")
 };
 
@@ -453,6 +459,8 @@ const rAmt=amtIdx!=null?parseFloat(row[amtIdx].replace(/[^0-9.\-]/g,""))||0:0;
 const rTx=(txIdx!=null?row[txIdx]:"").toLowerCase();
 /* Detect chargeback */
 const isCB=rAmt<0||rTx.includes("chargeback")||rTx.includes("clawback")||rTx.includes("reversal")||rTx.includes("recoup")||rTx.includes("refund");
+const isFE=rTx.includes("fe")||rTx.includes("front")||rTx.includes("initial");
+const isBE=rTx.includes("be")||rTx.includes("back")||rTx.includes("backend")||rTx.includes("residual");
 /* Match by MBI first, then exact name, then fuzzy name */
 let match=null;let conf="none";
 if(rMbi){match=myCls.find(c=>(c.mbiNumber||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase()===rMbi);if(match)conf="mbi"}
@@ -467,7 +475,7 @@ else if(match&&absAmt>0&&absAmt<expected)payType="partial";
 else if(match&&absAmt>0&&absAmt>expected)payType="overpay";
 else if(match&&absAmt>0)payType="full";
 else if(!match&&absAmt>0)payType="unmatched";
-return{row,rName:nameIdx!=null?row[nameIdx]:"—",rAmt,rMbi:mbiIdx!=null?row[mbiIdx]:"",match,conf,expected,payType,isCB,absAmt}
+return{row,rName:nameIdx!=null?row[nameIdx]:"—",rAmt,rMbi:mbiIdx!=null?row[mbiIdx]:"",match,conf,expected,payType,isCB,isFE,isBE,absAmt}
 });
 /* Find clients with this carrier NOT on statement (missing payments) */
 const matchedIds=new Set(matches.filter(m=>m.match).map(m=>m.match.id));
@@ -509,16 +517,22 @@ if(m.isCB){
 /* Chargeback - same for broker and heap */
 hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:agRole,amount:-m.absAmt,type:"chargeback",expected:m.expected,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
 }else if(isHeap){
-/* HEAP: write front-end payment at their FE rate */
+/* HEAP: detect FE vs BE from statement or default to FE */
 const feAmt=isA?Number(ag?.heapFrontEnd)||0:Number(up?.heapFrontEnd)||0;
 const beAmt=isA?Number(ag?.heapBackEnd)||0:Number(up?.heapBackEnd)||0;
+if(m.isBE){
+hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:"heap",amount:beAmt,type:"heap_be",heapBE:beAmt,effectiveDate:m.match.effectiveDate||"",expected:feAmt+beAmt,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+}else{
 hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:"heap",amount:feAmt,type:"heap_fe",heapBE:beAmt,effectiveDate:m.match.effectiveDate||"",expected:feAmt+beAmt,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+}
 }else{
 /* Broker: paid in full */
 hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:"broker",amount:m.absAmt,type:"payment",expected:m.expected,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
 }
 });
 await hBatch.commit();
+/* Store statement record */
+await db.collection("statements").add({uploadedBy:cu.uid,uploaderName:up?.displayName||"",uploaderRole:up?.role||"",carrier:reconCarrier,rowCount:reconRows.length,matchCount:selected.length,cbCount:selected.filter(m=>m.isCB).length,payCount:selected.filter(m=>!m.isCB).length,totalAmount:selected.reduce((s,m)=>s+(m.isCB?-m.absAmt:m.absAmt),0),uploadDate:td(),createdAt:firebase.firestore.FieldValue.serverTimestamp()});
 flash("Applied "+selected.length+" changes!");setReconStep(1);setReconRaw("");setReconMatches([]);setReconSel(new Set())
 };
 
@@ -793,7 +807,7 @@ return team.map(u=>{
 })},[isA,team,cls]);
 
 const myLeads=leads.filter(c=>isA||c.agentId===cu.uid);
-const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"},{id:"reports",label:"Reports",ic:"\uD83D\uDCC4"}]:[]),...(up?.role!=="heap"?[{id:"commissions",label:"Carrier Commissions",ic:"\uD83D\uDCB3"}]:[]),...(up?.role!=="heap"?[{id:"mycommissions",label:"My Commissions",ic:"\uD83D\uDCB0"}]:[]),{sep:true},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"}];
+const tabs=[{id:"dashboard",label:"Dashboard",ic:"\uD83D\uDCCA"},{id:"book",label:"Book of Business",ic:"\uD83D\uDCD6",ct:book.length},{id:"clients",label:"All Clients",ic:"\uD83D\uDC65",ct:disp.length},{id:"leads",label:"Leads",ic:"\uD83C\uDFAF",ct:myLeads.filter(l=>l.stage!=="applied"&&l.stage!=="lost").length},{id:"analytics",label:"Analytics",ic:"\uD83D\uDCC8"},{id:"calendar",label:"Calendar",ic:"\uD83D\uDCC5"},{id:"goals",label:"Goals",ic:"\uD83C\uDFAF"},...(isA?[{id:"team",label:"Team",ic:"\uD83C\uDFE2"},{id:"reports",label:"Reports",ic:"\uD83D\uDCC4"}]:[]),{id:"commissions",label:"Commissions",ic:"\uD83D\uDCB3"},{sep:true},{id:"templates",label:"Templates",ic:"\uD83D\uDCE8"},{id:"directory",label:"Directory",ic:"\uD83D\uDCD2"},{id:"scripts",label:"Scripts",ic:"\uD83D\uDCDC"},{id:"training",label:"Training",ic:"\uD83C\uDF93"}];
 
 if(ld)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{fontSize:18,fontWeight:700,color:"var(--t2)"}}>Loading...</div></div>;
 
@@ -1880,10 +1894,10 @@ return<div key={key} style={{background:"var(--card)",borderRadius:14,border:"1p
 </div>}
 
 {/* ═══ RECONCILIATION TAB ═══ */}
-{tab==="commissions"&&up?.role!=="heap"&&<div style={{animation:"slideUp .3s"}}>
+{tab==="commissions"&&<div style={{animation:"slideUp .3s"}}>
 <div style={{marginBottom:20}}>
-<h1 style={{fontSize:24,fontWeight:800}}>Carrier Commissions</h1>
-<p style={{fontSize:13,color:"var(--t3)",marginTop:4}}>Upload a carrier commission statement to verify payments, catch chargebacks, and flag discrepancies</p>
+<h1 style={{fontSize:24,fontWeight:800}}>Commissions</h1>
+<p style={{fontSize:13,color:"var(--t3)",marginTop:4}}>Upload a commission statement (CSV, Excel, or PDF) to verify payments, catch chargebacks, and flag discrepancies</p>
 </div>
 
 {reconStep===1&&<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:24}}>
@@ -1896,7 +1910,11 @@ return<div key={key} style={{background:"var(--card)",borderRadius:14,border:"1p
 <textarea value={reconRaw} onChange={e=>setReconRaw(e.target.value)} style={{...inp,minHeight:160,fontFamily:"monospace",fontSize:12}} placeholder={"Paste your carrier commission statement here (CSV format)\n\nExpected columns: Member Name, MBI/HICN, Commission Amount\nOptional: Transaction Type, Effective Date, Plan Name\n\nYou can also upload a .csv file below"}/>
 </div>
 <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-<input type="file" accept=".csv,.tsv,.txt" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{setReconRaw(ev.target.result)};r.readAsText(f)}} style={{fontSize:12}}/>
+<input type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf" onChange={e=>{const f=e.target.files[0];if(!f)return;const ext=f.name.split(".").pop().toLowerCase();
+if(ext==="xlsx"||ext==="xls"){const r=new FileReader();r.onload=ev=>{try{const wb=XLSX.read(ev.target.result,{type:"array"});const ws=wb.Sheets[wb.SheetNames[0]];const csv=XLSX.utils.sheet_to_csv(ws);setReconRaw(csv);flash("Excel loaded: "+f.name)}catch(e2){flash("Excel error: "+e2.message,"error")}};r.readAsArrayBuffer(f)}
+else if(ext==="pdf"){const r=new FileReader();r.onload=async ev=>{try{const pdf=await pdfjsLib.getDocument({data:new Uint8Array(ev.target.result)}).promise;let txt="";for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const tc=await pg.getTextContent();const items=tc.items;let lastY=null,line="";items.forEach(it=>{if(lastY!==null&&Math.abs(it.transform[5]-lastY)>2){txt+=line.trim()+"\n";line=""}line+=it.str+" ";lastY=it.transform[5]});txt+=line.trim()+"\n"}setReconRaw(txt);flash("PDF loaded: "+pdf.numPages+" pages")}catch(e2){flash("PDF error: "+e2.message,"error")}};r.readAsArrayBuffer(f)}
+else{const r=new FileReader();r.onload=ev=>{setReconRaw(ev.target.result);flash("File loaded: "+f.name)};r.readAsText(f)}
+}} style={{fontSize:12}}/>
 <div style={{flex:1}}/>
 <button onClick={parseRecon} disabled={!reconRaw.trim()||!reconCarrier} style={{...bP,opacity:reconRaw.trim()&&reconCarrier?1:.4}}>{"Parse Statement \u2192"}</button>
 </div>
@@ -1987,12 +2005,11 @@ return missing.length>0?<div style={{marginTop:18}}><Crd title={"\uD83D\uDD73\uF
 <MT headers={["Name","MBI","Effective","Expected Commission"]} rows={missing.map(c=>[<strong>{c.fullName}</strong>,c.mbiNumber||"—",fmt(c.effectiveDate),<strong style={{color:"#F59E0B"}}>{money(getComm(c))}</strong>])}/>
 </Crd></div>:null})()}
 </div>}
-</div>}
+</div>
 
-{/* ═══ MY COMMISSIONS TAB ═══ */}
-{tab==="mycommissions"&&<div style={{animation:"slideUp .3s"}}>
-<h1 style={{fontSize:24,fontWeight:800,marginBottom:6}}>My Commissions</h1>
-<p style={{fontSize:13,color:"var(--t3)",marginBottom:20}}>Your commission payments and chargebacks from carrier statements</p>
+{/* ═══ COMMISSION HISTORY ═══ */}
+<div style={{borderTop:"2px solid var(--border)",marginTop:24,paddingTop:24}}>
+<h2 style={{fontSize:18,fontWeight:800,marginBottom:16}}>{"\uD83D\uDCB0 Commission History"}</h2>
 
 {(()=>{
 const myHist=commHist.filter(h=>isA||h.agentId===cu.uid).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
@@ -2000,7 +2017,6 @@ const totalPaid=myHist.filter(h=>h.amount>0).reduce((s,h)=>s+h.amount,0);
 const totalCB=myHist.filter(h=>h.amount<0).reduce((s,h)=>s+Math.abs(h.amount),0);
 const netPay=totalPaid-totalCB;
 const pendingBE=myHist.filter(h=>h.type==="heap_fe").length;
-/* Group by date */
 const byDate={};myHist.forEach(h=>{const d=h.date||"Unknown";if(!byDate[d])byDate[d]=[];byDate[d].push(h)});
 
 return<>
@@ -2012,7 +2028,7 @@ return<>
 {pendingBE>0&&<Stat icon={"\u23F3"} value={pendingBE} label="Backend Pending" color="#F59E0B" s/>}
 </div>
 
-{myHist.length===0?<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:50,textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>{"\uD83D\uDCB3"}</div><div style={{fontSize:16,fontWeight:700,marginBottom:4}}>No commission records yet</div><div style={{fontSize:13,color:"var(--t3)"}}>Records appear here after your admin reconciles carrier commission statements</div></div>:
+{myHist.length===0?<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:50,textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>{"\uD83D\uDCB3"}</div><div style={{fontSize:16,fontWeight:700,marginBottom:4}}>No commission records yet</div><div style={{fontSize:13,color:"var(--t3)"}}>Upload a commission statement above to start tracking</div></div>:
 
 <div style={{display:"flex",flexDirection:"column",gap:18}}>
 {Object.entries(byDate).map(([date,entries])=>{
@@ -2034,12 +2050,11 @@ return<div key={date} style={{background:"var(--card)",borderRadius:14,border:"1
 <tbody>
 {entries.map((h,i)=>{
 const typeBadge=h.type==="chargeback"?<Badge color="#EF4444">Chargeback</Badge>:h.type==="heap_fe"?<Badge color="#F59E0B">Front End</Badge>:h.type==="heap_be"?<Badge color="#8B5CF6">Back End</Badge>:h.type==="heap_full"?<Badge color="#22C55E">Paid in Full</Badge>:<Badge color="#22C55E">Payment</Badge>;
-const statusLabel=h.type==="chargeback"?<span style={{fontSize:11,color:"#EF4444",fontWeight:600}}>Chargeback</span>:h.type==="heap_fe"?<span style={{fontSize:11,color:"#F59E0B",fontWeight:600}}>{"Paid FE \u2022 Backend Pending ($"+(h.heapBE||0)+")"}</span>:h.type==="heap_be"?<span style={{fontSize:11,color:"#8B5CF6",fontWeight:600}}>Backend Payment</span>:h.type==="heap_full"?<span style={{fontSize:11,color:"#22C55E",fontWeight:600}}>Paid in Full (FE+BE)</span>:<span style={{fontSize:11,color:"#22C55E",fontWeight:600}}>Paid in Full</span>;
-/* Check if HEAP BE is due (4+ months from effective) */
+const statusLabel=h.type==="chargeback"?<span style={{fontSize:11,color:"#EF4444",fontWeight:600}}>Chargeback</span>:h.type==="heap_fe"?<span style={{fontSize:11,color:"#F59E0B",fontWeight:600}}>{"Paid FE \u2022 BE Pending ($"+(h.heapBE||0)+")"}</span>:h.type==="heap_be"?<span style={{fontSize:11,color:"#8B5CF6",fontWeight:600}}>Backend Payment</span>:h.type==="heap_full"?<span style={{fontSize:11,color:"#22C55E",fontWeight:600}}>Paid in Full (FE+BE)</span>:<span style={{fontSize:11,color:"#22C55E",fontWeight:600}}>Paid in Full</span>;
 const beDue=h.type==="heap_fe"&&h.effectiveDate&&heapMoPast(h.effectiveDate)>=4;
 return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 <td style={{padding:"10px 14px",fontSize:13,fontWeight:600}}>{h.carrier||"\u2014"}</td>
-<td style={{padding:"10px 14px",fontSize:13}}>{h.clientName||"\u2014"}</td>
+<td style={{padding:"10px 14px",fontSize:13}}>{h.clientName||"\u2014"}{isA&&h.agentId&&<div style={{fontSize:10,color:"var(--t3)"}}>{team.find(u=>u.uid===h.agentId)?.displayName||""}</div>}</td>
 <td style={{padding:"10px 14px"}}>{typeBadge}</td>
 <td style={{padding:"10px 14px",fontSize:14,fontWeight:700,color:h.amount<0?"#EF4444":"#22C55E"}}>{h.amount<0?"-":""}{money(Math.abs(h.amount))}</td>
 <td style={{padding:"10px 14px"}}>{statusLabel}</td>
@@ -2049,6 +2064,27 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 </div></div>})}
 </div>}
 </>})()}
+</div>
+
+{/* ═══ STATEMENT HISTORY (Admin) ═══ */}
+{isA&&statements.length>0&&<div style={{borderTop:"2px solid var(--border)",marginTop:24,paddingTop:24}}>
+<h2 style={{fontSize:18,fontWeight:800,marginBottom:16}}>{"\uD83D\uDCC4 Statement Upload History"}</h2>
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+{statements.map(s=><div key={s.id} style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+<div>
+<div style={{fontSize:14,fontWeight:700}}>{s.carrier||"Unknown Carrier"}</div>
+<div style={{fontSize:11,color:"var(--t3)"}}>{fmt(s.uploadDate)+" \u2022 "+s.uploaderName+" ("+s.uploaderRole+")"}</div>
+</div>
+<div style={{display:"flex",gap:14,fontSize:12}}>
+<span style={{fontWeight:600}}>{s.matchCount+" matched"}</span>
+{s.payCount>0&&<span style={{fontWeight:700,color:"#22C55E"}}>{s.payCount+" payments"}</span>}
+{s.cbCount>0&&<span style={{fontWeight:700,color:"#EF4444"}}>{s.cbCount+" chargebacks"}</span>}
+<span style={{color:"var(--t3)"}}>{money(s.totalAmount)}</span>
+</div>
+</div>)}
+</div>
+</div>}
+
 </div>}
 
 </main>
