@@ -237,7 +237,10 @@ return()=>un();
 },[]);
 
 /* Load team */
-useEffect(()=>{const un=db.collection("users").onSnapshot(s=>setTeam(s.docs.map(d=>({uid:d.id,...d.data()}))));return()=>un()},[]);
+useEffect(()=>{const un=db.collection("users").onSnapshot(s=>{const raw=s.docs.map(d=>({uid:d.id,...d.data()}));
+if(up?.role==="admin"){setTeam(raw)}else{
+/* Non-admin: strip pay rates and overrides from OTHER users */
+setTeam(raw.map(u=>u.uid===cu.uid?u:{uid:u.uid,email:u.email,displayName:u.displayName,role:u.role,isOwner:u.isOwner,disabled:u.disabled,createdAt:u.createdAt}))}});return()=>un()},[up?.role]);
 
 /* Load leads */
 useEffect(()=>{const un=db.collection("leads").onSnapshot(s=>setLeads(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
@@ -504,8 +507,8 @@ if(m.isCB){
 hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:agRole,amount:-m.absAmt,type:"chargeback",expected:m.expected,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
 }else if(isHeap){
 /* HEAP: write front-end payment at their FE rate */
-const feAmt=Number(ag?.heapFrontEnd)||0;
-const beAmt=Number(ag?.heapBackEnd)||0;
+const feAmt=isA?Number(ag?.heapFrontEnd)||0:Number(up?.heapFrontEnd)||0;
+const beAmt=isA?Number(ag?.heapBackEnd)||0:Number(up?.heapBackEnd)||0;
 hBatch.set(db.collection("commissionHistory").doc(),{date:td(),carrier:reconCarrier,clientName:m.match.fullName,clientId:m.match.id,agentId:m.match.agentId||"",agentRole:"heap",amount:feAmt,type:"heap_fe",heapBE:beAmt,effectiveDate:m.match.effectiveDate||"",expected:feAmt+beAmt,reconBy:up?.displayName||"Admin",createdAt:firebase.firestore.FieldValue.serverTimestamp()});
 }else{
 /* Broker: paid in full */
@@ -1012,7 +1015,7 @@ return(
 {/* ═══════ HEAP VIEW (agent logged in OR admin viewing a HEAP agent) ═══════ */}
 {((!isA&&up?.role==="heap")||(isA&&selAgent!=="all"&&team.find(u=>u.uid===selAgent)?.role==="heap"))&&<>
 {(()=>{
-const uid=isA?selAgent:cu.uid;const me=team.find(u=>u.uid===uid);if(!me)return null;
+const uid=isA?selAgent:cu.uid;const me=isA?team.find(u=>u.uid===uid):{...up,uid:cu.uid};if(!me)return null;
 const myCl=cls.filter(c=>c.agentId===uid);
 const feR=parseFloat(me.heapFrontEnd)||0;const beR=parseFloat(me.heapBackEnd)||0;
 const completed=myCl.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c));
@@ -2131,8 +2134,8 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 <div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
 <div style={{fontSize:13,fontWeight:700,marginBottom:12}}>{"\uD83D\uDCB0 Tracking"}</div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
-{(()=>{const ag=team.find(u=>u.uid===vc.agentId);const isHeap=ag?.role==="heap"||up?.role==="heap";
-if(isHeap){const feR=parseFloat(ag?.heapFrontEnd||up?.heapFrontEnd)||0;const beR=parseFloat(ag?.heapBackEnd||up?.heapBackEnd)||0;const mo=vc.effectiveDate?heapMoPast(vc.effectiveDate):0;const done=mo>=4||vc.status==="heapArchived";const lost=vc.status==="inactive"||vc.status==="chargedBack"||vc.status==="neverInEffect";
+{(()=>{const ag=team.find(u=>u.uid===vc.agentId);const isHeapClient=ag?.role==="heap"||up?.role==="heap";const isHeap=isHeapClient;
+if(isHeap){const feR=isA?parseFloat(ag?.heapFrontEnd)||0:parseFloat(up?.heapFrontEnd)||0;const beR=isA?parseFloat(ag?.heapBackEnd)||0:parseFloat(up?.heapBackEnd)||0;const mo=vc.effectiveDate?heapMoPast(vc.effectiveDate):0;const done=mo>=4||vc.status==="heapArchived";const lost=vc.status==="inactive"||vc.status==="chargedBack"||vc.status==="neverInEffect";
 return[{l:"Front End",v:lost?"Cancelled":money(feR),c:lost?"#EF4444":"#22C55E"},{l:"Back End",v:lost?"N/A":done?money(beR):"Pending ("+Math.max(0,4-mo)+"mo left)",c:lost?"#94A3B8":done?"#22C55E":"#F59E0B"},{l:"Status",v:vc.status==="heapArchived"?"Completed":vc.status==="active"||vc.status==="paid"?"Active":vc.status==="inactive"?"Inactive":vc.status==="chargedBack"?"Charged Back":"Never in Effect",c:vc.status==="heapArchived"||vc.status==="active"||vc.status==="paid"?"#22C55E":"#EF4444"},{l:"Total Earned",v:lost?money(0):done?money(feR+beR):money(feR),c:lost?"#EF4444":"#22C55E"}]}
 else{return[{l:"Initial Commission",v:money(getComm(vc)),c:"#22C55E"},{l:"Residuals Started",v:resStart(vc.effectiveDate),c:"#3B8FD9"},{l:"Residual Earned",v:money(calcResEarned(vc.effectiveDate,td())),c:"#8B5CF6"},{l:"Total Earned",v:money(getComm(vc)+calcResEarned(vc.effectiveDate,td())),c:"#22C55E"},{l:"Chargeback",v:vc.chargebackAmount?money(vc.chargebackAmount):"\u2014",c:"#EF4444"},{l:"Cancelled",v:vc.cancelMonth?new Date(vc.cancelMonth+"-01T00:00:00").toLocaleDateString("en-US",{month:"short",year:"numeric"}):"\u2014"},{l:"Notes",v:vc.statusNote||"\u2014"}]}})()
 .map(f=><div key={f.l} style={{padding:10,background:"var(--hover)",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5,marginBottom:3}}>{f.l}</div><div style={{fontSize:13,fontWeight:600,color:f.c||"var(--text)"}}>{f.v}</div></div>)}
