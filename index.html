@@ -1030,14 +1030,52 @@ const pipe={};inProg.forEach(c=>{if(!c.effectiveDate)return;const mo=heapMoPast(
 /* Carrier breakdown */
 const hCarS={};myCl.filter(c=>c.status!=="heapArchived"&&c.carrier).forEach(c=>{if(!hCarS[c.carrier])hCarS[c.carrier]={total:0,completed:0,lost:0};hCarS[c.carrier].total++;if(c.status==="heapArchived"||((c.status==="active"||c.status==="paid")&&canArchive(c)))hCarS[c.carrier].completed++;else if(c.status==="inactive"||c.status==="chargedBack")hCarS[c.carrier].lost++});
 return<>
+{/* Income Summary Card */}
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20,marginBottom:20}}>
+<div style={{fontSize:16,fontWeight:800,marginBottom:16}}>{"\uD83D\uDCB0 Income Summary"}</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(200px,100%),1fr))",gap:12}}>
+<div style={{padding:14,background:"#22C55E10",borderRadius:12,border:"1px solid #22C55E30"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E",letterSpacing:.5}}>{"Front End Earned"}</div>
+<div style={{fontSize:28,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(feEarned)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{(completed.length+inProg.length)+" policies written × "+money(feR)}</div>
+</div>
+<div style={{padding:14,background:"#3B8FD910",borderRadius:12,border:"1px solid #3B8FD930"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#3B8FD9",letterSpacing:.5}}>{"Back End Earned"}</div>
+<div style={{fontSize:28,fontWeight:900,color:"#3B8FD9",marginTop:4}}>{money(beEarned)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{completed.length+" completed × "+money(beR)}</div>
+</div>
+<div style={{padding:14,background:"#F59E0B10",borderRadius:12,border:"1px solid #F59E0B30"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B",letterSpacing:.5}}>{"Back End Pending"}</div>
+<div style={{fontSize:28,fontWeight:900,color:"#F59E0B",marginTop:4}}>{money(bePending)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{inProg.length+" clients waiting on 4 months"}</div>
+</div>
+<div style={{padding:14,background:"#8B5CF610",borderRadius:12,border:"1px solid #8B5CF630"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#8B5CF6",letterSpacing:.5}}>{"Total Earned to Date"}</div>
+<div style={{fontSize:28,fontWeight:900,color:"#8B5CF6",marginTop:4}}>{money(totalEarned)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{"FE: "+money(feEarned)+" + BE: "+money(beEarned)}</div>
+</div>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
+<div style={{padding:14,background:"var(--hover)",borderRadius:12,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>{"Potential Total (if all stick)"}</div>
+<div style={{fontSize:24,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(projTotal)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{(completed.length+inProg.length)+" clients × "+money(feR+beR)}</div>
+</div>
+<div style={{padding:14,background:lost.length>0?"#EF444410":"var(--hover)",borderRadius:12,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:lost.length>0?"#EF4444":"var(--t3)"}}>{"Lost Income"}</div>
+<div style={{fontSize:24,fontWeight:900,color:lost.length>0?"#EF4444":"var(--t3)",marginTop:4}}>{money(lost.length*(feR+beR))}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{lost.length+" clients dropped"}</div>
+</div>
+</div>
+</div>
+
+{/* Quick stats row */}
 <div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
+<Stat icon={"\uD83D\uDCCB"} value={myCl.length} label="Total Written" s/>
 <Stat icon={"\u2705"} value={completed.length} label="Completed (4+ mo)" color="#22C55E" s/>
 <Stat icon={"\u23F3"} value={inProg.length} label="In Progress" color="#F59E0B" s/>
 <Stat icon={"\u274C"} value={lost.length} label="Lost" color="#EF4444" s/>
 <Stat icon={"\uD83D\uDCC8"} value={compRate} label="Completion Rate" color="#3B8FD9" s/>
-<Stat icon={"\uD83D\uDCB5"} value={money(totalEarned)} label="Total Earned" color="#22C55E" sub={"FE: "+money(feEarned)+" + BE: "+money(beEarned)} s/>
-<Stat icon={"\u23F3"} value={money(bePending)} label="BE Pending" color="#F59E0B" sub={inProg.length+" clients waiting"} s/>
-<Stat icon={"\uD83D\uDCB0"} value={money(projTotal)} label="Projected Total" color="#8B5CF6" sub={"If all complete"} s/>
 </div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
 <Crd title={"\uD83D\uDCB5 Your Pay Rates"}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,padding:10}}>
