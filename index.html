@@ -2005,7 +2005,6 @@ return missing.length>0?<div style={{marginTop:18}}><Crd title={"\uD83D\uDD73\uF
 <MT headers={["Name","MBI","Effective","Expected Commission"]} rows={missing.map(c=>[<strong>{c.fullName}</strong>,c.mbiNumber||"—",fmt(c.effectiveDate),<strong style={{color:"#F59E0B"}}>{money(getComm(c))}</strong>])}/>
 </Crd></div>:null})()}
 </div>}
-</div>
 
 {/* ═══ COMMISSION HISTORY ═══ */}
 <div style={{borderTop:"2px solid var(--border)",marginTop:24,paddingTop:24}}>
