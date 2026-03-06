@@ -942,7 +942,15 @@ return(
 </div>}
 
 {tab==="clients"&&<div style={{animation:"slideUp .3s"}}>
-<div style={{marginBottom:14}}><h1 style={{fontSize:24,fontWeight:800}}>All Clients</h1></div>
+<div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+<h1 style={{fontSize:24,fontWeight:800}}>All Clients</h1>
+<div style={{display:"flex",gap:8}}>
+{isA&&<button onClick={()=>setConfirm2({title:"Remove Duplicates",msg:"This will find and remove duplicate clients (matching name+phone+effective+state+carrier). Continue?",fn:dedup,lbl:"Deduplicate"})} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83E\uDDF9 Dedup"}</button>}
+<button onClick={()=>{setMuSel(new Set(disp.map(c=>c.id)));setMf("");setMv("");setShowMU(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\u26A1 Mass Update"}</button>
+<button onClick={()=>{setReoRaw("");setReoStep(1);setShowReorder(true)}} style={{...bO,fontSize:11,padding:"6px 10px"}}>{"\uD83D\uDD00 Reorder"}</button>
+<button onClick={()=>startReview(2)} style={{...bO,fontSize:11,padding:"6px 10px",borderColor:"#3B8FD9",color:"#3B8FD9"}}>{"\uD83D\uDCB0 Payment Check"}</button>
+</div>
+</div>
 {renderFilt(disp)}
 <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
 <button onClick={()=>setStFilt("all")} style={{...bO,fontSize:12,background:stFilt==="all"?"var(--tabBg)":"var(--card)",borderColor:stFilt==="all"?"#3B8FD9":"var(--border)",color:stFilt==="all"?"#3B8FD9":"var(--t2)"}}>{"All ("+disp.length+")"}</button>
