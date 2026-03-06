@@ -1018,98 +1018,109 @@ return(
 const uid=isA?selAgent:cu.uid;const me=isA?team.find(u=>u.uid===uid):{...up,uid:cu.uid};if(!me)return null;
 const myCl=cls.filter(c=>c.agentId===uid);
 const feR=parseFloat(me.heapFrontEnd)||0;const beR=parseFloat(me.heapBackEnd)||0;
+const activeAll=myCl.filter(c=>c.status!=="inactive"&&c.status!=="chargedBack"&&c.status!=="neverInEffect");
 const completed=myCl.filter(c=>c.status==="heapArchived"||(c.status==="active"||c.status==="paid")&&canArchive(c));
-const inProg=myCl.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchive(c));
 const lost=myCl.filter(c=>c.status==="inactive"||c.status==="chargedBack");
 const nie2=myCl.filter(c=>c.status==="neverInEffect");
-const activeAll=myCl.filter(c=>c.status!=="inactive"&&c.status!=="chargedBack"&&c.status!=="neverInEffect");
-const fePaid=myCl.filter(c=>c.status==="paid"||c.status==="heapArchived");
-const feExpected=myCl.filter(c=>c.status==="active");
-const fePaidAmt=fePaid.length*feR;
-const feExpectedAmt=feExpected.length*feR;
-const feTotal=fePaidAmt+feExpectedAmt;
-const beEarned=completed.length*beR;
-const bePending=(activeAll.length-completed.length)*beR;
-const totalInHand=fePaidAmt+beEarned;
-const totalEarned=feTotal+beEarned;
-const projTotal=activeAll.length*(feR+beR);
-const compRate=completed.length+lost.length>0?((completed.length/(completed.length+lost.length))*100).toFixed(0)+"%":"\u2014";
-/* Pipeline by month */
-const pipe={};inProg.forEach(c=>{if(!c.effectiveDate)return;const mo=heapMoPast(c.effectiveDate);const rem=4-mo;const ef=new Date(c.effectiveDate+"T00:00:00");const compDate=new Date(ef.getFullYear(),ef.getMonth()+4,1);const mk=compDate.toISOString().substring(0,7);if(!pipe[mk])pipe[mk]=0;pipe[mk]++});
+
+/* FE split: paid vs not paid */
+const fePaidCls=myCl.filter(c=>c.status==="paid"||c.status==="heapArchived");
+const feUnpaidCls=activeAll.filter(c=>c.status!=="paid"&&c.status!=="heapArchived");
+const fePaidAmt=fePaidCls.length*feR;
+const feUnpaidAmt=feUnpaidCls.length*feR;
+
+/* BE split: paid (completed) vs not paid (in progress) */
+const bePaidAmt=completed.length*beR;
+const beUnpaidAmt=(activeAll.length-completed.length)*beR;
+
+/* Chargebacks */
+const cbCls=myCl.filter(c=>c.status==="chargedBack");
+
+/* Totals */
+const totalMade=fePaidAmt+bePaidAmt;
+const totalOwed=feUnpaidAmt+beUnpaidAmt;
+const retRate=myCl.length>0?Math.round(activeAll.length/myCl.length*100):0;
+
 /* Carrier breakdown */
-const hCarS={};myCl.filter(c=>c.status!=="heapArchived"&&c.carrier).forEach(c=>{if(!hCarS[c.carrier])hCarS[c.carrier]={total:0,completed:0,lost:0};hCarS[c.carrier].total++;if(c.status==="heapArchived"||((c.status==="active"||c.status==="paid")&&canArchive(c)))hCarS[c.carrier].completed++;else if(c.status==="inactive"||c.status==="chargedBack")hCarS[c.carrier].lost++});
+const hCarS={};myCl.filter(c=>c.carrier).forEach(c=>{if(!hCarS[c.carrier])hCarS[c.carrier]={total:0,active:0,lost:0};hCarS[c.carrier].total++;if(c.status!=="inactive"&&c.status!=="chargedBack"&&c.status!=="neverInEffect")hCarS[c.carrier].active++;else hCarS[c.carrier].lost++});
+/* State breakdown */
+const hStS={};myCl.filter(c=>c.state&&c.status!=="neverInEffect").forEach(c=>{hStS[c.state]=(hStS[c.state]||0)+1});
+
 return<>
-{/* Income Summary Card */}
-<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20,marginBottom:20}}>
-<div style={{fontSize:16,fontWeight:800,marginBottom:16}}>{"\uD83D\uDCB0 Income Summary"}</div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(180px,100%),1fr))",gap:12}}>
-<div style={{padding:14,background:"#22C55E10",borderRadius:12,border:"1px solid #22C55E30"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E",letterSpacing:.5}}>{"FE Received"}</div>
-<div style={{fontSize:26,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(fePaidAmt)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{fePaid.length+" paid × "+money(feR)}</div>
+{/* ══ INCOME OVERVIEW ══ */}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(280px,100%),1fr))",gap:14,marginBottom:20}}>
+
+{/* Front End Card */}
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20}}>
+<div style={{fontSize:15,fontWeight:800,marginBottom:14}}>{"\uD83D\uDCB5 Front End"}</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+<div style={{padding:12,background:"#22C55E10",borderRadius:10,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E"}}>Paid</div>
+<div style={{fontSize:24,fontWeight:900,color:"#22C55E"}}>{money(fePaidAmt)}</div>
+<div style={{fontSize:11,color:"var(--t3)"}}>{fePaidCls.length+" clients"}</div>
 </div>
-<div style={{padding:14,background:"#F59E0B10",borderRadius:12,border:"1px solid #F59E0B30"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B",letterSpacing:.5}}>{"FE Expected"}</div>
-<div style={{fontSize:26,fontWeight:900,color:"#F59E0B",marginTop:4}}>{money(feExpectedAmt)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{feExpected.length+" active, not yet paid"}</div>
-</div>
-<div style={{padding:14,background:"#3B8FD910",borderRadius:12,border:"1px solid #3B8FD930"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#3B8FD9",letterSpacing:.5}}>{"BE Earned"}</div>
-<div style={{fontSize:26,fontWeight:900,color:"#3B8FD9",marginTop:4}}>{money(beEarned)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{completed.length+" completed × "+money(beR)}</div>
-</div>
-<div style={{padding:14,background:"#F59E0B10",borderRadius:12,border:"1px solid #F59E0B30"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B",letterSpacing:.5}}>{"BE Pending"}</div>
-<div style={{fontSize:26,fontWeight:900,color:"#F59E0B",marginTop:4}}>{money(bePending)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{(activeAll.length-completed.length)+" waiting on 4 months"}</div>
+<div style={{padding:12,background:"#F59E0B10",borderRadius:10,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B"}}>Not Paid</div>
+<div style={{fontSize:24,fontWeight:900,color:"#F59E0B"}}>{money(feUnpaidAmt)}</div>
+<div style={{fontSize:11,color:"var(--t3)"}}>{feUnpaidCls.length+" clients"}</div>
 </div>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginTop:12}}>
-<div style={{padding:14,background:"#22C55E10",borderRadius:12,border:"1px solid #22C55E30",textAlign:"center"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E"}}>{"Money in Hand"}</div>
-<div style={{fontSize:24,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(totalInHand)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{"FE paid + BE earned"}</div>
+<div style={{marginTop:10,padding:8,background:"var(--hover)",borderRadius:8,textAlign:"center",fontSize:12,color:"var(--t3)"}}>{money(feR)+" per sale"}</div>
 </div>
-<div style={{padding:14,background:"#8B5CF610",borderRadius:12,border:"1px solid #8B5CF630",textAlign:"center"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#8B5CF6"}}>{"Total Owed"}</div>
-<div style={{fontSize:24,fontWeight:900,color:"#8B5CF6",marginTop:4}}>{money(totalEarned)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{"All FE + BE earned"}</div>
+
+{/* Back End Card */}
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20}}>
+<div style={{fontSize:15,fontWeight:800,marginBottom:14}}>{"\uD83D\uDCB0 Back End"}</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+<div style={{padding:12,background:"#22C55E10",borderRadius:10,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E"}}>Paid</div>
+<div style={{fontSize:24,fontWeight:900,color:"#22C55E"}}>{money(bePaidAmt)}</div>
+<div style={{fontSize:11,color:"var(--t3)"}}>{completed.length+" completed"}</div>
 </div>
-<div style={{padding:14,background:"var(--hover)",borderRadius:12,textAlign:"center"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>{"If All Stick"}</div>
-<div style={{fontSize:24,fontWeight:900,color:"var(--text)",marginTop:4}}>{money(projTotal)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{activeAll.length+" × "+money(feR+beR)}</div>
+<div style={{padding:12,background:"#F59E0B10",borderRadius:10,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B"}}>Not Paid</div>
+<div style={{fontSize:24,fontWeight:900,color:"#F59E0B"}}>{money(beUnpaidAmt)}</div>
+<div style={{fontSize:11,color:"var(--t3)"}}>{(activeAll.length-completed.length)+" waiting"}</div>
 </div>
 </div>
-{lost.length>0&&<div style={{marginTop:12,padding:14,background:"#EF444410",borderRadius:12,border:"1px solid #EF444430",textAlign:"center"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#EF4444"}}>{"Lost Income"}</div>
-<div style={{fontSize:24,fontWeight:900,color:"#EF4444",marginTop:4}}>{money(lost.length*(feR+beR))}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{lost.length+" clients dropped"}</div>
+<div style={{marginTop:10,padding:8,background:"var(--hover)",borderRadius:8,textAlign:"center",fontSize:12,color:"var(--t3)"}}>{money(beR)+" after 4 months on book"}</div>
+</div>
+</div>
+
+{/* ══ TOTALS ROW ══ */}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(200px,100%),1fr))",gap:14,marginBottom:20}}>
+<div style={{background:"var(--card)",borderRadius:14,border:"2px solid #22C55E40",padding:18,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E",letterSpacing:.5}}>Total Made</div>
+<div style={{fontSize:30,fontWeight:900,color:"#22C55E"}}>{money(totalMade)}</div>
+</div>
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:18,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B",letterSpacing:.5}}>Still Owed</div>
+<div style={{fontSize:30,fontWeight:900,color:"#F59E0B"}}>{money(totalOwed)}</div>
+</div>
+<div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:18,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)",letterSpacing:.5}}>If All Stick</div>
+<div style={{fontSize:30,fontWeight:900}}>{money(activeAll.length*(feR+beR))}</div>
+</div>
+{cbCls.length>0&&<div style={{background:"var(--card)",borderRadius:14,border:"2px solid #EF444440",padding:18,textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#EF4444",letterSpacing:.5}}>Chargebacks</div>
+<div style={{fontSize:30,fontWeight:900,color:"#EF4444"}}>{cbCls.length}</div>
 </div>}
 </div>
 
-{/* Quick stats row */}
+{/* ══ CLIENT STATS ══ */}
 <div className="stat-grid" style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:20}}>
 <Stat icon={"\uD83D\uDCCB"} value={myCl.length} label="Total Written" s/>
-<Stat icon={"\u2705"} value={completed.length} label="Completed (4+ mo)" color="#22C55E" s/>
-<Stat icon={"\u23F3"} value={inProg.length} label="In Progress" color="#F59E0B" s/>
+<Stat icon={"\u2705"} value={activeAll.length} label="Active" color="#22C55E" s/>
 <Stat icon={"\u274C"} value={lost.length} label="Lost" color="#EF4444" s/>
-<Stat icon={"\uD83D\uDCC8"} value={compRate} label="Completion Rate" color="#3B8FD9" s/>
+<Stat icon={"\uD83D\uDEAB"} value={nie2.length} label="Never in Effect" color="#94A3B8" s/>
+<Stat icon={"\uD83D\uDCC8"} value={retRate+"%"} label="Retention" color={retRate>=80?"#22C55E":retRate>=60?"#F59E0B":"#EF4444"} s/>
 </div>
+
+{/* ══ CARRIER & STATE BREAKDOWN ══ */}
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
-<Crd title={"\uD83D\uDCB5 Your Pay Rates"}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,padding:10}}>
-<div style={{textAlign:"center",padding:16,background:"var(--hover)",borderRadius:12}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Front-End</div><div style={{fontSize:28,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(feR)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{"per sale"}</div></div>
-<div style={{textAlign:"center",padding:16,background:"var(--hover)",borderRadius:12}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Back-End</div><div style={{fontSize:28,fontWeight:900,color:"#3B8FD9",marginTop:4}}>{money(beR)}</div><div style={{fontSize:11,color:"var(--t3)"}}>{"after 4 months"}</div></div>
-<div style={{textAlign:"center",padding:16,background:"var(--hover)",borderRadius:12,gridColumn:"span 2"}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>Total Per Completed Client</div><div style={{fontSize:28,fontWeight:900,color:"#8B5CF6",marginTop:4}}>{money(feR+beR)}</div></div>
-</div></Crd>
-<Crd title={"\uD83D\uDCC5 Completion Pipeline"}>{Object.keys(pipe).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No clients in pipeline</div>:<><div style={{fontSize:12,color:"var(--t3)",marginBottom:8,padding:"0 4px"}}>When in-progress clients hit 4 months:</div><Bar data={Object.entries(pipe).sort((a,b)=>a[0].localeCompare(b[0])).map(([mk,v])=>[mLabel(mk),v])} color="#F59E0B"/></>}</Crd>
+<Crd title={"\uD83C\uDFE2 Carrier Breakdown"}>{Object.keys(hCarS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["Carrier","Total","Active","Lost","Retention"]} rows={Object.entries(hCarS).sort((a,b)=>b[1].total-a[1].total).map(([cr,d])=>[<strong>{cr}</strong>,d.total,<span style={{color:"#22C55E",fontWeight:700}}>{d.active}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.lost}</span>,<span style={{fontWeight:800,color:d.total>0&&d.active/d.total>=.75?"#22C55E":"#EF4444"}}>{pct(d.active,d.total)}</span>])}/>}</Crd>
+<Crd title={"\uD83D\uDDFA\uFE0F States"}>{Object.keys(hStS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<Bar data={Object.entries(hStS).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,n])=>[s,n])} color="#60A5FA"/>}</Crd>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(380px,100%),1fr))",gap:18,marginBottom:18}}>
-<Crd title={"\uD83C\uDFE2 Carrier Breakdown"}>{Object.keys(hCarS).length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No data</div>:<MT headers={["Carrier","Total","Completed","Lost","Rate"]} rows={Object.entries(hCarS).sort((a,b)=>b[1].total-a[1].total).map(([cr,d])=>[<strong>{cr}</strong>,d.total,<span style={{color:"#22C55E",fontWeight:700}}>{d.completed}</span>,<span style={{color:"#EF4444",fontWeight:700}}>{d.lost}</span>,<span style={{fontWeight:800,color:d.total>0&&d.completed/d.total>=.75?"#22C55E":"#EF4444"}}>{pct(d.completed,d.total)}</span>])}/>}</Crd>
-<Crd title={"\uD83D\uDCC9 Client Fall-Off"}>{ana.sData.length===0?<div style={{color:"var(--t3)",textAlign:"center",padding:20}}>No dropped clients</div>:<Bar data={ana.sData} color="#EF4444"/>}</Crd>
-</div>
-{inProg.length>0&&<div style={{marginBottom:18}}><Crd title={"\u23F3 In-Progress Clients ("+inProg.length+")"}><div style={{maxHeight:300,overflowY:"auto"}}>{inProg.sort((a,b)=>(a.effectiveDate||"").localeCompare(b.effectiveDate||"")).map(c=>{const mo=c.effectiveDate?heapMoPast(c.effectiveDate):0;const rem=Math.max(0,4-mo);return<div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderBottom:"1px solid var(--border)"}}><div><strong>{c.fullName}</strong><div style={{fontSize:11,color:"var(--t3)"}}>{fmtCar(c.carrier)+" \u00B7 Eff "+fmt(c.effectiveDate)}</div></div><Badge color={rem<=1?"#22C55E":"#F59E0B"}>{rem<=1?"Almost done!":rem+" mo left"}</Badge></div>})}</div></Crd></div>}
-{nie2.length>0&&<Crd title={"\uD83D\uDEAB Never in Effect ("+nie2.length+")"}><Bar data={Object.entries(nie2.reduce((o,c)=>{o[c.carrier||"Unknown"]=(o[c.carrier||"Unknown"]||0)+1;return o},{})).sort((a,b)=>b[1]-a[1]).map(([c2,n])=>[c2,n])} color="#94A3B8"/></Crd>}
 </>})()}
 </>}
 
