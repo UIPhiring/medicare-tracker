@@ -1023,10 +1023,15 @@ const inProg=myCl.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchiv
 const lost=myCl.filter(c=>c.status==="inactive"||c.status==="chargedBack");
 const nie2=myCl.filter(c=>c.status==="neverInEffect");
 const activeAll=myCl.filter(c=>c.status!=="inactive"&&c.status!=="chargedBack"&&c.status!=="neverInEffect");
-const feEarned=activeAll.length*feR;
+const fePaid=myCl.filter(c=>c.status==="paid"||c.status==="heapArchived");
+const feExpected=myCl.filter(c=>c.status==="active");
+const fePaidAmt=fePaid.length*feR;
+const feExpectedAmt=feExpected.length*feR;
+const feTotal=fePaidAmt+feExpectedAmt;
 const beEarned=completed.length*beR;
 const bePending=(activeAll.length-completed.length)*beR;
-const totalEarned=feEarned+beEarned;
+const totalInHand=fePaidAmt+beEarned;
+const totalEarned=feTotal+beEarned;
 const projTotal=activeAll.length*(feR+beR);
 const compRate=completed.length+lost.length>0?((completed.length/(completed.length+lost.length))*100).toFixed(0)+"%":"\u2014";
 /* Pipeline by month */
@@ -1037,40 +1042,50 @@ return<>
 {/* Income Summary Card */}
 <div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20,marginBottom:20}}>
 <div style={{fontSize:16,fontWeight:800,marginBottom:16}}>{"\uD83D\uDCB0 Income Summary"}</div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(200px,100%),1fr))",gap:12}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(180px,100%),1fr))",gap:12}}>
 <div style={{padding:14,background:"#22C55E10",borderRadius:12,border:"1px solid #22C55E30"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E",letterSpacing:.5}}>{"Front End Earned"}</div>
-<div style={{fontSize:28,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(feEarned)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{activeAll.length+" policies written × "+money(feR)}</div>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E",letterSpacing:.5}}>{"FE Received"}</div>
+<div style={{fontSize:26,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(fePaidAmt)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{fePaid.length+" paid × "+money(feR)}</div>
+</div>
+<div style={{padding:14,background:"#F59E0B10",borderRadius:12,border:"1px solid #F59E0B30"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B",letterSpacing:.5}}>{"FE Expected"}</div>
+<div style={{fontSize:26,fontWeight:900,color:"#F59E0B",marginTop:4}}>{money(feExpectedAmt)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{feExpected.length+" active, not yet paid"}</div>
 </div>
 <div style={{padding:14,background:"#3B8FD910",borderRadius:12,border:"1px solid #3B8FD930"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#3B8FD9",letterSpacing:.5}}>{"Back End Earned"}</div>
-<div style={{fontSize:28,fontWeight:900,color:"#3B8FD9",marginTop:4}}>{money(beEarned)}</div>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#3B8FD9",letterSpacing:.5}}>{"BE Earned"}</div>
+<div style={{fontSize:26,fontWeight:900,color:"#3B8FD9",marginTop:4}}>{money(beEarned)}</div>
 <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{completed.length+" completed × "+money(beR)}</div>
 </div>
 <div style={{padding:14,background:"#F59E0B10",borderRadius:12,border:"1px solid #F59E0B30"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B",letterSpacing:.5}}>{"Back End Pending"}</div>
-<div style={{fontSize:28,fontWeight:900,color:"#F59E0B",marginTop:4}}>{money(bePending)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{(activeAll.length-completed.length)+" clients waiting on 4 months"}</div>
-</div>
-<div style={{padding:14,background:"#8B5CF610",borderRadius:12,border:"1px solid #8B5CF630"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#8B5CF6",letterSpacing:.5}}>{"Total Earned to Date"}</div>
-<div style={{fontSize:28,fontWeight:900,color:"#8B5CF6",marginTop:4}}>{money(totalEarned)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{"FE: "+money(feEarned)+" + BE: "+money(beEarned)}</div>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B",letterSpacing:.5}}>{"BE Pending"}</div>
+<div style={{fontSize:26,fontWeight:900,color:"#F59E0B",marginTop:4}}>{money(bePending)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{(activeAll.length-completed.length)+" waiting on 4 months"}</div>
 </div>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginTop:12}}>
+<div style={{padding:14,background:"#22C55E10",borderRadius:12,border:"1px solid #22C55E30",textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E"}}>{"Money in Hand"}</div>
+<div style={{fontSize:24,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(totalInHand)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{"FE paid + BE earned"}</div>
+</div>
+<div style={{padding:14,background:"#8B5CF610",borderRadius:12,border:"1px solid #8B5CF630",textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#8B5CF6"}}>{"Total Owed"}</div>
+<div style={{fontSize:24,fontWeight:900,color:"#8B5CF6",marginTop:4}}>{money(totalEarned)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{"All FE + BE earned"}</div>
+</div>
 <div style={{padding:14,background:"var(--hover)",borderRadius:12,textAlign:"center"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>{"Potential Total (if all stick)"}</div>
-<div style={{fontSize:24,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(projTotal)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{activeAll.length+" clients × "+money(feR+beR)}</div>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>{"If All Stick"}</div>
+<div style={{fontSize:24,fontWeight:900,color:"var(--text)",marginTop:4}}>{money(projTotal)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{activeAll.length+" × "+money(feR+beR)}</div>
 </div>
-<div style={{padding:14,background:lost.length>0?"#EF444410":"var(--hover)",borderRadius:12,textAlign:"center"}}>
-<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:lost.length>0?"#EF4444":"var(--t3)"}}>{"Lost Income"}</div>
-<div style={{fontSize:24,fontWeight:900,color:lost.length>0?"#EF4444":"var(--t3)",marginTop:4}}>{money(lost.length*(feR+beR))}</div>
+</div>
+{lost.length>0&&<div style={{marginTop:12,padding:14,background:"#EF444410",borderRadius:12,border:"1px solid #EF444430",textAlign:"center"}}>
+<div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#EF4444"}}>{"Lost Income"}</div>
+<div style={{fontSize:24,fontWeight:900,color:"#EF4444",marginTop:4}}>{money(lost.length*(feR+beR))}</div>
 <div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{lost.length+" clients dropped"}</div>
-</div>
-</div>
+</div>}
 </div>
 
 {/* Quick stats row */}
