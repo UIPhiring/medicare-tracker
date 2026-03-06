@@ -1019,11 +1019,12 @@ const completed=myCl.filter(c=>c.status==="heapArchived"||(c.status==="active"||
 const inProg=myCl.filter(c=>(c.status==="active"||c.status==="paid")&&!canArchive(c));
 const lost=myCl.filter(c=>c.status==="inactive"||c.status==="chargedBack");
 const nie2=myCl.filter(c=>c.status==="neverInEffect");
-const feEarned=(completed.length+inProg.length)*feR;
+const activeAll=myCl.filter(c=>c.status!=="inactive"&&c.status!=="chargedBack"&&c.status!=="neverInEffect");
+const feEarned=activeAll.length*feR;
 const beEarned=completed.length*beR;
-const bePending=inProg.length*beR;
+const bePending=(activeAll.length-completed.length)*beR;
 const totalEarned=feEarned+beEarned;
-const projTotal=feEarned+beEarned+bePending;
+const projTotal=activeAll.length*(feR+beR);
 const compRate=completed.length+lost.length>0?((completed.length/(completed.length+lost.length))*100).toFixed(0)+"%":"\u2014";
 /* Pipeline by month */
 const pipe={};inProg.forEach(c=>{if(!c.effectiveDate)return;const mo=heapMoPast(c.effectiveDate);const rem=4-mo;const ef=new Date(c.effectiveDate+"T00:00:00");const compDate=new Date(ef.getFullYear(),ef.getMonth()+4,1);const mk=compDate.toISOString().substring(0,7);if(!pipe[mk])pipe[mk]=0;pipe[mk]++});
@@ -1037,7 +1038,7 @@ return<>
 <div style={{padding:14,background:"#22C55E10",borderRadius:12,border:"1px solid #22C55E30"}}>
 <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#22C55E",letterSpacing:.5}}>{"Front End Earned"}</div>
 <div style={{fontSize:28,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(feEarned)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{(completed.length+inProg.length)+" policies written × "+money(feR)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{activeAll.length+" policies written × "+money(feR)}</div>
 </div>
 <div style={{padding:14,background:"#3B8FD910",borderRadius:12,border:"1px solid #3B8FD930"}}>
 <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#3B8FD9",letterSpacing:.5}}>{"Back End Earned"}</div>
@@ -1047,7 +1048,7 @@ return<>
 <div style={{padding:14,background:"#F59E0B10",borderRadius:12,border:"1px solid #F59E0B30"}}>
 <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#F59E0B",letterSpacing:.5}}>{"Back End Pending"}</div>
 <div style={{fontSize:28,fontWeight:900,color:"#F59E0B",marginTop:4}}>{money(bePending)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{inProg.length+" clients waiting on 4 months"}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{(activeAll.length-completed.length)+" clients waiting on 4 months"}</div>
 </div>
 <div style={{padding:14,background:"#8B5CF610",borderRadius:12,border:"1px solid #8B5CF630"}}>
 <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#8B5CF6",letterSpacing:.5}}>{"Total Earned to Date"}</div>
@@ -1059,7 +1060,7 @@ return<>
 <div style={{padding:14,background:"var(--hover)",borderRadius:12,textAlign:"center"}}>
 <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--t3)"}}>{"Potential Total (if all stick)"}</div>
 <div style={{fontSize:24,fontWeight:900,color:"#22C55E",marginTop:4}}>{money(projTotal)}</div>
-<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{(completed.length+inProg.length)+" clients × "+money(feR+beR)}</div>
+<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>{activeAll.length+" clients × "+money(feR+beR)}</div>
 </div>
 <div style={{padding:14,background:lost.length>0?"#EF444410":"var(--hover)",borderRadius:12,textAlign:"center"}}>
 <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:lost.length>0?"#EF4444":"var(--t3)"}}>{"Lost Income"}</div>
