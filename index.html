@@ -217,6 +217,7 @@ const[posts,setPosts]=useState([]);const[showPost,setShowPost]=useState(false);c
 const[goalSub,setGoalSub]=useState("production");
 const[badgeInc,setBadgeInc]=useState({});const[showBadgeInc,setShowBadgeInc]=useState(null);const[badgeIncVal,setBadgeIncVal]=useState("");
 const[announcedBadges,setAnnouncedBadges]=useState(null);const badgeCheckRef=React.useRef(false);
+const[badgeViewUid,setBadgeViewUid]=useState("");const[badgePayouts,setBadgePayouts]=useState({});
 const[customTraining,setCustomTraining]=useState(null);const[showTrainEdit,setShowTrainEdit]=useState(false);const[trainForm,setTrainForm]=useState({});const[editTrainId,setEditTrainId]=useState(null);
 const[customScripts,setCustomScripts]=useState(null);const[showScriptEdit,setShowScriptEdit]=useState(false);const[scriptForm,setScriptForm]=useState({});const[editScriptId,setEditScriptId]=useState(null);
 const[customTemplates,setCustomTemplates]=useState(null);const[showTmplEdit,setShowTmplEdit]=useState(false);const[tmplForm,setTmplForm]=useState({});const[editTmplId,setEditTmplId]=useState(null);
@@ -259,10 +260,12 @@ useEffect(()=>{const un=db.collection("trainingContent").orderBy("order").onSnap
 useEffect(()=>{const un=db.collection("templateContent").orderBy("order").onSnapshot(s=>{setCustomTemplates(s.docs.map(d=>({id:d.id,...d.data()})))},()=>{const un2=db.collection("templateContent").onSnapshot(s=>{setCustomTemplates(s.docs.map(d=>({id:d.id,...d.data()})))});return()=>un2()});return()=>un()},[]);
 /* Load custom scripts */
 useEffect(()=>{const un=db.collection("scriptContent").orderBy("order").onSnapshot(s=>{setCustomScripts(s.docs.map(d=>({id:d.id,...d.data()})))},()=>{const un2=db.collection("scriptContent").onSnapshot(s=>{setCustomScripts(s.docs.map(d=>({id:d.id,...d.data()})))});return()=>un2()});return()=>un()},[]);
+/* Load badge payouts */
+useEffect(()=>{const un=db.collection("badgePayouts").onSnapshot(s=>{const m={};s.docs.forEach(d=>m[d.id]=d.data());setBadgePayouts(m)});return()=>un()},[]);
 /* Load announced badges for current user */
 useEffect(()=>{const un=db.collection("earnedBadges").doc(cu.uid).onSnapshot(s=>{if(s.exists)setAnnouncedBadges(s.data().badges||[]);else setAnnouncedBadges([])});return()=>un()},[]);
 /* Auto-post new badge wins */
-const announceNewBadges=React.useCallback(async(earned)=>{if(announcedBadges===null||badgeCheckRef.current)return;const earnedIds=earned.map(b=>b.id);const newBadges=earned.filter(b=>!announcedBadges.includes(b.id));if(newBadges.length===0)return;badgeCheckRef.current=true;try{for(const b of newBadges){await db.collection("bulletinPosts").add({type:"win",message:"\uD83C\uDFC6 "+up?.displayName+" just unlocked the \""+b.label+"\" badge! "+b.icon+"\n"+b.desc+(b.reward?" \u2014 Earned: "+b.reward:""),authorId:cu.uid,authorName:up?.displayName||"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),likes:[],autoBadge:true})}await db.collection("earnedBadges").doc(cu.uid).set({badges:earnedIds},{merge:true})}catch(e){console.error("Badge announce error:",e)}badgeCheckRef.current=false},[announcedBadges]);
+const announceNewBadges=React.useCallback(async(earned)=>{if(announcedBadges===null||badgeCheckRef.current)return;const earnedIds=earned.map(b=>b.id);const newBadges=earned.filter(b=>!announcedBadges.includes(b.id));if(newBadges.length===0)return;badgeCheckRef.current=true;try{for(const b of newBadges){await db.collection("bulletinPosts").add({type:"win",message:"\uD83C\uDFC6 "+up?.displayName+" just unlocked the \""+b.label+"\" badge! "+b.icon+"\n"+b.desc+(up?.role==="heap"&&b.reward?" \u2014 Earned: "+b.reward:""),authorId:cu.uid,authorName:up?.displayName||"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),likes:[],autoBadge:true})}await db.collection("earnedBadges").doc(cu.uid).set({badges:earnedIds},{merge:true})}catch(e){console.error("Badge announce error:",e)}badgeCheckRef.current=false},[announcedBadges]);
 /* Load personal goals + bulletin */
 useEffect(()=>{const un=db.collection("personalGoals").onSnapshot(s=>setPGoals(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
 useEffect(()=>{const un=db.collection("bulletinPosts").onSnapshot(s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))));return()=>un()},[]);
@@ -629,6 +632,7 @@ const savePost=async(d)=>{try{if(!d.message){flash("Message required","error");r
 const likePost=async(p)=>{const likes=p.likes||[];const has=likes.includes(cu.uid);await db.collection("bulletinPosts").doc(p.id).update({likes:has?likes.filter(u=>u!==cu.uid):[...likes,cu.uid]})};
 const delPost=async(id)=>{await db.collection("bulletinPosts").doc(id).delete();flash("Deleted")};
 const saveBadgeInc=async(bid,val)=>{await db.collection("badgeIncentives").doc(bid).set({incentive:val,updatedBy:up?.displayName||"Admin",updatedAt:td()});flash("Incentive saved!");setShowBadgeInc(null);setBadgeIncVal("")};
+const toggleBadgePaid=async(agentUid,badgeId)=>{const key=agentUid+"_"+badgeId;const cur=badgePayouts[key];if(cur?.paid){await db.collection("badgePayouts").doc(key).delete();flash("Marked unpaid")}else{await db.collection("badgePayouts").doc(key).set({paid:true,paidBy:up?.displayName||"Admin",paidDate:td(),agentUid,badgeId});flash("Marked as paid!")}};
 const delBadgeInc=async(bid)=>{await db.collection("badgeIncentives").doc(bid).delete();flash("Incentive removed");setShowBadgeInc(null);setBadgeIncVal("")};
 
 /* Templates */
@@ -1325,15 +1329,19 @@ const QUOTES=[
 const dayIdx=Math.floor(Date.now()/(1000*60*60*24))%QUOTES.length;
 const curMo=td().substring(0,7);
 
-/* Compute stats */
-const myGoalsDone=pGoals.filter(g=>g.agentId===cu.uid&&g.done).length;
-const myGoalsActive=pGoals.filter(g=>g.agentId===cu.uid&&!g.done).length;
-const myAppsThisMo=cls.filter(c=>c.agentId===cu.uid&&c.applicationDate&&c.applicationDate.substring(0,7)===curMo&&c.status!=="heapArchived").length;
-const myWins=posts.filter(p=>p.authorId===cu.uid&&p.type==="win").length;
+/* Compute stats — for selected badge view agent */
+const bvUid=badgeViewUid||cu.uid;
+const isOwnBadges=bvUid===cu.uid;
+const bvRole=isOwnBadges?up?.role:team.find(u=>u.uid===bvUid)?.role;
+const isHeapAgent=bvRole==="heap";
+const myGoalsDone=pGoals.filter(g=>g.agentId===bvUid&&g.done).length;
+const myGoalsActive=pGoals.filter(g=>g.agentId===bvUid&&!g.done).length;
+const myAppsThisMo=cls.filter(c=>c.agentId===bvUid&&c.applicationDate&&c.applicationDate.substring(0,7)===curMo&&c.status!=="heapArchived").length;
+const myWins=posts.filter(p=>p.authorId===bvUid&&p.type==="win").length;
 const teamPosts=posts.length;
 
 /* Achievements — expanded stats */
-const myCls=cls.filter(c=>c.agentId===cu.uid);
+const myCls=cls.filter(c=>c.agentId===bvUid);
 const totalClients=myCls.length;
 const activeCls=myCls.filter(c=>c.status==="active"||c.status==="paid");
 const paidCls=myCls.filter(c=>c.status==="paid");
@@ -1343,13 +1351,13 @@ const cohortRet=(()=>{const cohorts={};const now2=new Date();myCls.forEach(c=>{i
 const cohortRetRate=cohortRet.rate;const cohortRetSize=cohortRet.size;
 const uniqueCarriers=[...new Set(myCls.map(c=>c.carrier).filter(Boolean))].length;
 const uniqueStates=[...new Set(myCls.map(c=>c.state).filter(Boolean))].length;
-const myCommPaid=commHist.filter(h=>h.agentId===cu.uid&&h.amount>0).reduce((s,h)=>s+h.amount,0);
-const myCommCB=commHist.filter(h=>h.agentId===cu.uid&&h.amount<0).reduce((s,h)=>s+Math.abs(h.amount),0);
+const myCommPaid=commHist.filter(h=>h.agentId===bvUid&&h.amount>0).reduce((s,h)=>s+h.amount,0);
+const myCommCB=commHist.filter(h=>h.agentId===bvUid&&h.amount<0).reduce((s,h)=>s+Math.abs(h.amount),0);
 const myNetComm=myCommPaid-myCommCB;
-const myLeadsCon=leads.filter(l=>l.agentId===cu.uid&&l.stage==="applied").length;
-const myLeadsTotal=leads.filter(l=>l.agentId===cu.uid).length;
-const myTotalPosts=posts.filter(p=>p.authorId===cu.uid).length;
-const myTotalLikes=posts.filter(p=>p.authorId===cu.uid).reduce((s,p)=>(s+(p.likes||[]).length),0);
+const myLeadsCon=leads.filter(l=>l.agentId===bvUid&&l.stage==="applied").length;
+const myLeadsTotal=leads.filter(l=>l.agentId===bvUid).length;
+const myTotalPosts=posts.filter(p=>p.authorId===bvUid).length;
+const myTotalLikes=posts.filter(p=>p.authorId===bvUid).reduce((s,p)=>(s+(p.likes||[]).length),0);
 const moApps={};myCls.forEach(c=>{if(c.applicationDate){const mo=c.applicationDate.substring(0,7);moApps[mo]=(moApps[mo]||0)+1}});
 const moVals=Object.values(moApps);
 const bestMonth=moVals.length>0?Math.max(...moVals):0;
@@ -1422,7 +1430,7 @@ const TIER_ORDER={bronze:0,silver:1,gold:2,platinum:3,diamond:4};
 const CATS=[...new Set(BADGES.map(b=>b.cat))];
 const earned=BADGES.filter(b=>b.check);
 const locked=BADGES.filter(b=>!b.check);
-if(earned.length>0&&announcedBadges!==null)setTimeout(()=>announceNewBadges(earned),0);
+if(isOwnBadges&&earned.length>0&&announcedBadges!==null)setTimeout(()=>announceNewBadges(earned),0);
 
 return<>
 
@@ -1606,6 +1614,14 @@ return<div key={p.id} style={{background:t.bg,borderRadius:16,border:"1px solid 
 
 {/* ══ ACHIEVEMENTS ══ */}
 {goalSub==="badges"&&<div>
+{/* Agent selector */}
+<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:16}}>
+<select value={badgeViewUid||cu.uid} onChange={e=>setBadgeViewUid(e.target.value)} style={{...inp,width:"auto",minWidth:200,cursor:"pointer"}}>
+<option value={cu.uid}>{"My Badges"}</option>
+{team.filter(u=>u.uid!==cu.uid&&u.role!=="admin").map(u=><option key={u.uid} value={u.uid}>{u.displayName}</option>)}
+</select>
+<span style={{fontSize:12,color:"var(--t3)"}}>{(badgeViewUid&&badgeViewUid!==cu.uid)?"Viewing "+team.find(u=>u.uid===badgeViewUid)?.displayName+"'s badges":"Your badges"}</span>
+</div>
 
 {/* Progress bar */}
 <div style={{background:"var(--card)",borderRadius:14,border:"1px solid var(--border)",padding:20,marginBottom:24}}>
@@ -1641,8 +1657,9 @@ return<div key={cat} style={{marginBottom:24}}>
 <div style={{fontSize:12,fontWeight:800,marginBottom:2}}>{b.label}</div>
 <div style={{fontSize:10,color:"var(--t3)",marginBottom:4,lineHeight:1.3}}>{b.desc}</div>
 <div style={{display:"inline-block",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,padding:"2px 8px",borderRadius:10,background:tc+"18",color:tc}}>{b.tier}</div>
-{(inc?.incentive||b.reward)&&<div style={{marginTop:6,padding:"4px 8px",borderRadius:6,background:"#F59E0B10",border:"1px solid #F59E0B30",fontSize:10,fontWeight:600,color:"#F59E0B"}}>{"\uD83C\uDFC6 "+(inc?.incentive||b.reward)}</div>}
-{b.check&&(inc?.incentive||b.reward)&&<div style={{marginTop:4,fontSize:9,fontWeight:700,color:"#22C55E",textTransform:"uppercase",letterSpacing:.5}}>{"\u2705 EARNED!"}</div>}
+{(isHeapAgent||isA)&&(inc?.incentive||b.reward)&&<div style={{marginTop:6,padding:"4px 8px",borderRadius:6,background:"#F59E0B10",border:"1px solid #F59E0B30",fontSize:10,fontWeight:600,color:"#F59E0B"}}>{"\uD83C\uDFC6 "+(inc?.incentive||b.reward)}</div>}
+{b.check&&(isHeapAgent||isA)&&(inc?.incentive||b.reward)&&<div style={{marginTop:4,fontSize:9,fontWeight:700,color:"#22C55E",textTransform:"uppercase",letterSpacing:.5}}>{"\u2705 EARNED!"}</div>}
+{isA&&b.check&&(inc?.incentive||b.reward)&&(()=>{const pk=bvUid+"_"+b.id;const isPaid=badgePayouts[pk]?.paid;return<button onClick={()=>toggleBadgePaid(bvUid,b.id)} style={{marginTop:4,fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:6,border:"1px solid "+(isPaid?"#22C55E40":"#F59E0B40"),background:isPaid?"#22C55E10":"#F59E0B10",color:isPaid?"#22C55E":"#F59E0B",cursor:"pointer",fontFamily:"var(--font)"}}>{isPaid?"\u2705 Paid":"Mark Paid"}</button>})()}
 {isA&&<button onClick={()=>{setShowBadgeInc(b.id);setBadgeIncVal(inc?.incentive||b.reward||"")}} style={{marginTop:6,fontSize:9,color:"#3B8FD9",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font)",fontWeight:600}}>Set Incentive</button>}
 </div>})}
 </div></div>})}
