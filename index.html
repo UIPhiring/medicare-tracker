@@ -59,7 +59,7 @@ const secAuth=sec.auth();
 const FIELDS=[
 {key:"fullName",label:"Full Name",type:"text"},{key:"phone",label:"Phone",type:"tel"},{key:"email",label:"Email",type:"email"},{key:"dob",label:"Date of Birth",type:"date"},{key:"applicationDate",label:"Application Date",type:"date"},{key:"effectiveDate",label:"Effective Date",type:"date"},{key:"mailingAddress",label:"Mailing Address",type:"text"},{key:"city",label:"City",type:"text"},
 {key:"state",label:"State",type:"select",options:["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"]},
-{key:"zipCode",label:"Zip Code",type:"text"},{key:"mbiNumber",label:"MBI Number",type:"text"},{key:"electionPeriod",label:"Election Period",type:"select",options:["AEP","OEP","SEP","IEP","ICEP"]},{key:"medicaidNumber",label:"Medicaid Number",type:"text"},{key:"medicaidLevel",label:"Medicaid Level",type:"select",options:["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"]},
+{key:"zipCode",label:"Zip Code",type:"text"},{key:"mbiNumber",label:"MBI Number",type:"text"},{key:"electionPeriod",label:"Election Period",type:"select",options:["AEP","OEP","SEP","IEP","ICEP"]},{key:"sepCode",label:"SEP Code",type:"text"},{key:"medicaidNumber",label:"Medicaid Number",type:"text"},{key:"medicaidLevel",label:"Medicaid Level",type:"select",options:["N/A","QMB","QMB+","QI","FDBE","SLMB","SLMB+"]},
 {key:"carrier",label:"Carrier",type:"select",options:["Aetna","Anthem","CarePlus","Cigna","Devoted Health","Freedom Health","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Clover Health","Alignment Health","Oscar Health","Other"]},
 {key:"planName",label:"Plan Name",type:"text"},{key:"planType",label:"Plan Type",type:"select",options:["MAPD","DSNP","CSNP","PDP","Medigap"]},{key:"previousCarrier",label:"Previous Carrier",type:"select",options:["None/New to Medicare","Aetna","Anthem","CarePlus","Cigna","Devoted Health","Freedom Health","Humana","UnitedHealthcare","WellCare","Molina","Centene","Blue Cross Blue Shield","Kaiser Permanente","Clover Health","Alignment Health","Oscar Health","Other"]},{key:"hospitalIndemnity",label:"Hospital Indemnity",type:"select",options:["Yes","No"]},{key:"sunfireCode",label:"Sunfire Code",type:"text"}];
 
@@ -363,6 +363,9 @@ const applicationDate=appDateM?appDateM[1]:"";
 /* Election period */
 const epM=txt.match(/Election period\s*\n([^\n]+)/i);
 const electionPeriod=epM?epM[1].trim().toUpperCase():"";
+/* SEP code */
+const sepCodeM=txt.match(/Sep code\s*\n([^\n]+)/i);
+const sepCode=sepCodeM?sepCodeM[1].trim().toUpperCase():"";
 /* Sunfire/enrollment code */
 const codeM=txt.match(/Enrollment code[:\s]*([A-Za-z0-9]+)/i);
 const sunfireCode=codeM?codeM[1]:"";
@@ -377,7 +380,7 @@ else if(pnl.includes("pdp"))planType="PDP";
 else if(pnl.includes("hmo")||pnl.includes("ppo")||pnl.includes("pffs"))planType="MAPD";
 /* Date formatting helper */
 const fmtD=(d)=>{if(!d)return"";const m=d.match(/(\d{2})\/(\d{2})\/(\d{4})/);return m?m[3]+"-"+m[1]+"-"+m[2]:d};
-return{fullName,phone,email:"",dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,carrier,planName,planType,sunfireCode:"",medicaidLevel:"",medicaidNumber:"",hospitalIndemnity:"",previousCarrier:""}
+return{fullName,phone,email:"",dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,sepCode,carrier,planName,planType,sunfireCode:"",medicaidLevel:"",medicaidNumber:"",hospitalIndemnity:"",previousCarrier:""}
 };
 const openEd=c=>{setForm({...c});setEditId(c.id);setShowAdd(true)};
 const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);if(editId){logAct(editId,"edited","Client details updated")}flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
@@ -2256,10 +2259,12 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 {/* MODALS */}
 {showAdd&&<Mdl onClose={()=>{setShowAdd(false);resetF()}} title={editId?"Edit Client":"Add New Client"}>
 <div style={{padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxHeight:"60vh",overflowY:"auto"}}>
-{FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{f.label}{f.key==="fullName"&&<span style={{color:"#EF4444"}}>{" *"}</span>}</label>
+{FIELDS.map(f=>{
+if(f.key==="sepCode"&&form.electionPeriod!=="SEP")return null;
+return<div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--t3)",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{f.label}{f.key==="fullName"&&<span style={{color:"#EF4444"}}>{" *"}</span>}</label>
 {f.type==="select"?<select value={form[f.key]||""} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} style={{...inp,cursor:"pointer"}}><option value="">Select...</option>{f.options.map(o=><option key={o} value={o}>{o}</option>)}</select>
 :<input type={f.type} value={form[f.key]||""} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.label} style={inp}/>}
-</div>)}
+</div>})}
 </div>
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}><button onClick={()=>{setShowAdd(false);resetF()}} style={bO}>Cancel</button><button onClick={doSave} style={bP}>{editId?"Save":"Add Client"}</button></div>
 </Mdl>}
@@ -2267,7 +2272,7 @@ return<tr key={i} style={{borderBottom:"1px solid var(--border)"}}>
 {vc&&!showSt&&<Mdl onClose={()=>setVc(null)} width={700} title={vc.fullName} subtitle={<Badge color={(ST[vc.status]||ST.active).color}>{(ST[vc.status]||ST.active).icon+" "+(ST[vc.status]||ST.active).label}</Badge>}>
 <div style={{padding:24,maxHeight:"50vh",overflowY:"auto"}}>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-{FIELDS.map(f=><div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><div style={{fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.6,marginBottom:3}}>{f.label}</div><div style={{fontSize:14,fontWeight:500}}>{f.type==="date"?fmt(vc[f.key]):f.key==="phone"?fmtPh(vc[f.key]):f.key==="carrier"?fmtCar(vc[f.key]):vc[f.key]||"\u2014"}</div></div>)}
+{FIELDS.map(f=>{if(f.key==="sepCode"&&vc.electionPeriod!=="SEP")return null;return<div key={f.key} style={{gridColumn:f.key==="mailingAddress"?"1/-1":"auto"}}><div style={{fontSize:10,fontWeight:700,color:"var(--t3)",textTransform:"uppercase",letterSpacing:.6,marginBottom:3}}>{f.label}</div><div style={{fontSize:14,fontWeight:500}}>{f.type==="date"?fmt(vc[f.key]):f.key==="phone"?fmtPh(vc[f.key]):f.key==="carrier"?fmtCar(vc[f.key]):vc[f.key]||"\u2014"}</div></div>})}
 </div>
 <div style={{borderTop:"1px solid var(--border)",marginTop:18,paddingTop:18}}>
 <div style={{fontSize:13,fontWeight:700,marginBottom:12}}>{"\uD83D\uDCB0 Tracking"}</div>
