@@ -184,7 +184,7 @@ const[stFilt,setStFilt]=useState("all");
 const[cc,setCc]=useState(false);
 const[qe,setQe]=useState(null);
 const[flt,setFlt]=useState({});
-const[sf,setSf]=useState("custom");const[sd,setSd]=useState("asc");
+const[sf,setSf]=useState("applicationDate");const[sd,setSd]=useState("desc");
 const[stForm,setStForm]=useState({});
 const[showSt,setShowSt]=useState(null);
 const[confirm2,setConfirm2]=useState(null);
@@ -2300,7 +2300,7 @@ else{return[{l:"Initial Commission",v:money(getComm(vc)),c:"#22C55E"},{l:"Residu
 </div>
 </div>
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-<button onClick={()=>setConfirm2({title:"Delete",dng:true,lbl:"Delete",msg:"Delete "+vc.fullName+"?",fn:()=>del(vc.id)})} style={{...bO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>{"\uD83D\uDDD1 Delete"}</button>
+<button onClick={()=>{const name=vc.fullName;const cid=vc.id;setVc(null);setTimeout(()=>setConfirm2({title:"Delete",dng:true,lbl:"Delete",msg:"Delete "+name+"?",fn:()=>del(cid)}),50)}} style={{...bO,borderColor:"#EF4444",color:"#EF4444",fontSize:12}}>{"\uD83D\uDDD1 Delete"}</button>
 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
 {(TRANS[vc.status]||[]).map(ns=><button key={ns} onClick={()=>openSC(vc,ns)} style={{...bO,borderColor:ST[ns].color,color:ST[ns].color,fontSize:12}}>{ST[ns].icon+" "+ST[ns].label}</button>)}
 <button onClick={()=>{setVc(null);openEd(vc)}} style={{...bP,fontSize:12}}>{"\u270F\uFE0F Edit"}</button>
@@ -2332,7 +2332,7 @@ else{return[{l:"Initial Commission",v:money(getComm(vc)),c:"#22C55E"},{l:"Residu
 </div>
 <div style={{padding:"14px 24px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",gap:10}}>
 <button onClick={()=>setShowEnrollPaste(false)} style={bO}>Cancel</button>
-<button onClick={()=>{if(!enrollRaw.trim()){flash("Paste enrollment first","error");return}const parsed=parseEnrollment(enrollRaw);if(!parsed.fullName){flash("Couldn't find a name in the text","error");return}setForm(parsed);setEditId(null);setShowEnrollPaste(false);setShowAdd(true);flash("Parsed! Review the fields and save.")}} disabled={!enrollRaw.trim()} style={{...bP,opacity:enrollRaw.trim()?1:.4}}>{"Parse & Fill Form \u2192"}</button>
+<button onClick={()=>{if(!enrollRaw.trim()){flash("Paste enrollment first","error");return}const parsed=parseEnrollment(enrollRaw);if(!parsed.fullName){flash("Couldn't find a name in the text","error");return}setForm(parsed);setEditId(null);setShowEnrollPaste(false);setShowAdd(true);flash("Filled! Review the fields and save.")}} disabled={!enrollRaw.trim()} style={{...bP,opacity:enrollRaw.trim()?1:.4}}>{"Paste & Fill Form \u2192"}</button>
 </div></Mdl>}
 
 {showQP&&<Mdl onClose={()=>setShowQP(false)} width={900} title={"\uD83D\uDCE5 Quick Paste"} subtitle={qpStep===1?"Paste rows from your spreadsheet":"Preview "+qpParsed.length+" clients"}>
