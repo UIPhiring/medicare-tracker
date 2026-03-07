@@ -377,7 +377,7 @@ else if(pnl.includes("pdp"))planType="PDP";
 else if(pnl.includes("hmo")||pnl.includes("ppo")||pnl.includes("pffs"))planType="MAPD";
 /* Date formatting helper */
 const fmtD=(d)=>{if(!d)return"";const m=d.match(/(\d{2})\/(\d{2})\/(\d{4})/);return m?m[3]+"-"+m[1]+"-"+m[2]:d};
-return{fullName,phone,email:"",dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,carrier,planName,planType,sunfireCode,medicaidLevel:hasMedicaid?"QMB":"N/A",medicaidNumber:"",hospitalIndemnity:"",previousCarrier:""}
+return{fullName,phone,email:"",dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,carrier,planName,planType,sunfireCode:"",medicaidLevel:"",medicaidNumber:"",hospitalIndemnity:"",previousCarrier:""}
 };
 const openEd=c=>{setForm({...c});setEditId(c.id);setShowAdd(true)};
 const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);if(editId){logAct(editId,"edited","Client details updated")}flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
