@@ -345,13 +345,19 @@ if(!fullName){const appNameM=txt.match(/Applicant Name\s*\n([^\n]+)/i);if(appNam
 fullName=fullName.split(" ").map(w=>w.length>1?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w.toUpperCase()).join(" ");
 const dob=gl("Date Of Birth")||gl("Date of birth")||"";
 const phone=gl("Primary Telephone")||gl("Phone")||gl("Phone number")||"";
-const email=gl("Email address")||"";
+const rawEmail=gl("Email address")||gl("Email")||"";
+const email=rawEmail.includes("@")?rawEmail:"";
 const mbi=gl("Medicare Number")||gl("Medicare number")||gl("Medicare Number \\(MBI\\)")||gl("MBI")||"";
-/* Address — UHC separate fields vs Sunfire single line */
+/* Address — UHC has separate fields, but "Primary Address" appears twice (header + value). Find the actual address line */
 let mailingAddress="",city="",state="",zipCode="";
-const addrUHC=gl("Primary Address or Institution Address");
-const addr2=gl("Address Line 2");
 const cityUHC=gl("City");const stateUHC=gl("State");const zipUHC=gl("Zip Code");
+let addrUHC="";
+if(cityUHC||stateUHC){
+/* Find all matches of "Primary Address or Institution Address:" and pick the one that's an actual address (not Yes/No/header) */
+const addrRe=/Primary Address or Institution Address[:\s]*\n([^\n]+)/gi;let am;
+while((am=addrRe.exec(txt))!==null){const v=am[1].trim();if(v&&!["Yes","No","yes","no"].includes(v)&&!v.startsWith("Are ")&&v.length>5){addrUHC=v;break}}
+}
+const addr2=gl("Address Line 2");
 if(addrUHC||cityUHC){mailingAddress=addrUHC+(addr2?(" "+addr2):"");city=cityUHC;state=stateUHC;zipCode=zipUHC}
 else{const addrM=txt.match(/Residential Address\s*\n([^\n]+)/i);
 if(addrM){const raw=addrM[1].trim();const parts=raw.split(",").map(s=>s.trim());
