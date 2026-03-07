@@ -334,17 +334,19 @@ const resetF=()=>{setForm({});setEditId(null)};
 /* Parse Enrollment Confirmation Paste — Sunfire/Humana + UHC/EnrollHere */
 const parseEnrollment=(txt)=>{
 /* Flexible label grabber: "Label:\nValue" or "Label\nValue" */
-const gl=(label)=>{const m=txt.match(new RegExp(label+"[:\\s]*\\n([^\\n]+)","i"));return m?m[1]?.trim():""};
+const gl=(label)=>{const m=txt.match(new RegExp(label+"[:\\s]*\\n([^\\n]+)","i"))||txt.match(new RegExp(label+":\\s*([^\\n]+)","i"));return m?m[1]?.trim():""};
 /* Name */
 const firstName=gl("First Name")||gl("First name")||"";
 const lastName=gl("Last Name")||gl("Last name")||"";
 let fullName=(firstName+" "+lastName).trim();
+/* Fallback: "Applicant Name" (UHC bottom section) */
+if(!fullName){const appNameM=txt.match(/Applicant Name\s*\n([^\n]+)/i);if(appNameM)fullName=appNameM[1].trim()}
 /* Title case names */
 fullName=fullName.split(" ").map(w=>w.length>1?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w.toUpperCase()).join(" ");
 const dob=gl("Date Of Birth")||gl("Date of birth")||"";
 const phone=gl("Primary Telephone")||gl("Phone")||gl("Phone number")||"";
 const email=gl("Email address")||"";
-const mbi=gl("Medicare Number")||gl("Medicare number")||gl("MBI")||"";
+const mbi=gl("Medicare Number")||gl("Medicare number")||gl("Medicare Number \\(MBI\\)")||gl("MBI")||"";
 /* Address — UHC separate fields vs Sunfire single line */
 let mailingAddress="",city="",state="",zipCode="";
 const addrUHC=gl("Primary Address or Institution Address");
@@ -368,7 +370,7 @@ let carrier="";for(const c of carriers){if(txt.toLowerCase().includes(c.toLowerC
 /* Dates */
 const effM=txt.match(/Proposed Effective Date[:\s]*\n([^\n]+)/i)||txt.match(/Proposed effective date\s*\n([^\n]+)/i);
 const effectiveDate=effM?effM[1].trim():"";
-const appDateM=txt.match(/Signature Date\s*\n([^\n]+)/i)||txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
+const appDateM=txt.match(/Applicant Signature Date\s*\n([^\n]+)/i)||txt.match(/Signature Date\s*\n([^\n]+)/i)||txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
 const applicationDate=appDateM?appDateM[1].trim():"";
 /* Election period — normalize "MA OEP" → "OEP" */
 const epM=txt.match(/Election Period[:\s]*\n([^\n]+)/i)||txt.match(/Election period\s*\n([^\n]+)/i);
