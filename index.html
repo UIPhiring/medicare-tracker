@@ -331,56 +331,65 @@ const logAct=async(id,action,detail)=>{await db.collection("clients").doc(id).up
 const fmtTs=ts=>{if(!ts)return"";const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})};
 const resetF=()=>{setForm({});setEditId(null)};
 
-/* Parse Enrollment Confirmation Paste */
+/* Parse Enrollment Confirmation Paste — Sunfire/Humana + UHC/EnrollHere */
 const parseEnrollment=(txt)=>{
-const g=(pattern,flags)=>{const m=txt.match(new RegExp(pattern,flags||"i"));return m?m[1]?.trim():""};
-const gl=(label)=>{const m=txt.match(new RegExp(label+"\\s*\\n([^\\n]+)","i"));return m?m[1]?.trim():""};
-const firstName=gl("First name")||"";
-const lastName=gl("Last name")||"";
-const fullName=(firstName+" "+lastName).trim();
-const dob=gl("Date of birth")||"";
-const phone=gl("Phone")||gl("Phone number")||"";
-const mbi=gl("Medicare number")||gl("MBI")||"";
-/* Address parsing */
-const addrM=txt.match(/Residential Address\s*\n([^\n]+)/i);
+/* Flexible label grabber: "Label:\nValue" or "Label\nValue" */
+const gl=(label)=>{const m=txt.match(new RegExp(label+"[:\\s]*\\n([^\\n]+)","i"));return m?m[1]?.trim():""};
+/* Name */
+const firstName=gl("First Name")||gl("First name")||"";
+const lastName=gl("Last Name")||gl("Last name")||"";
+let fullName=(firstName+" "+lastName).trim();
+/* Title case names */
+fullName=fullName.split(" ").map(w=>w.length>1?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w.toUpperCase()).join(" ");
+const dob=gl("Date Of Birth")||gl("Date of birth")||"";
+const phone=gl("Primary Telephone")||gl("Phone")||gl("Phone number")||"";
+const email=gl("Email address")||"";
+const mbi=gl("Medicare Number")||gl("Medicare number")||gl("MBI")||"";
+/* Address — UHC separate fields vs Sunfire single line */
 let mailingAddress="",city="",state="",zipCode="";
+const addrUHC=gl("Primary Address or Institution Address");
+const addr2=gl("Address Line 2");
+const cityUHC=gl("City");const stateUHC=gl("State");const zipUHC=gl("Zip Code");
+if(addrUHC||cityUHC){mailingAddress=addrUHC+(addr2?(" "+addr2):"");city=cityUHC;state=stateUHC;zipCode=zipUHC}
+else{const addrM=txt.match(/Residential Address\s*\n([^\n]+)/i);
 if(addrM){const raw=addrM[1].trim();const parts=raw.split(",").map(s=>s.trim());
 const lastP=parts[parts.length-1];const szM=lastP.match(/([A-Z]{2})\s+(\d{5})/);
 if(szM){state=szM[1];zipCode=szM[2]}
 if(parts.length>=3){mailingAddress=parts[0];city=parts[1]}
 else if(parts.length===2){mailingAddress=parts[0]}
-else{mailingAddress=raw}}
-/* Plan & carrier */
-const planM=txt.match(/Plan[:\s]*([^\n]+(?:HMO|PPO|PFFS|SNP|PDP)[^\n]*)/i);
-const planName=planM?planM[1].trim().replace(/^Plan[:\s]*/i,""):"";
-const carriers=["Humana","UnitedHealthcare","Aetna","WellCare","Cigna","Devoted Health","Freedom Health","CarePlus","Molina","CareSource","Zing Health","Anthem","Blue Cross Blue Shield","Clover Health","Oscar Health","Centene","Alignment Health","Kaiser Permanente","Optimum HealthCare","Peoples Health"];
-let carrier="";for(const c of carriers){if(txt.toLowerCase().includes(c.toLowerCase())){carrier=c;break}}
+else{mailingAddress=raw}}}
+/* Plan */
+const planM=txt.match(/Plan Name[:\s]*\n([^\n]+)/i)||txt.match(/Plan[:\s]*([^\n]+(?:HMO|PPO|PFFS|SNP|PDP|MAPD)[^\n]*)/i);
+let planName=planM?planM[1].trim().replace(/^Plan[:\s]*/i,""):"";
+planName=planName.replace(/^IND\s*-\s*/i,"").trim();
+/* Carrier */
+const carriers=["Humana","UnitedHealthcare","UHC","AARP","Aetna","WellCare","Cigna","Devoted Health","Freedom Health","CarePlus","Molina","CareSource","Zing Health","Anthem","Blue Cross Blue Shield","Clover Health","Oscar Health","Centene","Alignment Health","Kaiser Permanente","Optimum HealthCare","Peoples Health"];
+let carrier="";for(const c of carriers){if(txt.toLowerCase().includes(c.toLowerCase())){carrier=(c==="UHC"||c==="AARP")?"UnitedHealthcare":c;break}}
 /* Dates */
-const effM=txt.match(/Proposed effective date\s*\n([^\n]+)/i)||txt.match(/effective date[:\s]*([^\n]+)/i);
+const effM=txt.match(/Proposed Effective Date[:\s]*\n([^\n]+)/i)||txt.match(/Proposed effective date\s*\n([^\n]+)/i);
 const effectiveDate=effM?effM[1].trim():"";
-const appDateM=txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
-const applicationDate=appDateM?appDateM[1]:"";
-/* Election period */
-const epM=txt.match(/Election period\s*\n([^\n]+)/i);
-const electionPeriod=epM?epM[1].trim().toUpperCase():"";
+const appDateM=txt.match(/Signature Date\s*\n([^\n]+)/i)||txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
+const applicationDate=appDateM?appDateM[1].trim():"";
+/* Election period — normalize "MA OEP" → "OEP" */
+const epM=txt.match(/Election Period[:\s]*\n([^\n]+)/i)||txt.match(/Election period\s*\n([^\n]+)/i);
+let electionPeriod=epM?epM[1].trim().toUpperCase():"";
+electionPeriod=electionPeriod.replace(/^MA\s+/,"").replace(/^MAPD\s+/,"");
+if(!["AEP","OEP","SEP","IEP","ICEP"].includes(electionPeriod)){if(electionPeriod.includes("OEP"))electionPeriod="OEP";else if(electionPeriod.includes("SEP"))electionPeriod="SEP";else if(electionPeriod.includes("AEP"))electionPeriod="AEP";else if(electionPeriod.includes("IEP"))electionPeriod="IEP"}
 /* SEP code */
-const sepCodeM=txt.match(/Sep code\s*\n([^\n]+)/i);
+const sepCodeM=txt.match(/Sep code[:\s]*\n([^\n]+)/i);
 const sepCode=sepCodeM?sepCodeM[1].trim().toUpperCase():"";
-/* Sunfire/enrollment code */
-const codeM=txt.match(/Enrollment code[:\s]*([A-Za-z0-9]+)/i);
-const sunfireCode=codeM?codeM[1]:"";
-/* Medicaid */
-const medicaidM=txt.match(/enrolled in your state Medicaid[^\n]*\n(Yes|No)/i);
-const hasMedicaid=medicaidM&&medicaidM[1].toLowerCase()==="yes";
-/* Plan type detection */
+/* Plan type */
 let planType="";const pnl=planName.toLowerCase();
 if(pnl.includes("d-snp")||pnl.includes("dsnp"))planType="DSNP";
 else if(pnl.includes("c-snp")||pnl.includes("csnp"))planType="CSNP";
 else if(pnl.includes("pdp"))planType="PDP";
-else if(pnl.includes("hmo")||pnl.includes("ppo")||pnl.includes("pffs"))planType="MAPD";
-/* Date formatting helper */
-const fmtD=(d)=>{if(!d)return"";const m=d.match(/(\d{2})\/(\d{2})\/(\d{4})/);return m?m[3]+"-"+m[1]+"-"+m[2]:d};
-return{fullName,phone,email:"",dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,sepCode,carrier,planName,planType,sunfireCode:"",medicaidLevel:"",medicaidNumber:"",hospitalIndemnity:"",previousCarrier:""}
+else if(pnl.includes("hmo")||pnl.includes("ppo")||pnl.includes("pffs")||pnl.includes("mapd"))planType="MAPD";
+/* Previous carrier */
+let previousCarrier="";const prevM=txt.match(/currently have a Medicare Supplement[^\n]*\n(Yes|No)/i);
+if(prevM&&prevM[1].toLowerCase()==="yes")previousCarrier="Other";
+/* Date format */
+const fmtD=(d)=>{if(!d)return"";const m=d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?m[3]+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0"):d};
+return{fullName,phone,email,dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,sepCode,carrier,planName,planType,sunfireCode:"",medicaidLevel:"",medicaidNumber:"",hospitalIndemnity:"",previousCarrier}
 };
 const openEd=c=>{setForm({...c});setEditId(c.id);setShowAdd(true)};
 const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);if(editId){logAct(editId,"edited","Client details updated")}flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
