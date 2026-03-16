@@ -334,30 +334,33 @@ const resetF=()=>{setForm({});setEditId(null)};
 /* Parse Enrollment Confirmation Paste — Sunfire/Humana + UHC/EnrollHere */
 const parseEnrollment=(txt)=>{
 /* Flexible label grabber: "Label:\nValue" or "Label\nValue" */
-const gl=(label)=>{const m=txt.match(new RegExp(label+"[:\\s]*\\n([^\\n]+)","i"))||txt.match(new RegExp(label+":\\s*([^\\n]+)","i"));return m?m[1]?.trim():""};
+const gl=(label)=>{const m=txt.match(new RegExp(label+"\\s*\\*?\\s*[:\\s]\\n([^\\n]+)","i"))||txt.match(new RegExp(label+"\\s*\\*?\\s*:\\s*([^\\n]+)","i"));return m?m[1]?.trim()||"":""};
 /* Name */
 const firstName=gl("First Name")||gl("First name")||"";
 const lastName=gl("Last Name")||gl("Last name")||"";
 let fullName=(firstName+" "+lastName).trim();
-/* Fallback: "Applicant Name" (UHC bottom section) */
-if(!fullName){const appNameM=txt.match(/Applicant Name\s*\n([^\n]+)/i);if(appNameM)fullName=appNameM[1].trim()}
+/* Fallback: "Applicant Name" (UHC) or "Beneficiary Signature" (Aetna) */
+if(!fullName){const appNameM=txt.match(/Applicant Name\s*\n([^\n]+)/i)||txt.match(/Beneficiary Signature\s*:\s*([^\n]+)/i);if(appNameM)fullName=appNameM[1].trim()}
 /* Title case names */
 fullName=fullName.split(" ").map(w=>w.length>1?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w.toUpperCase()).join(" ");
 const dob=gl("Date Of Birth")||gl("Date of birth")||"";
-const phone=gl("Primary Telephone")||gl("Phone")||gl("Phone number")||"";
+const phone=gl("Primary Phone Number")||gl("Primary Telephone")||gl("Phone")||gl("Phone number")||"";
 const rawEmail=gl("Email address")||gl("Email")||"";
 const email=rawEmail.includes("@")?rawEmail:"";
 const mbi=gl("Medicare Number")||gl("Medicare number")||gl("Medicare Number \\(MBI\\)")||gl("MBI")||"";
-/* Address — UHC has separate fields, but "Primary Address" appears twice (header + value). Find the actual address line */
+/* Address — UHC separate fields, Aetna separate fields, Sunfire single line */
 let mailingAddress="",city="",state="",zipCode="";
-const cityUHC=gl("City");const stateUHC=gl("State");const zipUHC=gl("Zip Code");
+const cityUHC=gl("City");const stateUHC=gl("State");const zipUHC=gl("ZIP Code")||gl("Zip Code");
 let addrUHC="";
-if(cityUHC||stateUHC){
-/* Find all matches of "Primary Address or Institution Address:" and pick the one that's an actual address (not Yes/No/header) */
+/* Aetna format: "Address (Line 1) * : value" */
+const addrAetna=gl("Address \\(Line 1\\)");
+const addr2Aetna=gl("Address \\(Line 2\\)");
+if(addrAetna){addrUHC=addrAetna;if(addr2Aetna)addrUHC+=" "+addr2Aetna}
+if(!addrUHC&&(cityUHC||stateUHC)){
 const addrRe=/Primary Address or Institution Address[:\s]*\n([^\n]+)/gi;let am;
 while((am=addrRe.exec(txt))!==null){const v=am[1].trim();if(v&&!["Yes","No","yes","no"].includes(v)&&!v.startsWith("Are ")&&v.length>5){addrUHC=v;break}}
 }
-const addr2=gl("Address Line 2");
+const addr2=(!addrAetna)?gl("Address Line 2"):"";
 if(addrUHC||cityUHC){mailingAddress=addrUHC+(addr2?(" "+addr2):"");city=cityUHC;state=stateUHC;zipCode=zipUHC}
 else{const addrM=txt.match(/Residential Address\s*\n([^\n]+)/i);
 if(addrM){const raw=addrM[1].trim();const parts=raw.split(",").map(s=>s.trim());
@@ -367,20 +370,22 @@ if(parts.length>=3){mailingAddress=parts[0];city=parts[1]}
 else if(parts.length===2){mailingAddress=parts[0]}
 else{mailingAddress=raw}}}
 /* Plan */
-const planM=txt.match(/Plan Name[:\s]*\n([^\n]+)/i)||txt.match(/Plan[:\s]*([^\n]+(?:HMO|PPO|PFFS|SNP|PDP|MAPD)[^\n]*)/i);
+const planM=txt.match(/Plan Name[:\s]*\n([^\n]+)/i)||txt.match(/Plan Name\s*\n([^\n]+(?:HMO|PPO|PFFS|SNP|PDP|MAPD)[^\n]*)/i)||txt.match(/Plan[:\s]*([^\n]+(?:HMO|PPO|PFFS|SNP|PDP|MAPD)[^\n]*)/i)||txt.match(/((?:Aetna|Humana|UHC|AARP|WellCare|Cigna|Devoted|Freedom|Zing)[^\n]+(?:HMO|PPO|PFFS|SNP|PDP)[^\n]*)/i);
 let planName=planM?planM[1].trim().replace(/^Plan[:\s]*/i,""):"";
-planName=planName.replace(/^IND\s*-\s*/i,"").trim();
+planName=planName.replace(/^IND\s*-\s*/i,"").replace(/\s*H\d{4}-\d{3}$/,"").trim();
 /* Carrier */
 const carriers=["Humana","UnitedHealthcare","UHC","AARP","Aetna","WellCare","Cigna","Devoted Health","Freedom Health","CarePlus","Molina","CareSource","Zing Health","Anthem","Blue Cross Blue Shield","Clover Health","Oscar Health","Centene","Alignment Health","Kaiser Permanente","Optimum HealthCare","Peoples Health"];
 let carrier="";for(const c of carriers){if(txt.toLowerCase().includes(c.toLowerCase())){carrier=(c==="UHC"||c==="AARP")?"UnitedHealthcare":c;break}}
 /* Dates */
-const effM=txt.match(/Proposed Effective Date[:\s]*\n([^\n]+)/i)||txt.match(/Proposed effective date\s*\n([^\n]+)/i);
+const effM=txt.match(/Requested Effective Date\s*[:\s]*\s*(\d{2}\/\d{2}\/\d{4})/i)||txt.match(/Proposed Effective Date[:\s]*\n([^\n]+)/i)||txt.match(/Proposed effective date\s*\n([^\n]+)/i);
 const effectiveDate=effM?effM[1].trim():"";
-const appDateM=txt.match(/Applicant Signature Date\s*\n([^\n]+)/i)||txt.match(/Signature Date\s*\n([^\n]+)/i)||txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
+const appDateM=txt.match(/Beneficiary Signature Date\s*[:\s]*\s*([^\n]+)/i)||txt.match(/Applicant Signature Date\s*\n([^\n]+)/i)||txt.match(/Signature Date\s*\n([^\n]+)/i)||txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
 const applicationDate=appDateM?appDateM[1].trim():"";
-/* Election period — normalize "MA OEP" → "OEP" */
+/* Election period — normalize "MA OEP" → "OEP", detect from text */
 const epM=txt.match(/Election Period[:\s]*\n([^\n]+)/i)||txt.match(/Election period\s*\n([^\n]+)/i);
 let electionPeriod=epM?epM[1].trim().toUpperCase():"";
+electionPeriod=electionPeriod.replace(/^MA\s+/,"").replace(/^MAPD\s+/,"");
+if(!electionPeriod){if(txt.includes("Open Enrollment Period"))electionPeriod="OEP";else if(txt.includes("Annual Enrollment"))electionPeriod="AEP";else if(txt.includes("Special Enrollment"))electionPeriod="SEP";else if(txt.includes("Initial Enrollment"))electionPeriod="IEP"}
 electionPeriod=electionPeriod.replace(/^MA\s+/,"").replace(/^MAPD\s+/,"");
 if(!["AEP","OEP","SEP","IEP","ICEP"].includes(electionPeriod)){if(electionPeriod.includes("OEP"))electionPeriod="OEP";else if(electionPeriod.includes("SEP"))electionPeriod="SEP";else if(electionPeriod.includes("AEP"))electionPeriod="AEP";else if(electionPeriod.includes("IEP"))electionPeriod="IEP"}
 /* SEP code */
