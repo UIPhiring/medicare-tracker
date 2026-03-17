@@ -333,18 +333,28 @@ const resetF=()=>{setForm({});setEditId(null)};
 
 /* Parse Enrollment Confirmation Paste — Sunfire/Humana + UHC/EnrollHere */
 const parseEnrollment=(txt0)=>{
-/* Normalize text: strip carriage returns, collapse whitespace around colons */
-const txt=txt0.replace(/\r/g,"").replace(/\t/g," ");
+/* Normalize text: strip carriage returns, tabs, zero-width chars */
+const txt=txt0.replace(/\r/g,"").replace(/\t/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
+console.log("PARSE DEBUG - first 200 chars:",JSON.stringify(txt.substring(0,200)));
 /* Flexible label grabber */
-const gl=(label)=>{const m=txt.match(new RegExp(label+"\\s*\\*?\\s*:?\\s*\\n([^\\n]+)","i"))||txt.match(new RegExp(label+"\\s*\\*?\\s*:\\s*([^\\n]+)","i"));return m?m[1]?.trim()||"":""};
-/* Name */
-const firstName=gl("First Name")||gl("First name")||"";
-const lastName=gl("Last Name")||gl("Last name")||"";
+const gl=(label)=>{
+const r1=new RegExp(label+"\\s*\\*?\\s*:?\\s*\\n([^\\n]+)","i");
+const r2=new RegExp(label+"\\s*\\*?\\s*:\\s*([^\\n]+)","i");
+const m=txt.match(r1)||txt.match(r2);
+return m?m[1]?.trim()||"":""};
+/* Name — try every possible format */
+let firstName=gl("First Name")||gl("First name")||"";
+let lastName=gl("Last Name")||gl("Last name")||"";
 let fullName=(firstName+" "+lastName).trim();
-/* Fallback: "Applicant Name" (UHC) or "Beneficiary Signature" (Aetna) or line after name-like label */
+console.log("PARSE DEBUG - firstName:",JSON.stringify(firstName),"lastName:",JSON.stringify(lastName));
+/* Fallback 1: Applicant Name / Beneficiary Signature */
 if(!fullName){const appNameM=txt.match(/Applicant Name\s*\n([^\n]+)/i)||txt.match(/Beneficiary Signature\s*:\s*([^\n]+)/i);if(appNameM)fullName=appNameM[1].trim()}
-/* Last resort: find LASTNAME, FIRSTNAME pattern at start of text */
-if(!fullName){const topM=txt.match(/^([A-Z]+),\s*([A-Z]+)/m);if(topM)fullName=topM[2]+" "+topM[1]}
+/* Fallback 2: LASTNAME, FIRSTNAME at top */
+if(!fullName){const topM=txt.match(/^([A-Z][A-Za-z]+),\s*([A-Z][A-Za-z]+)/m);if(topM)fullName=topM[2]+" "+topM[1]}
+/* Fallback 3: Scan for common name patterns in text */
+if(!fullName){const namePatterns=[/First\s*(?:name|Name)\s*[:*\s]*\n?\s*([A-Za-z]+)\s*\n.*?Last\s*(?:name|Name)\s*[:*\s]*\n?\s*([A-Za-z]+)/is];
+for(const p of namePatterns){const m=txt.match(p);if(m){fullName=(m[1]+" "+m[2]).trim();break}}}
+console.log("PARSE DEBUG - fullName after fallbacks:",JSON.stringify(fullName));
 /* Title case names */
 fullName=fullName.split(" ").map(w=>w.length>1?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w.toUpperCase()).join(" ");
 const dob=gl("Date Of Birth")||gl("Date of birth")||"";
