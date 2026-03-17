@@ -332,15 +332,19 @@ const fmtTs=ts=>{if(!ts)return"";const d=new Date(ts);return d.toLocaleDateStrin
 const resetF=()=>{setForm({});setEditId(null)};
 
 /* Parse Enrollment Confirmation Paste — Sunfire/Humana + UHC/EnrollHere */
-const parseEnrollment=(txt)=>{
-/* Flexible label grabber: "Label:\nValue" or "Label\nValue" */
+const parseEnrollment=(txt0)=>{
+/* Normalize text: strip carriage returns, collapse whitespace around colons */
+const txt=txt0.replace(/\r/g,"").replace(/\t/g," ");
+/* Flexible label grabber */
 const gl=(label)=>{const m=txt.match(new RegExp(label+"\\s*\\*?\\s*:?\\s*\\n([^\\n]+)","i"))||txt.match(new RegExp(label+"\\s*\\*?\\s*:\\s*([^\\n]+)","i"));return m?m[1]?.trim()||"":""};
 /* Name */
 const firstName=gl("First Name")||gl("First name")||"";
 const lastName=gl("Last Name")||gl("Last name")||"";
 let fullName=(firstName+" "+lastName).trim();
-/* Fallback: "Applicant Name" (UHC) or "Beneficiary Signature" (Aetna) */
+/* Fallback: "Applicant Name" (UHC) or "Beneficiary Signature" (Aetna) or line after name-like label */
 if(!fullName){const appNameM=txt.match(/Applicant Name\s*\n([^\n]+)/i)||txt.match(/Beneficiary Signature\s*:\s*([^\n]+)/i);if(appNameM)fullName=appNameM[1].trim()}
+/* Last resort: find LASTNAME, FIRSTNAME pattern at start of text */
+if(!fullName){const topM=txt.match(/^([A-Z]+),\s*([A-Z]+)/m);if(topM)fullName=topM[2]+" "+topM[1]}
 /* Title case names */
 fullName=fullName.split(" ").map(w=>w.length>1?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w.toUpperCase()).join(" ");
 const dob=gl("Date Of Birth")||gl("Date of birth")||"";
@@ -379,8 +383,8 @@ let carrier="";for(const c of carriers){if(txt.toLowerCase().includes(c.toLowerC
 /* Dates */
 const effM=txt.match(/Requested Effective Date\s*[:\s]*\s*(\d{2}\/\d{2}\/\d{4})/i)||txt.match(/Proposed Effective Date[:\s]*\n([^\n]+)/i)||txt.match(/Proposed effective date\s*\n([^\n]+)/i);
 const effectiveDate=effM?effM[1].trim():"";
-const appDateM=txt.match(/Beneficiary Signature Date\s*[:\s]*\s*([^\n]+)/i)||txt.match(/Applicant Signature Date\s*\n([^\n]+)/i)||txt.match(/Signature Date\s*\n([^\n]+)/i)||txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
-const applicationDate=appDateM?appDateM[1].trim():"";
+const appDateM=txt.match(/Beneficiary Signature Date\s*[:\s]*\s*([^\n]+)/i)||txt.match(/Applicant Signature Date\s*\n([^\n]+)/i)||txt.match(/Signature Date\s*\n([^\n]+)/i)||txt.match(/Voice\s*\|\s*(\d{2}-\d{2}-\d{4})/)||txt.match(/Date[:\s]*(\d{2}\/\d{2}\/\d{4})/);
+let applicationDate=appDateM?appDateM[1].trim():"";
 /* Election period — normalize "MA OEP" → "OEP", detect from text */
 const epM=txt.match(/Election Period[:\s]*\n([^\n]+)/i)||txt.match(/Election period\s*\n([^\n]+)/i);
 let electionPeriod=epM?epM[1].trim().toUpperCase():"";
@@ -400,9 +404,12 @@ else if(pnl.includes("hmo")||pnl.includes("ppo")||pnl.includes("pffs")||pnl.incl
 /* Previous carrier */
 let previousCarrier="";const prevM=txt.match(/currently have a Medicare Supplement[^\n]*\n(Yes|No)/i);
 if(prevM&&prevM[1].toLowerCase()==="yes")previousCarrier="Other";
+/* Medicaid */
+const medicaidNum=gl("Medicaid number")||gl("Medicaid Number")||"";
+const medicaidEnrolled=txt.match(/enrolled in your state Medicaid[^\n]*\n\s*(Yes)/i)||txt.match(/Medicaid Program[^\n]*\n\s*(Yes)/i);
 /* Date format */
-const fmtD=(d)=>{if(!d)return"";const m=d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?m[3]+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0"):d};
-return{fullName,phone,email,dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,sepCode,carrier,planName,planType,sunfireCode:"",medicaidLevel:"",medicaidNumber:"",hospitalIndemnity:"",previousCarrier}
+const fmtD=(d)=>{if(!d)return"";const m=d.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);return m?m[3]+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0"):d};
+return{fullName,phone,email,dob:fmtD(dob),applicationDate:fmtD(applicationDate),effectiveDate:fmtD(effectiveDate),mailingAddress,city,state,zipCode,mbiNumber:mbi,electionPeriod,sepCode,carrier,planName,planType,sunfireCode:"",medicaidLevel:"",medicaidNumber:medicaidNum,hospitalIndemnity:"",previousCarrier}
 };
 const openEd=c=>{setForm({...c});setEditId(c.id);setShowAdd(true)};
 const doSave=async()=>{if(!form.fullName?.trim()){flash("Name required","error");return}const cl={...form};cl.agentId=cl.agentId||cu.uid;if(editId)cl.id=editId;await save(cl);if(editId){logAct(editId,"edited","Client details updated")}flash(editId?"Updated":"Added");setShowAdd(false);resetF()};
