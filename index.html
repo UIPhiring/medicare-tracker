@@ -334,7 +334,7 @@ const resetF=()=>{setForm({});setEditId(null)};
 /* Parse Enrollment Confirmation Paste — Sunfire/Humana + UHC/EnrollHere */
 const parseEnrollment=(txt)=>{
 /* Flexible label grabber: "Label:\nValue" or "Label\nValue" */
-const gl=(label)=>{const m=txt.match(new RegExp(label+"\\s*\\*?\\s*[:\\s]\\n([^\\n]+)","i"))||txt.match(new RegExp(label+"\\s*\\*?\\s*:\\s*([^\\n]+)","i"));return m?m[1]?.trim()||"":""};
+const gl=(label)=>{const m=txt.match(new RegExp(label+"\\s*\\*?\\s*:?\\s*\\n([^\\n]+)","i"))||txt.match(new RegExp(label+"\\s*\\*?\\s*:\\s*([^\\n]+)","i"));return m?m[1]?.trim()||"":""};
 /* Name */
 const firstName=gl("First Name")||gl("First name")||"";
 const lastName=gl("Last Name")||gl("Last name")||"";
